@@ -1,23 +1,15 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ClipboardList, TrendingUp, Download, Loader2, Package, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ClipboardList, TrendingUp, Download, Loader2, Layers, ChevronRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, subDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 interface EntryDetail {
   id: string;
@@ -32,6 +24,13 @@ interface EntryDetail {
 
 type ModalType = "today" | "week" | null;
 
+interface CategorySummary {
+  id: string;
+  name: string;
+  status: string;
+  codes: number;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState({ today: 0, week: 0, month: 0 });
   const [chartData, setChartData] = useState<{ date: string; entries: number }[]>([]);
@@ -40,51 +39,23 @@ export default function Dashboard() {
   const [todayEntries, setTodayEntries] = useState<EntryDetail[]>([]);
   const [weekEntries, setWeekEntries] = useState<EntryDetail[]>([]);
   const [backingUp, setBackingUp] = useState(false);
-  const [materials, setMaterials] = useState<{ id: string; name: string; unit: string; current_stock: number }[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [categories, setCategories] = useState<CategorySummary[]>([]);
 
-  const fetchMaterials = async () => {
-    const { data } = await supabase
-      .from("raw_materials")
-      .select("id, name, unit, current_stock")
-      .eq("status", "active");
-    const shuffled = [...(data ?? [])].sort(() => Math.random() - 0.5);
-    setMaterials(shuffled);
+  const fetchCategories = async () => {
+    const [catRes, codeRes] = await Promise.all([
+      supabase.from("product_categories").select("id, name, status").eq("status", "active").order("name"),
+      supabase.from("product_codes").select("category_id").eq("status", "active").limit(5000),
+    ]);
+    const counts: Record<string, number> = {};
+    for (const c of (codeRes.data ?? []) as any[]) {
+      counts[c.category_id] = (counts[c.category_id] ?? 0) + 1;
+    }
+    setCategories((catRes.data ?? []).map((c: any) => ({ ...c, codes: counts[c.id] ?? 0 })));
   };
 
   useEffect(() => {
-    fetchMaterials();
+    fetchCategories();
   }, []);
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    const { data: recipes } = await supabase
-      .from("product_recipes")
-      .select("id")
-      .eq("raw_material_id", deleteTarget.id)
-      .limit(1);
-    if (recipes && recipes.length > 0) {
-      toast({
-        title: "Cannot delete",
-        description: "This material is used in product recipes. Remove it from recipes first.",
-        variant: "destructive",
-      });
-      setDeleting(false);
-      setDeleteTarget(null);
-      return;
-    }
-    const { error } = await supabase.from("raw_materials").delete().eq("id", deleteTarget.id);
-    setDeleting(false);
-    setDeleteTarget(null);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Material deleted" });
-    await fetchMaterials();
-  };
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -329,74 +300,40 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-secondary" />
-            Raw Materials Inventory ({materials.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Material</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead className="text-right">Current Stock</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {materials.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No materials found</TableCell>
-                </TableRow>
-              ) : (
-                materials.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-medium">{m.name}</TableCell>
-                    <TableCell>{m.unit}</TableCell>
-                    <TableCell className={`text-right font-mono ${m.current_stock <= 0 ? "text-muted-foreground" : ""}`}>
-                      {Number(m.current_stock).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget({ id: m.id, name: m.name })}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between pt-2">
+        <h2 className="text-xl font-bold">Product Categories</h2>
+        <Link to="/admin/products">
+          <Button size="sm" variant="outline">Manage</Button>
+        </Link>
+      </div>
 
-      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete raw material?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <span className="font-semibold">{deleteTarget?.name}</span>. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); confirmDelete(); }}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {categories.length === 0 ? (
+          <p className="text-center py-8 text-muted-foreground col-span-full">No categories found</p>
+        ) : (
+          categories.map((c) => (
+            <Link key={c.id} to="/admin/products" className="block">
+              <Card className="cursor-pointer hover:shadow-lg hover:border-secondary/50 transition-all group h-full">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center">
+                      <Layers className="h-5 w-5 text-secondary" />
+                    </div>
+                    <Badge variant="default" className="text-[10px] px-2 py-0.5">{c.status}</Badge>
+                  </div>
+                  <h3 className="font-semibold text-sm leading-tight mb-1 line-clamp-2">{c.name}</h3>
+                  <p className="text-2xl font-bold text-secondary mb-3">
+                    {c.codes} <span className="text-xs font-normal text-muted-foreground">codes</span>
+                  </p>
+                  <div className="flex items-center justify-end pt-3 border-t border-border">
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        )}
+      </div>
     </div>
   );
 }
