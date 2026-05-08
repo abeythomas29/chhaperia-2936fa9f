@@ -361,7 +361,7 @@ export default function RawMaterials() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Recent Stock Entries</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Recent Stock Entries ({filteredEntries.length})</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -380,9 +380,9 @@ export default function RawMaterials() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stockEntries.length === 0 ? (
-                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No stock entries yet</TableCell></TableRow>
-              ) : stockEntries.map((e) => (
+              {filteredEntries.length === 0 ? (
+                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
+              ) : filteredEntries.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
                   <TableCell>{e.material_name}</TableCell>
