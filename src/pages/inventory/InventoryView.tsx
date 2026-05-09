@@ -197,6 +197,71 @@ export default function InventoryView() {
     p.code.toLowerCase().includes(search.toLowerCase())
   );
 
+  const allFilteredSelected = filtered.length > 0 && filtered.every((m) => selectedIds.has(m.id));
+  const someFilteredSelected = filtered.some((m) => selectedIds.has(m.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        filtered.forEach((m) => next.delete(m.id));
+      } else {
+        filtered.forEach((m) => next.add(m.id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleting(true);
+    const { data: usedRecipes } = await supabase
+      .from("product_recipes")
+      .select("raw_material_id")
+      .in("raw_material_id", ids);
+    const blocked = new Set((usedRecipes ?? []).map((r: any) => r.raw_material_id));
+    const deletable = ids.filter((id) => !blocked.has(id));
+    if (deletable.length === 0) {
+      setBulkDeleting(false);
+      setBulkDeleteOpen(false);
+      toast({
+        title: "Cannot delete",
+        description: "All selected materials are used in product recipes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { data, error } = await supabase
+      .from("raw_materials")
+      .delete()
+      .in("id", deletable)
+      .select("id");
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    const deletedIds = new Set((data ?? []).map((d: any) => d.id));
+    setMaterials((cur) => cur.filter((m) => !deletedIds.has(m.id)));
+    setSelectedIds(new Set());
+    toast({
+      title: `Deleted ${deletedIds.size} material(s)`,
+      description: blocked.size > 0 ? `${blocked.size} skipped (used in recipes).` : undefined,
+    });
+    await fetchMaterials();
+  };
+
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
