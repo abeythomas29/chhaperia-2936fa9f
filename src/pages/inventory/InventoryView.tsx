@@ -317,6 +317,16 @@ export default function InventoryView() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Current Stock ({editUnit})</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editStock}
+                onChange={(e) => setEditStock(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Use this to correct wrong inventory totals.</p>
+            </div>
             <Button onClick={saveEdit} disabled={savingEdit || !editName.trim()} className="w-full bg-secondary hover:bg-secondary/90">
               {savingEdit ? "Saving…" : "Save Changes"}
             </Button>
