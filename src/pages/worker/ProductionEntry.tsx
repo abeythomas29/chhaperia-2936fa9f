@@ -8,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, CheckCircle, Loader2, Trash2, ChevronDown, Package } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, CheckCircle, Loader2, Trash2, ChevronDown, Package, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { UNIT_OPTIONS } from "@/lib/units";
+
+interface ThicknessRow { thickness_mm: string; rolls_count: string; quantity_per_roll: string; }
 
 interface MaterialUsageRow {
   raw_material_id: string;
