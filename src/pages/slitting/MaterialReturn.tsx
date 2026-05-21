@@ -58,9 +58,10 @@ export default function MaterialReturn() {
   const alreadyReturned = selected ? (returns[selected.id] ?? 0) : 0;
   const newReturn = parseFloat(form.returned_quantity) || 0;
   const totalReturned = alreadyReturned + newReturn;
-  const used = selected ? Number(selected.source_quantity) - totalReturned : 0;
+  const issued = selected ? Number(selected.source_quantity) : 0;
   const produced = selected ? Number(selected.cut_quantity_produced) : 0;
-  const matched = selected && Math.abs(used - produced) < 0.01;
+  const wastage = selected ? issued - produced - totalReturned : 0;
+  const matched = selected && Math.abs(wastage) < 0.01;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
