@@ -32,6 +32,7 @@ interface LogEntry {
   swelling_height: number | null;
   swelling_speed: number | null;
   surface_resistance: number | null;
+  notes: string | null;
   product_codes: { code: string } | null;
   profiles: { name: string } | null;
 }
