@@ -174,6 +174,11 @@ export default function Products() {
       setDeleteCodeId(null);
       return;
     }
+    // Clean up dependent records that have no production backing (orphaned issues/sales)
+    const { error: issuesErr } = await supabase.from("stock_issues").delete().eq("product_code_id", deleteCodeId);
+    if (issuesErr) { toast({ title: "Error", description: issuesErr.message, variant: "destructive" }); return; }
+    const { error: salesErr } = await supabase.from("sales").delete().eq("product_code_id", deleteCodeId);
+    if (salesErr) { toast({ title: "Error", description: salesErr.message, variant: "destructive" }); return; }
     const { error } = await supabase.from("product_codes").delete().eq("id", deleteCodeId);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Product code deleted" });
