@@ -388,7 +388,7 @@ export default function ProductionLogs() {
                   <TableCell className="text-right font-semibold">{e.total_quantity ?? "—"}</TableCell>
                   <TableCell>{e.unit}</TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     {(() => {
                       const parseNote = (label: string) => {
                         if (!e.notes) return null;
@@ -396,28 +396,27 @@ export default function ProductionLogs() {
                         const m = e.notes.match(re);
                         return m ? m[1] : null;
                       };
-                      const has =
+                      const hasLab =
                         e.gsm != null || e.tensile_strength != null || e.elongation != null ||
                         e.swelling_height != null || e.swelling_speed != null || e.surface_resistance != null ||
                         parseNote("GSM") || parseNote("Tensile") || parseNote("Elongation") ||
                         parseNote("Swelling Height") || parseNote("Swelling Speed") || parseNote("Surface Resistance");
-                      if (!has) return <span className="text-muted-foreground">—</span>;
                       return (
-                        <Button variant="outline" size="sm" className="h-7" onClick={() => setLabEntry(e)}>
-                          <FlaskConical className="h-3.5 w-3.5 mr-1" /> View
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          {hasLab && (
+                            <Button variant="ghost" size="icon" onClick={() => setLabEntry(e)} title="View Lab Report" className="text-primary hover:text-primary">
+                              <FlaskConical className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(e.id)} title="Delete" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       );
                     })()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(e.id)} title="Delete" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
               ))
