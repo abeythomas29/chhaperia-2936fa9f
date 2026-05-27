@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers } from "lucide-react";
+import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "lucide-react";
 import { UNIT_OPTIONS } from "@/lib/units";
 
 interface ProductCode { id: string; code: string; category_id: string; }
@@ -20,17 +20,21 @@ export default function SlittingEntryForm() {
   const [productCodes, setProductCodes] = useState<ProductCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(true);
   const [rollsOpen, setRollsOpen] = useState(true);
   const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", rolls_count: "" }]);
 
   const [form, setForm] = useState({
     product_code_id: "",
-    qty_per_source: "",
-    source_count: "",
+    // Source product
+    source_width_mm: "",
+    source_length_mtr: "",
+    source_rolls: "",
+    source_gsm: "",
+    source_thickness_mm: "",
     source_unit: "meters",
+    // Output rolls
     roll_length_mtr: "",
-    thickness_mm: "",
-    gsm: "",
     unit: "meters",
     notes: "",
   });
@@ -47,28 +51,24 @@ export default function SlittingEntryForm() {
     })();
   }, []);
 
+  // Source calculations
+  const srcWidth = parseFloat(form.source_width_mm) || 0;
+  const srcLength = parseFloat(form.source_length_mtr) || 0;
+  const srcRolls = parseFloat(form.source_rolls) || 0;
+  const srcGsm = parseFloat(form.source_gsm) || 0;
+  const sourceSqm = (srcWidth / 1000) * srcLength * srcRolls;
+  const sourceKg = sourceSqm * srcGsm / 1000;
+  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : srcLength * srcRolls);
+
+  // Output rolls calculations
   const rollLength = parseFloat(form.roll_length_mtr) || 0;
-  const gsm = parseFloat(form.gsm) || 0;
-  const qtyPerSource = parseFloat(form.qty_per_source) || 0;
-  const sourceCount = parseFloat(form.source_count) || 0;
-  const sourceQty = qtyPerSource * sourceCount;
-
   const validRollRows = rollRows.filter((r) => parseFloat(r.width_mm) > 0 && parseFloat(r.rolls_count) > 0);
-
   const totalRolls = validRollRows.reduce((s, r) => s + (parseFloat(r.rolls_count) || 0), 0);
+  const totalLength = rollLength * totalRolls;
   const totalSqm = rollLength
     ? validRollRows.reduce((s, r) => s + (parseFloat(r.width_mm) * rollLength / 1000) * parseFloat(r.rolls_count), 0)
     : 0;
-
-  const sqmFromGsm = !totalSqm && gsm > 0 && sourceQty > 0 && form.source_unit === "kg"
-    ? (1000 / gsm) * sourceQty
-    : 0;
-  const totalProduction = totalSqm || sqmFromGsm;
-  const totalLength = rollLength * totalRolls;
-  // kg = sqm * gsm / 1000  (if gsm provided); otherwise fall back to source qty when source is kg
-  const totalKg = gsm > 0 && totalProduction > 0
-    ? (totalProduction * gsm) / 1000
-    : (form.source_unit === "kg" ? sourceQty : 0);
+  const totalKg = srcGsm > 0 && totalSqm > 0 ? (totalSqm * srcGsm) / 1000 : 0;
 
   const updateRollRow = (i: number, patch: Partial<RollRow>) =>
     setRollRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -79,7 +79,7 @@ export default function SlittingEntryForm() {
     e.preventDefault();
     if (!user) return;
     if (!form.product_code_id || !sourceQty) {
-      toast({ title: "Missing fields", description: "Select product code and enter source quantity (per source × count).", variant: "destructive" });
+      toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
       return;
     }
     if (validRollRows.length === 0) {
@@ -89,17 +89,17 @@ export default function SlittingEntryForm() {
 
     setSubmitting(true);
 
-    const sourceNote = `Source: ${qtyPerSource} × ${sourceCount} ${form.source_unit}`;
+    const sourceNote = `Source: ${srcWidth}mm × ${srcLength}m × ${srcRolls} rolls (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const rowsToInsert = validRollRows.map((r, idx) => ({
       product_code_id: form.product_code_id,
       source_quantity: idx === 0 ? sourceQty : 0,
       cut_quantity_produced: rollLength ? rollLength * parseFloat(r.rolls_count) : parseFloat(r.rolls_count),
       cut_width_mm: parseFloat(r.width_mm),
       remaining_returned: 0,
-      thickness_mm: form.thickness_mm ? parseFloat(form.thickness_mm) : null,
-      gsm: form.gsm ? parseFloat(form.gsm) : null,
+      thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
+      gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
       unit: form.unit,
-      notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, form.gsm ? `GSM: ${form.gsm}` : ""].filter(Boolean).join(" | "),
+      notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
       slitting_manager_id: user.id,
     }));
 
@@ -109,7 +109,12 @@ export default function SlittingEntryForm() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
-      setForm({ ...form, qty_per_source: "", source_count: "", roll_length_mtr: "", thickness_mm: "", gsm: "", notes: "" });
+      setForm({
+        ...form,
+        source_width_mm: "", source_length_mtr: "", source_rolls: "",
+        source_gsm: "", source_thickness_mm: "",
+        roll_length_mtr: "", notes: "",
+      });
       setRollRows([{ width_mm: "", rolls_count: "" }]);
     }
     setSubmitting(false);
@@ -134,7 +139,58 @@ export default function SlittingEntryForm() {
             </Select>
           </div>
 
-          {/* Rolls breakdown (per-roll width when widths vary) */}
+          {/* Source Product */}
+          <Collapsible open={sourceOpen} onOpenChange={setSourceOpen} className="border rounded-lg">
+            <CollapsibleTrigger asChild>
+              <button type="button" className="w-full flex items-center justify-between p-3 text-left">
+                <span className="flex items-center gap-2 font-medium">
+                  <Package className="h-4 w-4" /> Source Product *
+                  {sourceQty > 0 && <span className="text-xs text-muted-foreground">— {sourceQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}</span>}
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${sourceOpen ? "rotate-180" : ""}`} />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-3 pb-3 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Source Width (mm)</Label>
+                  <Input type="number" step="any" value={form.source_width_mm}
+                    onChange={(e) => setForm({ ...form, source_width_mm: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Source Length (mtr)</Label>
+                  <Input type="number" step="any" value={form.source_length_mtr}
+                    onChange={(e) => setForm({ ...form, source_length_mtr: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">No. of Rolls</Label>
+                  <Input type="number" step="any" value={form.source_rolls}
+                    onChange={(e) => setForm({ ...form, source_rolls: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">GSM</Label>
+                  <Input type="number" step="any" value={form.source_gsm}
+                    onChange={(e) => setForm({ ...form, source_gsm: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Thickness (mm)</Label>
+                  <Input type="number" step="any" value={form.source_thickness_mm}
+                    onChange={(e) => setForm({ ...form, source_thickness_mm: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Unit</Label>
+                  <Select value={form.source_unit} onValueChange={(v) => setForm({ ...form, source_unit: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Output Rolls */}
           <Collapsible open={rollsOpen} onOpenChange={setRollsOpen} className="border rounded-lg">
             <CollapsibleTrigger asChild>
               <button type="button" className="w-full flex items-center justify-between p-3 text-left">
@@ -145,6 +201,23 @@ export default function SlittingEntryForm() {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Produced Roll Length (mtr)</Label>
+                  <Input type="number" step="any" value={form.roll_length_mtr}
+                    onChange={(e) => setForm({ ...form, roll_length_mtr: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Output Unit</Label>
+                  <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 Add one row per roll width. Use multiple rows if some rolls came narrower than required.
               </p>
@@ -171,60 +244,7 @@ export default function SlittingEntryForm() {
             </CollapsibleContent>
           </Collapsible>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label>Qty per Source *</Label>
-              <Input type="number" step="any" value={form.qty_per_source}
-                onChange={(e) => setForm({ ...form, qty_per_source: e.target.value })} required />
-            </div>
-            <div className="space-y-2">
-              <Label>No. of Sources *</Label>
-              <Input type="number" step="any" value={form.source_count}
-                onChange={(e) => setForm({ ...form, source_count: e.target.value })} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Source Unit</Label>
-              <Select value={form.source_unit} onValueChange={(v) => setForm({ ...form, source_unit: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {sourceQty > 0 && (
-            <p className="text-xs text-muted-foreground -mt-2">Total source: <span className="font-semibold text-foreground">{sourceQty.toLocaleString()} {form.source_unit}</span></p>
-          )}
-
-          <div className="space-y-2">
-            <Label>Produced Roll Length (mtr)</Label>
-            <Input type="number" step="any" value={form.roll_length_mtr}
-              onChange={(e) => setForm({ ...form, roll_length_mtr: e.target.value })} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Thickness (mm)</Label>
-              <Input type="number" step="any" value={form.thickness_mm}
-                onChange={(e) => setForm({ ...form, thickness_mm: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>GSM</Label>
-              <Input type="number" step="any" value={form.gsm}
-                onChange={(e) => setForm({ ...form, gsm: e.target.value })} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Output Unit</Label>
-            <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
+          {/* Auto-calculated totals */}
           <div className="bg-muted rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
             <div>
               <p className="text-xs text-muted-foreground">Total Rolls</p>
@@ -236,15 +256,15 @@ export default function SlittingEntryForm() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total (sqm)</p>
-              <p className="text-xl font-bold text-primary">{totalProduction.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">sqm</span></p>
+              <p className="text-xl font-bold text-primary">{totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">sqm</span></p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total (kg)</p>
               <p className="text-xl font-bold text-primary">{totalKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">kg</span></p>
             </div>
           </div>
-          {gsm <= 0 && form.source_unit !== "kg" && (
-            <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM (or use kg source) to see total kg.</p>
+          {srcGsm <= 0 && (
+            <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM in Source Product to calculate total kg.</p>
           )}
 
           <div className="space-y-2">
