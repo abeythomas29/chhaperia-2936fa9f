@@ -365,14 +365,25 @@ export default function ProductionLogs() {
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell>
                     {(() => {
-                      const fields = [
-                        e.gsm != null && `GSM: ${e.gsm}`,
-                        e.tensile_strength != null && `Tensile: ${e.tensile_strength}`,
-                        e.elongation != null && `Elong: ${e.elongation}`,
-                        e.swelling_height != null && `Swell H: ${e.swelling_height}`,
-                        e.swelling_speed != null && `Swell S: ${e.swelling_speed}`,
-                        e.surface_resistance != null && `SR: ${e.surface_resistance}`,
-                      ].filter(Boolean);
+                      // Parse lab values from notes as fallback (newer entries store labs there)
+                      const parseNote = (label: string) => {
+                        if (!e.notes) return null;
+                        const re = new RegExp(`${label}\\s*:\\s*([\\d.]+)`, "i");
+                        const m = e.notes.match(re);
+                        return m ? m[1] : null;
+                      };
+                      const get = (col: number | null | undefined, label: string) =>
+                        col != null ? String(col) : parseNote(label);
+
+                      const pairs: [string, string | null][] = [
+                        ["GSM", get(e.gsm, "GSM")],
+                        ["Tensile", get(e.tensile_strength, "Tensile")],
+                        ["Elong", get(e.elongation, "Elongation") ?? get(null, "Elong")],
+                        ["Swell H", get(e.swelling_height, "Swelling Height") ?? get(null, "Swell H")],
+                        ["Swell S", get(e.swelling_speed, "Swelling Speed") ?? get(null, "Swell S")],
+                        ["SR", get(e.surface_resistance, "Surface Resistance") ?? get(null, "SR")],
+                      ];
+                      const fields = pairs.filter(([, v]) => v != null).map(([k, v]) => `${k}: ${v}`);
                       if (fields.length === 0) return <span className="text-muted-foreground">—</span>;
                       return <div className="text-xs space-y-0.5 min-w-[140px]">{fields.map((f, i) => <div key={i}>{f}</div>)}</div>;
                     })()}
