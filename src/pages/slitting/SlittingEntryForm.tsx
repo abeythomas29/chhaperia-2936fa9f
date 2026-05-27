@@ -271,7 +271,7 @@ export default function SlittingEntryForm() {
 
           {exceedsSource && (
             <p className="text-xs text-destructive text-center">
-              Produced ({producedInSourceUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}) exceeds source ({sourceQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}). Produced must be less than or equal to source.
+              Produced area ({totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) exceeds source area ({sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm). Total cut area cannot exceed source area.
             </p>
           )}
 
