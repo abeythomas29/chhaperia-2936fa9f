@@ -291,12 +291,18 @@ export default function SlittingEntryForm() {
             <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM in Source Product to calculate total kg.</p>
           )}
 
+          {exceedsSource && (
+            <p className="text-xs text-destructive text-center">
+              Produced ({producedInSourceUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}) exceeds source ({sourceQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}). Produced must be less than or equal to source.
+            </p>
+          )}
+
           <div className="space-y-2">
             <Label>Notes / Remarks</Label>
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
 
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting}>
+          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Slitting Entry
           </Button>
