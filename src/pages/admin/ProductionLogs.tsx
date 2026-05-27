@@ -389,39 +389,26 @@ export default function ProductionLogs() {
                   <TableCell>{e.unit}</TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell>
+                  <TableCell>
                     {(() => {
-                      // Parse lab values from notes as fallback (newer entries store labs there)
                       const parseNote = (label: string) => {
                         if (!e.notes) return null;
                         const re = new RegExp(`${label}\\s*:\\s*([\\d.]+)`, "i");
                         const m = e.notes.match(re);
                         return m ? m[1] : null;
                       };
-                      const get = (col: number | null | undefined, label: string) =>
-                        col != null ? String(col) : parseNote(label);
-
-                      const pairs: [string, string | null][] = [
-                        ["GSM", get(e.gsm, "GSM")],
-                        ["Tensile", get(e.tensile_strength, "Tensile")],
-                        ["Elong", get(e.elongation, "Elongation") ?? get(null, "Elong")],
-                        ["Swell H", get(e.swelling_height, "Swelling Height") ?? get(null, "Swell H")],
-                        ["Swell S", get(e.swelling_speed, "Swelling Speed") ?? get(null, "Swell S")],
-                        ["SR", get(e.surface_resistance, "Surface Resistance") ?? get(null, "SR")],
-                      ];
-                      const fields = pairs.filter(([, v]) => v != null).map(([k, v]) => `${k}: ${v}`);
-                      if (fields.length === 0) return <span className="text-muted-foreground">—</span>;
-                      return <div className="text-xs space-y-0.5 min-w-[140px]">{fields.map((f, i) => <div key={i}>{f}</div>)}</div>;
+                      const has =
+                        e.gsm != null || e.tensile_strength != null || e.elongation != null ||
+                        e.swelling_height != null || e.swelling_speed != null || e.surface_resistance != null ||
+                        parseNote("GSM") || parseNote("Tensile") || parseNote("Elongation") ||
+                        parseNote("Swelling Height") || parseNote("Swelling Speed") || parseNote("Surface Resistance");
+                      if (!has) return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <Button variant="outline" size="sm" className="h-7" onClick={() => setLabEntry(e)}>
+                          <FlaskConical className="h-3.5 w-3.5 mr-1" /> View
+                        </Button>
+                      );
                     })()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(e.id)} title="Delete" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
               ))
