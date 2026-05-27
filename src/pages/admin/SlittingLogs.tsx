@@ -225,7 +225,10 @@ export default function SlittingLogs() {
             </DialogHeader>
             {detailEntry && (() => {
               const t = computeTotals(detailEntry);
+              const unit = detailEntry.unit;
+              const totalInUnit = unit === "kg" ? t.kg : unit === "sqm" ? t.sqm : t.lengthMtr;
               const rows: [string, string][] = [
+                [`Total Quantity (${unit})`, totalInUnit > 0 ? `${totalInUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}` : "—"],
                 ["Total Rolls", t.rolls > 0 ? `${t.rolls.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"],
                 ["Total Length", `${t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })} mtr`],
                 ["Total Area", `${t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm`],
