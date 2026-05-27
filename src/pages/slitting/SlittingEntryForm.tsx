@@ -75,6 +75,10 @@ export default function SlittingEntryForm() {
   const addRollRow = () => setRollRows((rows) => [...rows, { width_mm: "", rolls_count: "" }]);
   const removeRollRow = (i: number) => setRollRows((rows) => rows.filter((_, idx) => idx !== i));
 
+  const producedInSourceUnit =
+    form.source_unit === "kg" ? totalKg : form.source_unit === "sqm" ? totalSqm : totalLength;
+  const exceedsSource = sourceQty > 0 && producedInSourceUnit > sourceQty + 1e-6;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -84,6 +88,14 @@ export default function SlittingEntryForm() {
     }
     if (validRollRows.length === 0) {
       toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
+      return;
+    }
+    if (exceedsSource) {
+      toast({
+        title: "Produced exceeds source",
+        description: `Produced (${producedInSourceUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${form.source_unit}) cannot be greater than source (${sourceQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${form.source_unit}).`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -279,12 +291,18 @@ export default function SlittingEntryForm() {
             <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM in Source Product to calculate total kg.</p>
           )}
 
+          {exceedsSource && (
+            <p className="text-xs text-destructive text-center">
+              Produced ({producedInSourceUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}) exceeds source ({sourceQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {form.source_unit}). Produced must be less than or equal to source.
+            </p>
+          )}
+
           <div className="space-y-2">
             <Label>Notes / Remarks</Label>
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
 
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting}>
+          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Slitting Entry
           </Button>
