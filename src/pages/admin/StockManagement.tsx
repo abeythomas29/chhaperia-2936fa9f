@@ -196,9 +196,9 @@ export default function StockManagement() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const filteredSummaries = summaries.filter((s) =>
-    !search || s.code.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredSummaries = summaries
+    .filter((s) => s.available > 0 && s.code !== "—")
+    .filter((s) => !search || s.code.toLowerCase().includes(search.toLowerCase()));
 
   const filteredLedger = ledger.filter((e) => {
     const s = search.toLowerCase();
