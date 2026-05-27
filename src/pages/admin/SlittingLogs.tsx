@@ -48,6 +48,22 @@ export default function SlittingLogs() {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState<string>("all");
   const [detailEntry, setDetailEntry] = useState<SlittingRow | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true);
+    const { error } = await supabase.from("slitting_entries").delete().eq("id", id);
+    setDeleting(false);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+    setDeleteId(null);
+    toast({ title: "Entry deleted" });
+  };
 
   useEffect(() => {
     (async () => {
