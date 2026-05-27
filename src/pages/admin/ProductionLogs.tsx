@@ -121,12 +121,14 @@ export default function ProductionLogs() {
   };
 
   const fetchDropdowns = async () => {
-    const [{ data: pc }, { data: cl }] = await Promise.all([
+    const [{ data: pc }, { data: cl }, { data: cats }] = await Promise.all([
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
+      supabase.from("product_categories").select("id, name").eq("status", "active").order("name"),
     ]);
     setProductCodes(pc ?? []);
     setClients(cl ?? []);
+    setCategories(cats ?? []);
   };
 
   useEffect(() => {
