@@ -25,6 +25,13 @@ interface LogEntry {
   thickness_mm: number | null;
   product_code_id: string;
   client_id: string | null;
+  lab_report_included: boolean | null;
+  gsm: number | null;
+  tensile_strength: number | null;
+  elongation: number | null;
+  swelling_height: number | null;
+  swelling_speed: number | null;
+  surface_resistance: number | null;
   product_codes: { code: string } | null;
   profiles: { name: string } | null;
 }
