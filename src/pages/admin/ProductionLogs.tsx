@@ -568,6 +568,56 @@ export default function ProductionLogs() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Totals Dialog */}
+      <Dialog open={!!totalsEntry} onOpenChange={(open) => !open && setTotalsEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sigma className="h-5 w-5" /> Auto-Calculated Totals
+            </DialogTitle>
+            <DialogDescription>
+              {totalsEntry?.product_codes?.code ?? "—"} · {totalsEntry ? format(new Date(totalsEntry.date), "dd/MM/yyyy") : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {totalsEntry && (() => {
+            const parseNum = (label: string) => {
+              if (!totalsEntry.notes) return 0;
+              const m = totalsEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+              return m ? parseFloat(m[1]) : 0;
+            };
+            const rolls = totalsEntry.rolls_count || 0;
+            const total = totalsEntry.total_quantity ?? (rolls * (totalsEntry.quantity_per_roll || 0));
+            const isMeters = totalsEntry.unit === "meters";
+            const isKg = totalsEntry.unit === "kg";
+            const lengthMtr = isMeters ? total : 0;
+            const width = parseNum("Width") || parseNum("RollWidth");
+            const gsm = totalsEntry.gsm ?? parseNum("GSM");
+            const sqm = width > 0 && lengthMtr > 0 ? (width / 1000) * lengthMtr : 0;
+            const kg = isKg ? total : (gsm > 0 && sqm > 0 ? (sqm * gsm) / 1000 : 0);
+            const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
+            const rows: [string, string][] = [
+              ["Total Rolls", rolls > 0 ? fmt(rolls, 0) : "—"],
+              ["Total Length", lengthMtr > 0 ? `${fmt(lengthMtr)} mtr` : "—"],
+              ["Total Area", sqm > 0 ? `${fmt(sqm)} sqm` : "—"],
+              ["Total Weight", kg > 0 ? `${fmt(kg)} kg` : "—"],
+            ];
+            return (
+              <div className="divide-y border rounded-md">
+                {rows.map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm text-muted-foreground">{k}</span>
+                    <span className="font-mono font-semibold">{v}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTotalsEntry(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
