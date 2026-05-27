@@ -119,10 +119,13 @@ export default function SlittingHistory() {
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
-    const { error } = await supabase.from("slitting_entries").delete().eq("id", deleteId);
+    const { data, error } = await supabase.from("slitting_entries").delete().eq("id", deleteId).select("id");
     setDeleting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Not deleted", description: "You don't have permission to delete this entry, or it no longer exists.", variant: "destructive" });
+      setDeleteId(null);
     } else {
       toast({ title: "Entry deleted" });
       setDeleteId(null);
