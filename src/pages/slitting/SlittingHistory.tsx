@@ -116,10 +116,14 @@ export default function SlittingHistory() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
+  const handleDelete = async (idToDelete: string) => {
     setDeleting(true);
-    const { data, error } = await supabase.from("slitting_entries").delete().eq("id", deleteId).select("id");
+    const { data, error } = await supabase
+      .from("slitting_entries")
+      .delete()
+      .eq("id", idToDelete)
+      .eq("slitting_manager_id", user?.id ?? "")
+      .select("id");
     setDeleting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -248,8 +252,17 @@ export default function SlittingHistory() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (deleteId) {
+                    void handleDelete(deleteId);
+                  }
+                }}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
                 {deleting ? "Deleting..." : "Delete"}
               </AlertDialogAction>
             </AlertDialogFooter>
