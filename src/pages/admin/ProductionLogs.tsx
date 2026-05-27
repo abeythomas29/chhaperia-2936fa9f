@@ -85,7 +85,7 @@ export default function ProductionLogs() {
     // Try with thickness_mm first; fall back without it if column doesn't exist yet
     let { data, error } = await supabase
       .from("production_entries")
-      .select("id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, lab_report_included, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, product_codes(code), profiles:worker_id(name)")
+      .select("id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, product_codes(code), profiles:worker_id(name)")
       .order("date", { ascending: false })
       .limit(500);
 
