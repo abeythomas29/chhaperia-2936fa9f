@@ -1,0 +1,2 @@
+CREATE POLICY "Slitting managers can update own slitting entries" ON public.slitting_entries FOR UPDATE TO authenticated USING ((auth.uid() = slitting_manager_id) AND has_role(auth.uid(), 'slitting_manager')) WITH CHECK ((auth.uid() = slitting_manager_id) AND has_role(auth.uid(), 'slitting_manager'));
+CREATE POLICY "Slitting managers can delete own slitting entries" ON public.slitting_entries FOR DELETE TO authenticated USING ((auth.uid() = slitting_manager_id) AND has_role(auth.uid(), 'slitting_manager'));
