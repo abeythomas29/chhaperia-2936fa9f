@@ -100,9 +100,8 @@ export default function SlittingEntryForm() {
           cut_width_mm: parseFloat(r.width_mm),
           remaining_returned: 0,
           thickness_mm: form.thickness_mm ? parseFloat(form.thickness_mm) : null,
-          gsm: form.gsm ? gsm : null,
           unit: form.unit,
-          notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`].filter(Boolean).join(" | "),
+          notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, form.gsm ? `GSM: ${form.gsm}` : ""].filter(Boolean).join(" | "),
           slitting_manager_id: user.id,
         }))
       : [{
@@ -112,11 +111,11 @@ export default function SlittingEntryForm() {
           cut_width_mm: rollWidth,
           remaining_returned: 0,
           thickness_mm: form.thickness_mm ? parseFloat(form.thickness_mm) : null,
-          gsm: form.gsm ? gsm : null,
           unit: form.unit,
-          notes: form.notes || null,
+          notes: [form.notes, form.gsm ? `GSM: ${form.gsm}` : ""].filter(Boolean).join(" | ") || null,
           slitting_manager_id: user.id,
         }];
+
 
     const { error } = await supabase.from("slitting_entries").insert(rowsToInsert as any);
 
