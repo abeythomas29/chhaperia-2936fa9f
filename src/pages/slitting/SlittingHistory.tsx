@@ -51,6 +51,8 @@ const computeTotals = (r: SlittingRow) => {
   const kg = gsm > 0 ? (sqm * gsm) / 1000 : 0;
   return { lengthMtr, sqm, kg };
 };
+
+export default function SlittingHistory() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [entries, setEntries] = useState<SlittingRow[]>([]);
