@@ -15,6 +15,9 @@ interface SlittingRow {
   id: string;
   date: string;
   cut_quantity_produced: number;
+  cut_width_mm: number;
+  thickness_mm: number | null;
+  gsm: number | null;
   unit: string;
   product_codes: { code: string; id?: string } | null;
 }
@@ -32,8 +35,6 @@ export default function Head36Entry() {
     rolls_produced: "",
     roll_width_mm: "",
     length_per_tape_mtr: "",
-    thickness_mm: "",
-    gsm: "",
     unit: "meters",
     notes: "",
   });
@@ -43,7 +44,7 @@ export default function Head36Entry() {
     (async () => {
       const { data } = await supabase
         .from("slitting_entries")
-        .select("id, date, cut_quantity_produced, unit, product_codes(code, id)")
+        .select("id, date, cut_quantity_produced, cut_width_mm, thickness_mm, gsm, unit, product_codes(code, id)")
         .eq("slitting_manager_id", user.id)
         .order("date", { ascending: false })
         .limit(50);
@@ -52,10 +53,22 @@ export default function Head36Entry() {
     })();
   }, [user]);
 
+  const source = slittingEntries.find((s) => s.id === form.slitting_entry_id);
+
+  // Auto-fill width when source is selected
+  useEffect(() => {
+    if (source) {
+      setForm((f) => ({
+        ...f,
+        roll_width_mm: f.roll_width_mm || (source.cut_width_mm ? String(source.cut_width_mm) : ""),
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.slitting_entry_id]);
+
   const width = parseFloat(form.roll_width_mm) || 0;
   const length = parseFloat(form.length_per_tape_mtr) || 0;
   const rolls = parseFloat(form.rolls_produced) || 0;
-  const gsm = parseFloat(form.gsm) || 0;
 
   const totalLength = length * rolls;
   const totalSqm = width && length && rolls ? (width * length / 1000) * rolls : 0;
@@ -68,7 +81,6 @@ export default function Head36Entry() {
       return;
     }
     setSubmitting(true);
-    const source = slittingEntries.find((s) => s.id === form.slitting_entry_id);
     const { error } = await supabase.from("head36_entries" as any).insert({
       slitting_entry_id: form.slitting_entry_id || null,
       product_code_id: source?.product_codes?.id ?? null,
@@ -76,8 +88,8 @@ export default function Head36Entry() {
       rolls_produced: rolls,
       roll_width_mm: width || null,
       length_per_tape_mtr: length || null,
-      thickness_mm: form.thickness_mm ? parseFloat(form.thickness_mm) : null,
-      gsm: gsm || null,
+      thickness_mm: source?.thickness_mm ?? null,
+      gsm: source?.gsm ?? null,
       unit: form.unit,
       notes: form.notes || null,
       operator_id: user.id,
@@ -86,7 +98,7 @@ export default function Head36Entry() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "36 Head entry saved" });
-      setForm({ ...form, rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", thickness_mm: "", gsm: "", notes: "" });
+      setForm({ ...form, rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", notes: "" });
     }
     setSubmitting(false);
   };
@@ -101,17 +113,22 @@ export default function Head36Entry() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Source Slitting Entry (optional)</Label>
+            <Label>Source Slitting Entry *</Label>
             <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
               <SelectTrigger><SelectValue placeholder="Choose source rolls" /></SelectTrigger>
               <SelectContent>
                 {slittingEntries.map((e) => (
                   <SelectItem key={e.id} value={e.id}>
-                    {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.cut_quantity_produced} {e.unit}
+                    {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.cut_width_mm}mm — {e.cut_quantity_produced} {e.unit}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {source && (
+              <p className="text-xs text-muted-foreground">
+                Thickness: {source.thickness_mm ?? "—"} mm · GSM: {source.gsm ?? "—"} (from slitting entry)
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -140,26 +157,14 @@ export default function Head36Entry() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label>Thickness (mm)</Label>
-              <Input type="number" step="any" value={form.thickness_mm}
-                onChange={(e) => setForm({ ...form, thickness_mm: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>GSM</Label>
-              <Input type="number" step="any" value={form.gsm}
-                onChange={(e) => setForm({ ...form, gsm: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Unit</Label>
-              <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label>Unit</Label>
+            <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="bg-muted rounded-lg p-4 grid grid-cols-2 gap-3 text-center">
