@@ -51,6 +51,16 @@ const computeTotals = (r: SlittingRow) => {
   const kg = gsm > 0 ? (sqm * gsm) / 1000 : 0;
   return { lengthMtr, sqm, kg };
 };
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [entries, setEntries] = useState<SlittingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editEntry, setEditEntry] = useState<SlittingRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    date: "", cut_width_mm: "", cut_quantity_produced: "",
+    thickness_mm: "", gsm: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -74,18 +84,6 @@ const computeTotals = (r: SlittingRow) => {
       setLoadingHead36(null);
     }
   };
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [entries, setEntries] = useState<SlittingRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editEntry, setEditEntry] = useState<SlittingRow | null>(null);
-  const [editForm, setEditForm] = useState({
-    date: "", cut_width_mm: "", cut_quantity_produced: "",
-    thickness_mm: "", gsm: "", notes: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const fetchEntries = async () => {
     if (!user) return;
