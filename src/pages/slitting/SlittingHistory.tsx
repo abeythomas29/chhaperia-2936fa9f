@@ -213,7 +213,8 @@ export default function SlittingHistory() {
                   const isExpanded = expandedId === e.id;
                   const head36 = head36Map[e.id] ?? [];
                   return (
-                    <>
+                    <Fragment key={e.id}>
+                    {/* main row */}
                     <TableRow key={e.id}>
                       <TableCell className="p-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleExpand(e.id)} title="Show 36 Head production">
