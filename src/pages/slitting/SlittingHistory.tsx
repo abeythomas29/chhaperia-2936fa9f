@@ -279,7 +279,7 @@ export default function SlittingHistory() {
                         </TableCell>
                       </TableRow>
                     )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </TableBody>
