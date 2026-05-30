@@ -414,11 +414,7 @@ export default function ProductionLogs() {
                   <TableCell className="text-right font-mono">{sqm > 0 ? fmt(sqm) : "—"}</TableCell>
                   <TableCell className="text-right font-mono">{kg > 0 ? fmt(kg) : "—"}</TableCell>
                   <TableCell className="text-right font-mono">{gsm > 0 ? gsm : "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{e.thickness_mm ?? parseNum("Thickness") ?? "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{(e.tensile_strength ?? parseNum("Tensile")) || "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{(e.elongation ?? parseNum("Elongation")) || "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{(e.swelling_speed ?? parseNum("Swelling Speed")) || "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{(e.swelling_height ?? parseNum("Swelling Height")) || "—"}</TableCell>
+                  <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {hasReport && (
