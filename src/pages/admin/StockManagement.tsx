@@ -40,6 +40,7 @@ interface LedgerEntry {
   unit: string;
   notes: string | null;
   person: string | null;
+  source: "Production" | "Stock Issue" | "Sale";
 }
 
 interface Client {
@@ -98,6 +99,13 @@ export default function StockManagement() {
       .order("date", { ascending: false })
       .limit(1000);
 
+    // Fetch sales (OUT) – finished product sales also reduce stock and should appear in the ledger
+    const { data: salesData } = await supabase
+      .from("sales")
+      .select("id, date, product_code_id, item_type, quantity, unit, notes, thickness_mm, client_id, client_name, product_codes(code), company_clients(name), profiles:sold_by(name)")
+      .order("date", { ascending: false })
+      .limit(1000);
+
     // Fetch dropdowns
     const [{ data: cl }, { data: pc }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
@@ -131,6 +139,13 @@ export default function StockManagement() {
     for (const i of (issueData ?? []) as any[]) {
       const pcId = i.product_code_id;
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + Number(i.quantity));
+    }
+
+    // Include finished-product sales in issued totals (they reduce finished stock)
+    for (const s of (salesData ?? []) as any[]) {
+      if (s.item_type === "finished_product" && s.product_code_id) {
+        issueMap.set(s.product_code_id, (issueMap.get(s.product_code_id) ?? 0) + Number(s.quantity));
+      }
     }
 
     const allPcIds = new Set([...pcTotals.keys(), ...issueMap.keys()]);
@@ -173,6 +188,7 @@ export default function StockManagement() {
         unit: p.unit,
         notes: null,
         person: p.profiles?.name ?? null,
+        source: "Production",
       });
     }
     for (const i of (issueData ?? []) as any[]) {
@@ -187,6 +203,23 @@ export default function StockManagement() {
         unit: i.unit,
         notes: i.notes,
         person: i.profiles?.name ?? null,
+        source: "Stock Issue",
+      });
+    }
+    for (const s of (salesData ?? []) as any[]) {
+      const code = s.product_codes?.code ?? (s.item_type === "raw_material" ? "Raw Material" : "—");
+      ledgerEntries.push({
+        id: s.id,
+        date: s.date,
+        type: "OUT",
+        product_code: code,
+        thickness_mm: s.thickness_mm != null ? Number(s.thickness_mm) : null,
+        client_name: s.company_clients?.name ?? s.client_name ?? "—",
+        quantity: Number(s.quantity),
+        unit: s.unit,
+        notes: s.notes,
+        person: s.profiles?.name ?? null,
+        source: "Sale",
       });
     }
     ledgerEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -432,7 +465,7 @@ export default function StockManagement() {
             <div>
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <ArrowUpCircle className="h-5 w-5 text-red-500" />
-                Outward Supply (Issued to Clients)
+                Outward Supply (Issues & Sales)
                 <span className="text-sm font-normal text-muted-foreground">({outData.length} entries)</span>
               </h2>
               <div className="border rounded-lg">
@@ -440,29 +473,35 @@ export default function StockManagement() {
                   <TableHeader>
                     <TableRow>
                      <TableHead>Date</TableHead>
+                      <TableHead>Source</TableHead>
                       <TableHead>Product Code</TableHead>
                       <TableHead className="text-right">Thickness (mm)</TableHead>
                       <TableHead>Client</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
                       <TableHead>Unit</TableHead>
-                      <TableHead>Issued By</TableHead>
+                      <TableHead>By</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                         <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
                       </TableRow>
                     ) : outPaged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No outward entries found</TableCell>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No outward entries found</TableCell>
                       </TableRow>
                     ) : (
                       outPaged.map((e) => (
-                        <TableRow key={`OUT-${e.id}`}>
+                        <TableRow key={`OUT-${e.source}-${e.id}`}>
                           <TableCell className="text-base font-medium whitespace-nowrap">
                             {format(new Date(e.date), "dd/MM/yy")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={e.source === "Sale" ? "default" : "secondary"}>
+                              {e.source}
+                            </Badge>
                           </TableCell>
                           <TableCell className="font-medium">{e.product_code}</TableCell>
                           <TableCell className="text-right">{e.thickness_mm != null ? e.thickness_mm : "—"}</TableCell>
