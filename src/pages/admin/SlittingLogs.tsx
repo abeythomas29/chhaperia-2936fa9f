@@ -8,9 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Scissors, Search, Trash2, Layers } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Loader2, Scissors, Search, Trash2, Layers, CalendarIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface SlittingRow {
   id: string;
@@ -23,7 +26,7 @@ interface SlittingRow {
   unit: string;
   notes: string | null;
   slitting_manager_id: string;
-  product_codes: { code: string } | null;
+  product_codes: { code: string; category_id?: string | null } | null;
 }
 
 const parseNum = (notes: string | null, label: string): number => {
@@ -66,6 +69,11 @@ export default function SlittingLogs() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
@@ -85,8 +93,8 @@ export default function SlittingLogs() {
 
   useEffect(() => {
     (async () => {
-      const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, gsm, unit, notes, slitting_manager_id, product_codes(code)";
-      const basicSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, unit, notes, slitting_manager_id, product_codes(code)";
+      const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, gsm, unit, notes, slitting_manager_id, product_codes(code, category_id)";
+      const basicSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, unit, notes, slitting_manager_id, product_codes(code, category_id)";
 
       let { data, error } = await supabase
         .from("slitting_entries")
@@ -148,10 +156,21 @@ export default function SlittingLogs() {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("product_categories").select("id, name").eq("status", "active").order("name");
+      setCategories(data ?? []);
+    })();
+  }, []);
+
   const products = Array.from(new Set(entries.map((e) => e.product_codes?.code).filter(Boolean))) as string[];
 
   const filtered = entries.filter((e) => {
     if (productFilter !== "all" && e.product_codes?.code !== productFilter) return false;
+    if (categoryFilter !== "all" && e.product_codes?.category_id !== categoryFilter) return false;
+    const d = new Date(e.date);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -189,8 +208,8 @@ export default function SlittingLogs() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by product, manager, notes..."
@@ -199,13 +218,45 @@ export default function SlittingLogs() {
               className="pl-9"
             />
           </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={productFilter} onValueChange={setProductFilter}>
-            <SelectTrigger className="sm:w-64"><SelectValue placeholder="All products" /></SelectTrigger>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="All products" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All products</SelectItem>
               {products.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4 mr-2" />
+                {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "From date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus className="p-3 pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4 mr-2" />
+                {dateTo ? format(dateTo, "dd/MM/yyyy") : "To date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateTo} onSelect={setDateTo} initialFocus className="p-3 pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>Clear dates</Button>
+          )}
         </div>
 
         <div className="bg-muted rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center mb-4">
@@ -279,9 +330,14 @@ export default function SlittingLogs() {
                       <TableCell className="text-right font-mono">{gsm > 0 ? gsm : "—"}</TableCell>
                       <TableCell className="text-right font-mono">{e.thickness_mm ?? "—"}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(e.id)} title="Delete" className="text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setReportEntry(e)} title="Report" className="text-primary hover:text-primary">
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(e.id)} title="Delete" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -371,6 +427,51 @@ export default function SlittingLogs() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" /> Lab Report
+              </DialogTitle>
+              <DialogDescription>
+                {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+              </DialogDescription>
+            </DialogHeader>
+            {reportEntry && (() => {
+              const note = (label: string) => {
+                if (!reportEntry.notes) return null;
+                const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+                return m ? m[1] : null;
+              };
+              const pairs: [string, string | null][] = [
+                ["GSM", reportEntry.gsm != null ? String(reportEntry.gsm) : note("GSM")],
+                ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : note("Thickness")],
+                ["Tensile Strength", note("Tensile")],
+                ["Elongation", note("Elongation")],
+                ["Swelling Height", note("Swelling Height")],
+                ["Swelling Speed", note("Swelling Speed")],
+                ["Surface Resistance", note("Surface Resistance")],
+              ];
+              return (
+                <div className="divide-y border rounded-md">
+                  {pairs.map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-sm text-muted-foreground">{k}</span>
+                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
+                        {v != null && v !== "" ? v : "N/A"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
 
       </CardContent>
     </Card>
