@@ -42,9 +42,27 @@ const computeTotals = (r: SlittingRow) => {
   return { lengthMtr, sqm, kg, rolls, rollLength };
 };
 
+interface Head36Row {
+  id: string;
+  date: string;
+  slitting_entry_id: string | null;
+  rolls_taken: number;
+  rolls_produced: number;
+  roll_width_mm: number | null;
+  length_per_tape_mtr: number | null;
+  thickness_mm: number | null;
+  gsm: number | null;
+  unit: string;
+  notes: string | null;
+  operator_id: string;
+}
+
 export default function SlittingLogs() {
   const [entries, setEntries] = useState<SlittingRow[]>([]);
   const [managers, setManagers] = useState<Record<string, string>>({});
+  const [head36ByEntry, setHead36ByEntry] = useState<Record<string, Head36Row[]>>({});
+  const [head36Operators, setHead36Operators] = useState<Record<string, string>>({});
+  const [head36Open, setHead36Open] = useState<SlittingRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState<string>("all");
