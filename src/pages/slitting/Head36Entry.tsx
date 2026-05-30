@@ -111,7 +111,11 @@ export default function Head36Entry() {
       operator_id: user.id,
     } as any);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      const isMissingTable = (error as any).code === "PGRST205" || /head36_entries/i.test(error.message ?? "") && /schema cache|not find/i.test(error.message ?? "");
+      const description = isMissingTable
+        ? "36 Head table is not provisioned in the backend yet. Ask an admin to run the head36_entries setup SQL (see .lovable/plan.md)."
+        : error.message;
+      toast({ title: "Error", description, variant: "destructive" });
     } else {
       toast({ title: "36 Head entry saved" });
       setForm({ ...form, rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", notes: "" });
