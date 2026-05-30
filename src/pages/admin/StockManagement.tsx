@@ -100,11 +100,32 @@ export default function StockManagement() {
       .limit(1000);
 
     // Fetch sales (OUT) – finished product sales also reduce stock and should appear in the ledger
-    const { data: salesData } = await supabase
+    // Note: sales table has no FK constraints, so we cannot use embedded joins. Fetch flat and map locally.
+    const { data: salesRaw, error: salesErr } = await supabase
       .from("sales")
-      .select("id, date, product_code_id, item_type, quantity, unit, notes, thickness_mm, client_id, client_name, product_codes(code), company_clients(name), profiles:sold_by(name)")
+      .select("id, date, product_code_id, item_type, quantity, unit, notes, thickness_mm, client_id, client_name, sold_by")
       .order("date", { ascending: false })
       .limit(1000);
+    if (salesErr) console.error("sales fetch error", salesErr);
+
+    // Resolve labels for sales rows
+    const saleSellerIds = Array.from(new Set((salesRaw ?? []).map((s: any) => s.sold_by).filter(Boolean)));
+    const saleClientIds = Array.from(new Set((salesRaw ?? []).map((s: any) => s.client_id).filter(Boolean)));
+    const salePcIds = Array.from(new Set((salesRaw ?? []).map((s: any) => s.product_code_id).filter(Boolean)));
+    const [{ data: sellerProfiles }, { data: saleClients }, { data: salePcs }] = await Promise.all([
+      saleSellerIds.length ? supabase.from("profiles").select("user_id, name").in("user_id", saleSellerIds) : Promise.resolve({ data: [] as any[] }),
+      saleClientIds.length ? supabase.from("company_clients").select("id, name").in("id", saleClientIds) : Promise.resolve({ data: [] as any[] }),
+      salePcIds.length ? supabase.from("product_codes").select("id, code").in("id", salePcIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const sellerMap = new Map((sellerProfiles ?? []).map((p: any) => [p.user_id, p.name]));
+    const saleClientMap = new Map((saleClients ?? []).map((c: any) => [c.id, c.name]));
+    const salePcMap = new Map((salePcs ?? []).map((p: any) => [p.id, p.code]));
+    const salesData = (salesRaw ?? []).map((s: any) => ({
+      ...s,
+      product_codes: s.product_code_id ? { code: salePcMap.get(s.product_code_id) } : null,
+      company_clients: s.client_id ? { name: saleClientMap.get(s.client_id) } : null,
+      profiles: s.sold_by ? { name: sellerMap.get(s.sold_by) } : null,
+    }));
 
     // Fetch dropdowns
     const [{ data: cl }, { data: pc }] = await Promise.all([
