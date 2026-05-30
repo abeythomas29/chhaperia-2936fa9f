@@ -465,7 +465,7 @@ export default function StockManagement() {
             <div>
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <ArrowUpCircle className="h-5 w-5 text-red-500" />
-                Outward Supply (Issued to Clients)
+                Outward Supply (Issues & Sales)
                 <span className="text-sm font-normal text-muted-foreground">({outData.length} entries)</span>
               </h2>
               <div className="border rounded-lg">
@@ -473,29 +473,35 @@ export default function StockManagement() {
                   <TableHeader>
                     <TableRow>
                      <TableHead>Date</TableHead>
+                      <TableHead>Source</TableHead>
                       <TableHead>Product Code</TableHead>
                       <TableHead className="text-right">Thickness (mm)</TableHead>
                       <TableHead>Client</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
                       <TableHead>Unit</TableHead>
-                      <TableHead>Issued By</TableHead>
+                      <TableHead>By</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                         <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
                       </TableRow>
                     ) : outPaged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No outward entries found</TableCell>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No outward entries found</TableCell>
                       </TableRow>
                     ) : (
                       outPaged.map((e) => (
-                        <TableRow key={`OUT-${e.id}`}>
+                        <TableRow key={`OUT-${e.source}-${e.id}`}>
                           <TableCell className="text-base font-medium whitespace-nowrap">
                             {format(new Date(e.date), "dd/MM/yy")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={e.source === "Sale" ? "default" : "secondary"}>
+                              {e.source}
+                            </Badge>
                           </TableCell>
                           <TableCell className="font-medium">{e.product_code}</TableCell>
                           <TableCell className="text-right">{e.thickness_mm != null ? e.thickness_mm : "—"}</TableCell>
