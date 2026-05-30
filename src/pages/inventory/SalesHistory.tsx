@@ -36,6 +36,10 @@ export default function SalesHistory() {
   const { user, isAdmin } = useAuth();
   const [rows, setRows] = useState<SaleRow[]>([]);
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "raw_material" | "finished_product">("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editRow, setEditRow] = useState<SaleRow | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
