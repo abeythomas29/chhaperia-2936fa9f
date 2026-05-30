@@ -19,6 +19,7 @@ interface SlittingRow {
   thickness_mm: number | null;
   gsm: number | null;
   unit: string;
+  notes?: string | null;
   product_codes: { code: string; id?: string } | null;
 }
 
