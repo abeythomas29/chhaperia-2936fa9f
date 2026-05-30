@@ -121,6 +121,29 @@ export default function SlittingLogs() {
         (profs ?? []).forEach((p: any) => { map[p.user_id] = p.name; });
         setManagers(map);
       }
+
+      // Fetch head36 entries linked to these slitting entries
+      const slittingIds = rows.map((r) => r.id);
+      if (slittingIds.length) {
+        const { data: h36 } = await supabase
+          .from("head36_entries" as any)
+          .select("id, date, slitting_entry_id, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, thickness_mm, gsm, unit, notes, operator_id")
+          .in("slitting_entry_id", slittingIds);
+        const grouped: Record<string, Head36Row[]> = {};
+        ((h36 as unknown as Head36Row[]) ?? []).forEach((r) => {
+          if (!r.slitting_entry_id) return;
+          (grouped[r.slitting_entry_id] ||= []).push(r);
+        });
+        setHead36ByEntry(grouped);
+
+        const opIds = Array.from(new Set(((h36 as unknown as Head36Row[]) ?? []).map((r) => r.operator_id).filter(Boolean)));
+        if (opIds.length) {
+          const { data: ops } = await supabase.from("profiles").select("user_id, name").in("user_id", opIds);
+          const opMap: Record<string, string> = {};
+          (ops ?? []).forEach((p: any) => { opMap[p.user_id] = p.name; });
+          setHead36Operators(opMap);
+        }
+      }
       setLoading(false);
     })();
   }, []);
