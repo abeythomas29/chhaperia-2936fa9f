@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, ShoppingCart, Pencil, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { Search, ShoppingCart, Pencil, Trash2, Filter, X } from "lucide-react";
+import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,10 @@ export default function SalesHistory() {
   const { user, isAdmin } = useAuth();
   const [rows, setRows] = useState<SaleRow[]>([]);
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "raw_material" | "finished_product">("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editRow, setEditRow] = useState<SaleRow | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -124,14 +129,31 @@ export default function SalesHistory() {
 
   const filtered = rows.filter((r) => {
     const q = search.toLowerCase();
-    return (
+    const matchesSearch =
       (r.item_name ?? "").toLowerCase().includes(q) ||
       (r.client_name ?? "").toLowerCase().includes(q) ||
-      (r.notes ?? "").toLowerCase().includes(q)
-    );
+      (r.notes ?? "").toLowerCase().includes(q);
+
+    let matchesDate = true;
+    if (dateFrom || dateTo) {
+      const d = new Date(r.date);
+      if (dateFrom && dateTo) {
+        matchesDate = isWithinInterval(d, { start: startOfDay(new Date(dateFrom)), end: endOfDay(new Date(dateTo)) });
+      } else if (dateFrom) {
+        matchesDate = d >= startOfDay(new Date(dateFrom));
+      } else if (dateTo) {
+        matchesDate = d <= endOfDay(new Date(dateTo));
+      }
+    }
+
+    const matchesCategory = categoryFilter === "all" || r.item_type === categoryFilter;
+
+    return matchesSearch && matchesDate && matchesCategory;
   });
 
   const totalRevenue = filtered.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+
+  const activeFilterCount = [dateFrom, dateTo].filter(Boolean).length + (categoryFilter !== "all" ? 1 : 0);
 
   return (
     <div className="space-y-4">
@@ -144,9 +166,65 @@ export default function SalesHistory() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search by item, client, notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search by item, client, notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          </div>
+          <Button
+            type="button"
+            variant={showFilters || activeFilterCount > 0 ? "default" : "outline"}
+            size="icon"
+            onClick={() => setShowFilters((s) => !s)}
+            className="relative"
+          >
+            <Filter className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-white font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        </div>
+
+        {showFilters && (
+          <div className="rounded-lg border bg-card p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Filters</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setDateFrom(""); setDateTo(""); setCategoryFilter("all"); }}
+                className="h-7 text-xs"
+              >
+                <X className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">From Date</Label>
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">To Date</Label>
+                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Category</Label>
+                <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="raw_material">Raw Material</SelectItem>
+                    <SelectItem value="finished_product">Finished Product</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <Card>
