@@ -34,7 +34,9 @@ interface StockEntry {
   notes: string | null;
   added_by: string;
   created_at: string;
+  kind?: "in" | "out";
 }
+
 
 export default function RawMaterials() {
   const { user } = useAuth();
@@ -79,28 +81,65 @@ export default function RawMaterials() {
   const [stockNotes, setStockNotes] = useState("");
 
   const fetchData = async () => {
-    const [matRes, entryRes] = await Promise.all([
+    const [matRes, entryRes, saleRes] = await Promise.all([
       supabase.from("raw_materials").select("*").order("name"),
       supabase.from("raw_material_stock_entries").select("*").order("created_at", { ascending: false }).limit(2000),
+      supabase
+        .from("sales")
+        .select("id, raw_material_id, quantity, date, notes, thickness_mm, sold_by, client_name, client_id, created_at")
+        .eq("item_type", "raw_material")
+        .order("created_at", { ascending: false })
+        .limit(2000),
     ]);
     setMaterials(matRes.data ?? []);
 
-    const entries = entryRes.data ?? [];
+    const inwardEntries = (entryRes.data ?? []) as StockEntry[];
+    const salesRows = (saleRes.data ?? []) as any[];
+
+    // Resolve client names for sales (some sales reference company_clients by id)
+    const clientIds = [...new Set(salesRows.map((s) => s.client_id).filter(Boolean))];
+    let clientMap = new Map<string, string>();
+    if (clientIds.length > 0) {
+      const { data: clients } = await supabase.from("company_clients").select("id, name").in("id", clientIds);
+      clientMap = new Map((clients ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
+    }
+
+    const outwardEntries: StockEntry[] = salesRows
+      .filter((s) => s.raw_material_id)
+      .map((s) => ({
+        id: `sale-${s.id}`,
+        raw_material_id: s.raw_material_id,
+        quantity: Number(s.quantity) || 0,
+        date: s.date,
+        lot_number: null,
+        supplier: clientMap.get(s.client_id) ?? s.client_name ?? null,
+        pallets: null,
+        thickness_mm: s.thickness_mm,
+        notes: s.notes ? `Sale: ${s.notes}` : "Sale",
+        added_by: s.sold_by,
+        created_at: s.created_at,
+        kind: "out",
+      }));
+
+    const allEntries = [...inwardEntries.map((e) => ({ ...e, kind: "in" as const })), ...outwardEntries]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
     // Resolve names
     const materialMap = new Map((matRes.data ?? []).map((m: RawMaterial) => [m.id, m]));
-    const userIds = [...new Set(entries.map((e: StockEntry) => e.added_by))];
+    const userIds = [...new Set(allEntries.map((e) => e.added_by).filter(Boolean))];
     let profileMap = new Map<string, string>();
     if (userIds.length > 0) {
       const { data: profiles } = await supabase.from("profiles").select("user_id, name").in("user_id", userIds);
       profileMap = new Map((profiles ?? []).map((p: { user_id: string; name: string }) => [p.user_id, p.name]));
     }
-    setStockEntries(entries.map((e: StockEntry) => ({
+    setStockEntries(allEntries.map((e) => ({
       ...e,
       material_name: materialMap.get(e.raw_material_id)?.name ?? "Unknown",
       material_unit: materialMap.get(e.raw_material_id)?.unit ?? "",
       person_name: profileMap.get(e.added_by) ?? "Unknown",
     })));
   };
+
 
   useEffect(() => { fetchData(); }, []);
 
@@ -367,27 +406,35 @@ export default function RawMaterials() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Material</TableHead>
-                <TableHead>Supplier</TableHead>
+                <TableHead>Supplier / Client</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead className="text-right">Pallets</TableHead>
                 <TableHead className="text-right">Thickness</TableHead>
                 <TableHead>Lot No.</TableHead>
                 <TableHead>Notes</TableHead>
-                <TableHead>Added By</TableHead>
+                <TableHead>By</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredEntries.length === 0 ? (
-                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
-              ) : filteredEntries.map((e) => (
+                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
+              ) : filteredEntries.map((e) => {
+                const isOut = e.kind === "out";
+                return (
                 <TableRow key={e.id}>
                   <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
+                  <TableCell>
+                    <Badge variant={isOut ? "destructive" : "default"}>{isOut ? "Out (Sale)" : "In"}</Badge>
+                  </TableCell>
                   <TableCell>{e.material_name}</TableCell>
                   <TableCell>{e.supplier ?? "—"}</TableCell>
-                  <TableCell className="text-right font-mono">{e.quantity.toLocaleString()}</TableCell>
+                  <TableCell className={`text-right font-mono ${isOut ? "text-destructive" : ""}`}>
+                    {isOut ? "−" : "+"}{Number(e.quantity).toLocaleString()}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{e.material_unit}</TableCell>
                   <TableCell className="text-right font-mono">{e.pallets ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono">{e.thickness_mm != null ? `${e.thickness_mm} mm` : "—"}</TableCell>
@@ -395,11 +442,19 @@ export default function RawMaterials() {
                   <TableCell className="text-muted-foreground">{e.notes ?? "—"}</TableCell>
                   <TableCell>{e.person_name}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    {isOut ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
+
             </TableBody>
           </Table>
         </CardContent>
