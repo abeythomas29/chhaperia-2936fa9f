@@ -81,28 +81,65 @@ export default function RawMaterials() {
   const [stockNotes, setStockNotes] = useState("");
 
   const fetchData = async () => {
-    const [matRes, entryRes] = await Promise.all([
+    const [matRes, entryRes, saleRes] = await Promise.all([
       supabase.from("raw_materials").select("*").order("name"),
       supabase.from("raw_material_stock_entries").select("*").order("created_at", { ascending: false }).limit(2000),
+      supabase
+        .from("sales")
+        .select("id, raw_material_id, quantity, date, notes, thickness_mm, sold_by, client_name, client_id, created_at")
+        .eq("item_type", "raw_material")
+        .order("created_at", { ascending: false })
+        .limit(2000),
     ]);
     setMaterials(matRes.data ?? []);
 
-    const entries = entryRes.data ?? [];
+    const inwardEntries = (entryRes.data ?? []) as StockEntry[];
+    const salesRows = (saleRes.data ?? []) as any[];
+
+    // Resolve client names for sales (some sales reference company_clients by id)
+    const clientIds = [...new Set(salesRows.map((s) => s.client_id).filter(Boolean))];
+    let clientMap = new Map<string, string>();
+    if (clientIds.length > 0) {
+      const { data: clients } = await supabase.from("company_clients").select("id, name").in("id", clientIds);
+      clientMap = new Map((clients ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
+    }
+
+    const outwardEntries: StockEntry[] = salesRows
+      .filter((s) => s.raw_material_id)
+      .map((s) => ({
+        id: `sale-${s.id}`,
+        raw_material_id: s.raw_material_id,
+        quantity: Number(s.quantity) || 0,
+        date: s.date,
+        lot_number: null,
+        supplier: clientMap.get(s.client_id) ?? s.client_name ?? null,
+        pallets: null,
+        thickness_mm: s.thickness_mm,
+        notes: s.notes ? `Sale: ${s.notes}` : "Sale",
+        added_by: s.sold_by,
+        created_at: s.created_at,
+        kind: "out",
+      }));
+
+    const allEntries = [...inwardEntries.map((e) => ({ ...e, kind: "in" as const })), ...outwardEntries]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
     // Resolve names
     const materialMap = new Map((matRes.data ?? []).map((m: RawMaterial) => [m.id, m]));
-    const userIds = [...new Set(entries.map((e: StockEntry) => e.added_by))];
+    const userIds = [...new Set(allEntries.map((e) => e.added_by).filter(Boolean))];
     let profileMap = new Map<string, string>();
     if (userIds.length > 0) {
       const { data: profiles } = await supabase.from("profiles").select("user_id, name").in("user_id", userIds);
       profileMap = new Map((profiles ?? []).map((p: { user_id: string; name: string }) => [p.user_id, p.name]));
     }
-    setStockEntries(entries.map((e: StockEntry) => ({
+    setStockEntries(allEntries.map((e) => ({
       ...e,
       material_name: materialMap.get(e.raw_material_id)?.name ?? "Unknown",
       material_unit: materialMap.get(e.raw_material_id)?.unit ?? "",
       person_name: profileMap.get(e.added_by) ?? "Unknown",
     })));
   };
+
 
   useEffect(() => { fetchData(); }, []);
 
