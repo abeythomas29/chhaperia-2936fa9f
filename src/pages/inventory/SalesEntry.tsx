@@ -82,6 +82,21 @@ export default function SalesEntry() {
     if (selectedMaterial) setUnit(selectedMaterial.unit);
   }, [selectedMaterial]);
 
+  // Fetch available stock for finished product
+  useEffect(() => {
+    if (tab !== "finished_product" || !productId) {
+      setProductAvailable(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingAvailable(true);
+    getFinishedProductAvailable(productId)
+      .then((v) => { if (!cancelled) setProductAvailable(v); })
+      .catch(() => { if (!cancelled) setProductAvailable(null); })
+      .finally(() => { if (!cancelled) setLoadingAvailable(false); });
+    return () => { cancelled = true; };
+  }, [productId, tab]);
+
   const total = quantity && pricePerUnit ? Number(quantity) * Number(pricePerUnit) : 0;
 
   const reset = () => {
