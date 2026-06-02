@@ -352,7 +352,7 @@ export default function ProductionEntry() {
                 ) : (
                   <div className="space-y-2">
                     {thicknessRows.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                      <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 items-end">
                         <div>
                           {idx === 0 && <Label className="text-xs">Thickness (mm)</Label>}
                           <Input type="number" step="any" value={row.thickness_mm} className="h-9"
@@ -364,9 +364,14 @@ export default function ProductionEntry() {
                             onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, rolls_count: e.target.value } : r))} />
                         </div>
                         <div>
-                          {idx === 0 && <Label className="text-xs">Qty / Roll</Label>}
-                          <Input type="number" step="any" value={row.quantity_per_roll} className="h-9"
-                            onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, quantity_per_roll: e.target.value } : r))} />
+                          {idx === 0 && <Label className="text-xs">Length / Roll</Label>}
+                          <Input type="number" step="any" value={row.length_per_roll} className="h-9"
+                            onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, length_per_roll: e.target.value } : r))} />
+                        </div>
+                        <div>
+                          {idx === 0 && <Label className="text-xs">Width / Roll</Label>}
+                          <Input type="number" step="any" value={row.width_per_roll} className="h-9"
+                            onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, width_per_roll: e.target.value } : r))} />
                         </div>
                         <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setThicknessRows((rs) => rs.filter((_, i) => i !== idx))}>
                           <Trash2 className="h-4 w-4 text-destructive" />
