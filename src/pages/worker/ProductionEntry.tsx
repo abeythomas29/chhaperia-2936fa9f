@@ -437,8 +437,9 @@ export default function ProductionEntry() {
           {/* Copper Tape flags (semi-cond / water blocking tape — NOT fiber glass) */}
           {(() => {
             const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
-            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass");
-            const isCopperTape = !isFiberGlass && (catName.includes("copper") || catName.includes("semi cond") || catName.includes("water block"));
+            const code = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
+            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass") || catName.includes("fgt") || code.startsWith("FGT");
+            const isCopperTape = !isFiberGlass && (catName.includes("copper") || catName.includes("semi cond") || catName.includes("semicond") || catName.includes("water block") || code.startsWith("CWT") || code.startsWith("SCT"));
             if (!isCopperTape) return null;
             return (
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
@@ -461,7 +462,8 @@ export default function ProductionEntry() {
           {/* Fiber Glass Tape options */}
           {(() => {
             const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
-            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass");
+            const code = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
+            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass") || catName.includes("fgt") || code.startsWith("FGT");
             if (!isFiberGlass) return null;
             return (
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
