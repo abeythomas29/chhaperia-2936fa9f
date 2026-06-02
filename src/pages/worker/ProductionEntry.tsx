@@ -365,12 +365,12 @@ export default function ProductionEntry() {
                             onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, rolls_count: e.target.value } : r))} />
                         </div>
                         <div>
-                          {idx === 0 && <Label className="text-xs">Length / Roll</Label>}
+                          {idx === 0 && <Label className="text-xs">Length / Roll (mtr)</Label>}
                           <Input type="number" step="any" value={row.length_per_roll} className="h-9"
                             onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, length_per_roll: e.target.value } : r))} />
                         </div>
                         <div>
-                          {idx === 0 && <Label className="text-xs">Width / Roll</Label>}
+                          {idx === 0 && <Label className="text-xs">Width / Roll (mm)</Label>}
                           <Input type="number" step="any" value={row.width_per_roll} className="h-9"
                             onChange={(e) => setThicknessRows((rs) => rs.map((r, i) => i === idx ? { ...r, width_per_roll: e.target.value } : r))} />
                         </div>
@@ -391,7 +391,7 @@ export default function ProductionEntry() {
               <Input type="number" min="0" step="0.0001" value={form.rolls_count} onChange={(e) => setForm({ ...form, rolls_count: e.target.value })} placeholder="0" />
             </div>
             <div>
-              <Label>Length / Roll</Label>
+              <Label>Length / Roll (mtr)</Label>
               <Input type="number" min="0" step="0.0001" value={form.length_per_roll} onChange={(e) => setForm({ ...form, length_per_roll: e.target.value })} placeholder="0" />
             </div>
             <div>
@@ -400,7 +400,7 @@ export default function ProductionEntry() {
             </div>
           </div>
           {(Number(form.length_per_roll) > 0 && Number(form.width_per_roll) > 0) && (
-            <p className="text-xs text-muted-foreground -mt-2">Qty per roll = {qtyPerRoll.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+            <p className="text-xs text-muted-foreground -mt-2">Qty per roll (sqmtr) = {qtyPerRoll.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
           )}
 
           <div className="grid grid-cols-2 gap-4">
