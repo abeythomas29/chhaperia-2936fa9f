@@ -461,32 +461,26 @@ export default function ProductionEntry() {
 
           {(() => {
             const gsmVal = Number(form.gsm) || 0;
+            const rolls = Number(form.rolls_count) || 0;
+            const len = Number(form.length_per_roll) || 0;
+            const wid = Number(form.width_per_roll) || 0;
+            const sqm: number | null = rolls > 0 && len > 0 && wid > 0 ? rolls * len * wid : null;
+            const mtr: number | null = rolls > 0 && len > 0 ? rolls * len : null;
+            const kg: number | null = sqm !== null && gsmVal > 0 ? (sqm * gsmVal) / 1000 : null;
             const base = totalQuantity;
-            let kg: number | null = null;
-            let sqm: number | null = null;
-            let mtr: number | null = null;
-            if (form.unit === "kg") {
-              kg = base;
-              if (gsmVal > 0) sqm = (base * 1000) / gsmVal;
-            } else if (form.unit === "sqmtr") {
-              sqm = base;
-              if (gsmVal > 0) kg = (base * gsmVal) / 1000;
-            } else if (form.unit === "meters") {
-              mtr = base;
-            }
             const fmt = (n: number | null, u: string) =>
-              n === null ? <span className="text-muted-foreground">—</span> : <>{n.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-xs font-normal text-muted-foreground">{u}</span></>;
+              n === null ? <span className="text-muted-foreground">—</span> : <>{n.toLocaleString(undefined, { maximumFractionDigits: 4 })} <span className="text-xs font-normal text-muted-foreground">{u}</span></>;
             return (
               <div className="bg-muted rounded-lg p-4 space-y-2">
                 <p className="text-sm text-muted-foreground text-center">Total Quantity {thicknessRows.length > 0 ? "(single-row preview)" : ""}</p>
-                <p className="text-3xl font-bold text-primary text-center">{base.toLocaleString()} <span className="text-lg font-normal text-muted-foreground">{form.unit}</span></p>
+                <p className="text-3xl font-bold text-primary text-center">{base.toLocaleString(undefined, { maximumFractionDigits: 4 })} <span className="text-lg font-normal text-muted-foreground">{form.unit}</span></p>
                 <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border text-center">
                   <div><p className="text-xs text-muted-foreground">Meters</p><p className="text-base font-semibold">{fmt(mtr, "mtr")}</p></div>
                   <div><p className="text-xs text-muted-foreground">Square Meters</p><p className="text-base font-semibold">{fmt(sqm, "sqmtr")}</p></div>
                   <div><p className="text-xs text-muted-foreground">Kilograms</p><p className="text-base font-semibold">{fmt(kg, "kg")}</p></div>
                 </div>
-                {!gsmVal && (form.unit === "kg" || form.unit === "sqmtr") && (
-                  <p className="text-xs text-center text-muted-foreground italic">Enter GSM to convert between kg ↔ sqmtr</p>
+                {!gsmVal && (
+                  <p className="text-xs text-center text-muted-foreground italic">Enter GSM to compute kg</p>
                 )}
               </div>
             );
