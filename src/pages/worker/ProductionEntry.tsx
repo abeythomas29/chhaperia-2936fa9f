@@ -387,15 +387,15 @@ export default function ProductionEntry() {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <Label>Number of Rolls</Label>
-              <Input type="number" min="0" step="0.01" value={form.rolls_count} onChange={(e) => setForm({ ...form, rolls_count: e.target.value })} placeholder="0" />
+              <Input type="number" min="0" step="0.0001" value={form.rolls_count} onChange={(e) => setForm({ ...form, rolls_count: e.target.value })} placeholder="0" />
             </div>
             <div>
               <Label>Length / Roll</Label>
-              <Input type="number" min="0" step="0.01" value={form.length_per_roll} onChange={(e) => setForm({ ...form, length_per_roll: e.target.value })} placeholder="0" />
+              <Input type="number" min="0" step="0.0001" value={form.length_per_roll} onChange={(e) => setForm({ ...form, length_per_roll: e.target.value })} placeholder="0" />
             </div>
             <div>
               <Label>Width / Roll</Label>
-              <Input type="number" min="0" step="0.01" value={form.width_per_roll} onChange={(e) => setForm({ ...form, width_per_roll: e.target.value })} placeholder="0" />
+              <Input type="number" min="0" step="0.0001" value={form.width_per_roll} onChange={(e) => setForm({ ...form, width_per_roll: e.target.value })} placeholder="0" />
             </div>
           </div>
           {(Number(form.length_per_roll) > 0 && Number(form.width_per_roll) > 0) && (
@@ -405,11 +405,11 @@ export default function ProductionEntry() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Thickness (mm)</Label>
-              <Input type="number" min="0" step="0.01" value={form.thickness_mm} onChange={(e) => setForm({ ...form, thickness_mm: e.target.value })} placeholder="e.g. 0.25" />
+              <Input type="number" min="0" step="0.0001" value={form.thickness_mm} onChange={(e) => setForm({ ...form, thickness_mm: e.target.value })} placeholder="e.g. 0.25" />
             </div>
             <div>
               <Label>GSM</Label>
-              <Input type="number" min="0" step="0.01" value={form.gsm} onChange={(e) => setForm({ ...form, gsm: e.target.value })} placeholder="e.g. 80" />
+              <Input type="number" min="0" step="0.0001" value={form.gsm} onChange={(e) => setForm({ ...form, gsm: e.target.value })} placeholder="e.g. 80" />
             </div>
           </div>
 
@@ -516,57 +516,57 @@ export default function ProductionEntry() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Tensile Strength</Label>
-                      <Input type="number" min="0" step="0.01" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
                     </div>
                     <div>
                       <Label className="text-xs">Elongation</Label>
-                      <Input type="number" min="0" step="0.01" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
                     </div>
                     <div>
                       <Label className="text-xs">Swelling Speed</Label>
-                      <Input type="number" min="0" step="0.01" value={form.swelling_speed} onChange={(e) => setForm({ ...form, swelling_speed: e.target.value })} placeholder="e.g. 5.2" />
+                      <Input type="number" min="0" step="0.0001" value={form.swelling_speed} onChange={(e) => setForm({ ...form, swelling_speed: e.target.value })} placeholder="e.g. 5.2" />
                     </div>
                     <div>
                       <Label className="text-xs">Swelling Height</Label>
-                      <Input type="number" min="0" step="0.01" value={form.swelling_height} onChange={(e) => setForm({ ...form, swelling_height: e.target.value })} placeholder="e.g. 12.5" />
+                      <Input type="number" min="0" step="0.0001" value={form.swelling_height} onChange={(e) => setForm({ ...form, swelling_height: e.target.value })} placeholder="e.g. 12.5" />
                     </div>
                   </div>
                 ) : needsSurfaceResistance ? (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Tensile Strength</Label>
-                      <Input type="number" min="0" step="0.01" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
                     </div>
                     <div>
                       <Label className="text-xs">Elongation</Label>
-                      <Input type="number" min="0" step="0.01" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
                     </div>
                     {isWaterBlocking && (
                       <>
                         <div>
                           <Label className="text-xs">Swelling Speed</Label>
-                          <Input type="number" min="0" step="0.01" value={form.swelling_speed} onChange={(e) => setForm({ ...form, swelling_speed: e.target.value })} placeholder="e.g. 5.2" />
+                          <Input type="number" min="0" step="0.0001" value={form.swelling_speed} onChange={(e) => setForm({ ...form, swelling_speed: e.target.value })} placeholder="e.g. 5.2" />
                         </div>
                         <div>
                           <Label className="text-xs">Swelling Height</Label>
-                          <Input type="number" min="0" step="0.01" value={form.swelling_height} onChange={(e) => setForm({ ...form, swelling_height: e.target.value })} placeholder="e.g. 12.5" />
+                          <Input type="number" min="0" step="0.0001" value={form.swelling_height} onChange={(e) => setForm({ ...form, swelling_height: e.target.value })} placeholder="e.g. 12.5" />
                         </div>
                       </>
                     )}
                     <div className="col-span-2">
                       <Label className="text-xs">Surface Resistance (Ω)</Label>
-                      <Input type="number" min="0" step="0.01" value={form.surface_resistance} onChange={(e) => setForm({ ...form, surface_resistance: e.target.value })} placeholder="e.g. 1000" />
+                      <Input type="number" min="0" step="0.0001" value={form.surface_resistance} onChange={(e) => setForm({ ...form, surface_resistance: e.target.value })} placeholder="e.g. 1000" />
                     </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Tensile Strength</Label>
-                      <Input type="number" min="0" step="0.01" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.tensile_strength} onChange={(e) => setForm({ ...form, tensile_strength: e.target.value })} placeholder="e.g. 45.0" />
                     </div>
                     <div>
                       <Label className="text-xs">Elongation</Label>
-                      <Input type="number" min="0" step="0.01" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
+                      <Input type="number" min="0" step="0.0001" value={form.elongation} onChange={(e) => setForm({ ...form, elongation: e.target.value })} placeholder="e.g. 15.0" />
                     </div>
                   </div>
                 )}

@@ -193,7 +193,7 @@ export default function ProductionHistory() {
                 </div>
                 <div className="space-y-2">
                   <Label>Qty per Roll</Label>
-                  <Input type="number" value={editQtyPerRoll} onChange={(e) => setEditQtyPerRoll(e.target.value)} min={0} step="0.01" />
+                  <Input type="number" value={editQtyPerRoll} onChange={(e) => setEditQtyPerRoll(e.target.value)} min={0} step="0.0001" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -208,7 +208,7 @@ export default function ProductionHistory() {
               </div>
               <div className="space-y-2">
                 <Label>Thickness (mm)</Label>
-                <Input type="number" value={editThickness} onChange={(e) => setEditThickness(e.target.value)} min={0} step="0.01" placeholder="e.g. 0.25" />
+                <Input type="number" value={editThickness} onChange={(e) => setEditThickness(e.target.value)} min={0} step="0.0001" placeholder="e.g. 0.25" />
               </div>
             </div>
             <DialogFooter>
