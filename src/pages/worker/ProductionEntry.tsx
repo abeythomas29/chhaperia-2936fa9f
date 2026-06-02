@@ -56,6 +56,11 @@ export default function ProductionEntry() {
     surface_resistance: "",
     lab_report_included: false,
     raw_material_included: false,
+    copper_wire_count: "",
+    rope_diameter_mm: "",
+    bundles_count: "",
+    bundles_per_pallet: "",
+    weight_per_pallet: "",
   });
 
   // Rope multi-thickness rows (only used when category is Rope)
