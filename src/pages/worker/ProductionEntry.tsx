@@ -90,7 +90,8 @@ export default function ProductionEntry() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const qtyPerRoll = (Number(form.length_per_roll) || 0) * (Number(form.width_per_roll) || 0);
+  // Width is entered in millimeters; convert to meters for area calculations
+  const qtyPerRoll = (Number(form.length_per_roll) || 0) * ((Number(form.width_per_roll) || 0) / 1000);
   const totalQuantity = (Number(form.rolls_count) || 0) * qtyPerRoll;
 
   const filteredProductCodes = selectedCategory
