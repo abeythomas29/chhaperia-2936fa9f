@@ -384,16 +384,23 @@ export default function ProductionEntry() {
             );
           })()}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <Label>Number of Rolls</Label>
               <Input type="number" min="0" step="0.01" value={form.rolls_count} onChange={(e) => setForm({ ...form, rolls_count: e.target.value })} placeholder="0" />
             </div>
             <div>
-              <Label>Quantity per Roll</Label>
-              <Input type="number" min="0" step="0.01" value={form.quantity_per_roll} onChange={(e) => setForm({ ...form, quantity_per_roll: e.target.value })} placeholder="0" />
+              <Label>Length / Roll</Label>
+              <Input type="number" min="0" step="0.01" value={form.length_per_roll} onChange={(e) => setForm({ ...form, length_per_roll: e.target.value })} placeholder="0" />
+            </div>
+            <div>
+              <Label>Width / Roll</Label>
+              <Input type="number" min="0" step="0.01" value={form.width_per_roll} onChange={(e) => setForm({ ...form, width_per_roll: e.target.value })} placeholder="0" />
             </div>
           </div>
+          {(Number(form.length_per_roll) > 0 && Number(form.width_per_roll) > 0) && (
+            <p className="text-xs text-muted-foreground -mt-2">Qty per roll = {qtyPerRoll.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
