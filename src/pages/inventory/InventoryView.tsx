@@ -356,7 +356,7 @@ export default function InventoryView() {
                   </TableCell>
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell>{m.unit}</TableCell>
-                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
                   <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
@@ -405,7 +405,7 @@ export default function InventoryView() {
                   <TableCell>{p.unit}</TableCell>
                   <TableCell className="text-right font-mono">
                     <span className={p.available <= 0 ? "text-muted-foreground" : ""}>
-                      {p.available.toLocaleString()}
+                      {p.available.toLocaleString()} {p.unit}
                     </span>
                   </TableCell>
                 </TableRow>

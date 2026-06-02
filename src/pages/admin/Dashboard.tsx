@@ -226,8 +226,8 @@ export default function Dashboard() {
               <TableCell className="font-medium">{e.product_codes?.code ?? "—"}</TableCell>
               <TableCell>{e.profiles?.name ?? "—"}</TableCell>
               <TableCell className="text-right">{e.rolls_count}</TableCell>
-              <TableCell className="text-right">{e.quantity_per_roll}</TableCell>
-              <TableCell className="text-right font-semibold">{e.total_quantity ?? "—"}</TableCell>
+              <TableCell className="text-right">{e.quantity_per_roll} sqmtr</TableCell>
+              <TableCell className="text-right font-semibold">{e.total_quantity != null ? `${e.total_quantity} ${e.unit}` : "—"}</TableCell>
               <TableCell>{e.unit}</TableCell>
             </TableRow>
           ))

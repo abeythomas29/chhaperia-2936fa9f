@@ -290,7 +290,7 @@ export default function RawMaterials() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Quantity</Label>
+                  <Label>Quantity ({materials.find(m => m.id === stockMaterialId)?.unit ?? 'kg'})</Label>
                   <Input type="number" min="0" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="0" />
                 </div>
                 <div>
@@ -386,7 +386,7 @@ export default function RawMaterials() {
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell>{m.unit}</TableCell>
-                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
                   <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
@@ -433,7 +433,7 @@ export default function RawMaterials() {
                   <TableCell>{e.material_name}</TableCell>
                   <TableCell>{e.supplier ?? "—"}</TableCell>
                   <TableCell className={`text-right font-mono ${isOut ? "text-destructive" : ""}`}>
-                    {isOut ? "−" : "+"}{Number(e.quantity).toLocaleString()}
+                    {isOut ? "−" : "+"}{Number(e.quantity).toLocaleString()} {e.material_unit}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{e.material_unit}</TableCell>
                   <TableCell className="text-right font-mono">{e.pallets ?? "—"}</TableCell>

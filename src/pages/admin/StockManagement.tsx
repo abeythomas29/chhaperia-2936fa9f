@@ -352,16 +352,16 @@ export default function StockManagement() {
                 <div className="grid grid-cols-3 gap-2 text-center mb-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Produced</p>
-                    <p className="text-lg font-semibold text-green-600">{s.produced.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-green-600">{s.produced.toLocaleString()} {s.unit}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Issued</p>
-                    <p className="text-lg font-semibold text-red-500">{s.issued.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-red-500">{s.issued.toLocaleString()} {s.unit}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Available</p>
                     <p className={`text-lg font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
-                      {s.available.toLocaleString()}
+                      {s.available.toLocaleString()} {s.unit}
                     </p>
                   </div>
                 </div>
@@ -444,7 +444,7 @@ export default function StockManagement() {
                           </TableCell>
                           <TableCell className="font-medium">{e.product_code}</TableCell>
                           <TableCell className="text-right">{e.thickness_mm != null ? e.thickness_mm : <span className="text-muted-foreground italic">Not set</span>}</TableCell>
-                          <TableCell className="text-right font-semibold text-green-600">{Number(e.quantity).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-semibold text-green-600">{Number(e.quantity).toLocaleString()} {e.unit}</TableCell>
                           <TableCell>{e.unit}</TableCell>
                           <TableCell>{e.person ?? "—"}</TableCell>
                           <TableCell>
@@ -527,7 +527,7 @@ export default function StockManagement() {
                           <TableCell className="font-medium">{e.product_code}</TableCell>
                           <TableCell className="text-right">{e.thickness_mm != null ? e.thickness_mm : "—"}</TableCell>
                           <TableCell>{e.client_name ?? "—"}</TableCell>
-                          <TableCell className="text-right font-semibold text-red-500">{Number(e.quantity).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-semibold text-red-500">{Number(e.quantity).toLocaleString()} {e.unit}</TableCell>
                           <TableCell>{e.unit}</TableCell>
                           <TableCell>{e.person ?? "—"}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{e.notes ?? "—"}</TableCell>
@@ -587,8 +587,8 @@ export default function StockManagement() {
                 if (!stock) return null;
                 return (
                   <div className="flex gap-4 text-sm p-2 rounded bg-muted">
-                    <span>Produced: <strong className="text-green-600">{stock.produced.toLocaleString()}</strong></span>
-                    <span>Issued: <strong className="text-red-500">{stock.issued.toLocaleString()}</strong></span>
+                    <span>Produced: <strong className="text-green-600">{stock.produced.toLocaleString()} {stock.unit}</strong></span>
+                    <span>Issued: <strong className="text-red-500">{stock.issued.toLocaleString()} {stock.unit}</strong></span>
                     <span>Available: <strong className={stock.available > 0 ? "text-primary" : "text-destructive"}>{stock.available.toLocaleString()} {stock.unit}</strong></span>
                   </div>
                 );
@@ -607,7 +607,7 @@ export default function StockManagement() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Quantity</Label>
+                <Label>Quantity ({issueUnit})</Label>
                 <Input type="number" min="0" step="0.01" value={issueQuantity} onChange={(e) => setIssueQuantity(e.target.value)} placeholder="0" />
               </div>
               <div className="space-y-2">

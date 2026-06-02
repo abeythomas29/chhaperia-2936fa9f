@@ -306,7 +306,7 @@ export default function SalesEntry() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Quantity</Label>
+              <Label>Quantity ({unit})</Label>
               <Input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" />
             </div>
             <div>

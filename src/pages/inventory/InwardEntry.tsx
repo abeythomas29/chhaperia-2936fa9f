@@ -172,7 +172,7 @@ export default function InwardEntry() {
           </div>
 
           <div>
-            <Label>Quantity</Label>
+            <Label>Quantity ({selectedMaterial?.unit ?? 'kg'})</Label>
             <Input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" />
           </div>
 
