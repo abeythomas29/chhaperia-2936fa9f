@@ -607,7 +607,7 @@ export default function StockManagement() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Quantity</Label>
+                <Label>Quantity ({issueUnit})</Label>
                 <Input type="number" min="0" step="0.01" value={issueQuantity} onChange={(e) => setIssueQuantity(e.target.value)} placeholder="0" />
               </div>
               <div className="space-y-2">
