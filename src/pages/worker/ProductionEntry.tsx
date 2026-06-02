@@ -103,6 +103,30 @@ export default function ProductionEntry() {
     ? productCodes.filter((p) => p.category_id === selectedCategory)
     : productCodes;
 
+  const selectedCategoryName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
+  const selectedProductCode = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
+  const isFiberGlassSelection =
+    selectedCategoryName.includes("fiber") ||
+    selectedCategoryName.includes("fibre") ||
+    selectedCategoryName.includes("glass") ||
+    selectedCategoryName.includes("fgt") ||
+    selectedProductCode.includes("FGT") ||
+    selectedProductCode.includes("FIBER GLASS") ||
+    selectedProductCode.includes("FIBRE GLASS");
+  const isCopperTapeSelection =
+    !isFiberGlassSelection &&
+    (
+      selectedCategoryName.includes("copper") ||
+      selectedCategoryName.includes("semi cond") ||
+      selectedCategoryName.includes("semicond") ||
+      selectedCategoryName.includes("water block") ||
+      selectedProductCode.includes("CWT") ||
+      selectedProductCode.includes("SCT")
+    );
+  const isCwrSelection =
+    selectedProductCode.includes("CWR") ||
+    (selectedCategoryName.includes("rope") && selectedCategoryName.includes("water"));
+
   const handleCategoryChange = (catId: string) => {
     setSelectedCategory(catId);
     if (form.product_code_id) {
@@ -436,11 +460,7 @@ export default function ProductionEntry() {
 
           {/* Copper Tape flags (semi-cond / water blocking tape — NOT fiber glass) */}
           {(() => {
-            const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
-            const code = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
-            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass") || catName.includes("fgt") || code.startsWith("FGT");
-            const isCopperTape = !isFiberGlass && (catName.includes("copper") || catName.includes("semi cond") || catName.includes("semicond") || catName.includes("water block") || code.startsWith("CWT") || code.startsWith("SCT"));
-            if (!isCopperTape) return null;
+            if (!isCopperTapeSelection) return null;
             return (
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold">Copper Tape Options</Label>
@@ -461,10 +481,7 @@ export default function ProductionEntry() {
 
           {/* Fiber Glass Tape options */}
           {(() => {
-            const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
-            const code = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
-            const isFiberGlass = catName.includes("fiber") || catName.includes("fibre") || catName.includes("glass") || catName.includes("fgt") || code.startsWith("FGT");
-            if (!isFiberGlass) return null;
+            if (!isFiberGlassSelection) return null;
             return (
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold">Fiber Glass Tape Options</Label>
@@ -492,10 +509,7 @@ export default function ProductionEntry() {
 
           {/* Water Blocking Rope (CWR) options */}
           {(() => {
-            const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
-            const code = productCodes.find((p) => p.id === form.product_code_id)?.code?.toUpperCase() ?? "";
-            const isCWR = code.startsWith("CWR") || (catName.includes("rope") && catName.includes("water"));
-            if (!isCWR) return null;
+            if (!isCwrSelection) return null;
             return (
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold">Water Blocking Rope (CWR)</Label>
