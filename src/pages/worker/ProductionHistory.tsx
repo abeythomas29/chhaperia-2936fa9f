@@ -155,7 +155,7 @@ export default function ProductionHistory() {
                   <TableCell className="font-medium">{e.product_codes?.code ?? "—"}</TableCell>
                   <TableCell>{e.company_clients?.name ?? "—"}</TableCell>
                   <TableCell className="text-right">{e.rolls_count}</TableCell>
-                  <TableCell className="text-right font-semibold">{e.total_quantity ?? (e.rolls_count * e.quantity_per_roll)}</TableCell>
+                  <TableCell className="text-right font-semibold">{e.total_quantity ?? (e.rolls_count * e.quantity_per_roll)} {e.unit}</TableCell>
                   <TableCell>{e.unit}</TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell className="text-right">
@@ -192,7 +192,7 @@ export default function ProductionHistory() {
                   <Input type="number" value={editRolls} onChange={(e) => setEditRolls(e.target.value)} min={1} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Qty per Roll</Label>
+                  <Label>Qty per Roll (sqmtr)</Label>
                   <Input type="number" value={editQtyPerRoll} onChange={(e) => setEditQtyPerRoll(e.target.value)} min={0} step="0.0001" />
                 </div>
               </div>
