@@ -352,16 +352,16 @@ export default function StockManagement() {
                 <div className="grid grid-cols-3 gap-2 text-center mb-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Produced</p>
-                    <p className="text-lg font-semibold text-green-600">{s.produced.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-green-600">{s.produced.toLocaleString()} {s.unit}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Issued</p>
-                    <p className="text-lg font-semibold text-red-500">{s.issued.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-red-500">{s.issued.toLocaleString()} {s.unit}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Available</p>
                     <p className={`text-lg font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
-                      {s.available.toLocaleString()}
+                      {s.available.toLocaleString()} {s.unit}
                     </p>
                   </div>
                 </div>
