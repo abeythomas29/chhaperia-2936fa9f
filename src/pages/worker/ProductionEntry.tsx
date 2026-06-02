@@ -151,6 +151,11 @@ export default function ProductionEntry() {
     if (form.tensile_strength) labParts.push(`Tensile: ${form.tensile_strength}`);
     if (form.elongation) labParts.push(`Elongation: ${form.elongation}`);
     if (form.surface_resistance) labParts.push(`Surface Resistance: ${form.surface_resistance}`);
+    if (form.copper_wire_count) labParts.push(`Copper Wires: ${form.copper_wire_count}`);
+    if (form.rope_diameter_mm) labParts.push(`Rope Diameter: ${form.rope_diameter_mm} mm`);
+    if (form.bundles_count) labParts.push(`Bundles: ${form.bundles_count}`);
+    if (form.bundles_per_pallet) labParts.push(`Bundles/Pallet: ${form.bundles_per_pallet}`);
+    if (form.weight_per_pallet) labParts.push(`Weight/Pallet: ${form.weight_per_pallet} kg`);
 
     const combinedNotes = [form.notes.trim(), labParts.join(" | ")].filter(Boolean).join(" || ");
 
