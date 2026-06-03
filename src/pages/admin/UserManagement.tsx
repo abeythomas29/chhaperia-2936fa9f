@@ -77,6 +77,17 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     const { data, error } = await supabase.rpc("admin_list_users" as any);
     if (error) {
+      if (error.message === "Not authorized") {
+        const repaired = await attemptAdminRepair();
+        if (repaired) {
+          const retry = await supabase.rpc("admin_list_users" as any);
+          if (!retry.error) {
+            setUsers((retry.data ?? []) as UserRow[]);
+            toast({ title: "Admin access repaired" });
+            return;
+          }
+        }
+      }
       toast({ title: "Error loading users", description: error.message, variant: "destructive" });
       return;
     }
