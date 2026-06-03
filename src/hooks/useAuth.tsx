@@ -25,25 +25,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const SUPER_ADMIN_EMAILS = ["admin@chhaperia.com"];
 
-  const ensureSuperAdminRole = async (userId: string) => {
-    const { data: existing } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "super_admin")
-      .maybeSingle();
-    if (!existing) {
-      await supabase.from("user_roles").insert({ user_id: userId, role: "super_admin" });
+  const repairBootstrapAdmin = async (email: string | null | undefined) => {
+    if (!email || !SUPER_ADMIN_EMAILS.includes(email.toLowerCase())) {
+      return false;
     }
+
+    const { error } = await supabase.rpc("repair_admin_lockout" as never);
+    return !error;
   };
 
   const fetchRoles = async (userId: string, email: string | null | undefined, retries = 3) => {
     const isKnownSuperAdmin = !!email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
+
+    if (error && isKnownSuperAdmin) {
+      const repaired = await repairBootstrapAdmin(email);
+      if (repaired) {
+        return fetchRoles(userId, email, retries - 1);
+      }
+    }
 
     if (data && data.length > 0) {
       const userRoles = data.map((r) => r.role);
@@ -55,10 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (isKnownSuperAdmin) {
-      await ensureSuperAdminRole(userId);
-      setRoles(["super_admin"]);
-      setRole("super_admin");
-      return;
+      const repaired = await repairBootstrapAdmin(email);
+      if (repaired) {
+        return fetchRoles(userId, email, retries - 1);
+      }
     }
 
     if (retries > 0) {
@@ -99,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setSession(session);
         setUser(session?.user ?? null);
+        setRole(null);
+        setRoles([]);
+        setProfileName(null);
         if (session?.user) {
           setTimeout(() => {
             fetchRoles(session.user.id, session.user.email);
@@ -125,6 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSession(session);
       setUser(session?.user ?? null);
+      setRole(null);
+      setRoles([]);
+      setProfileName(null);
       if (session?.user) {
         fetchRoles(session.user.id, session.user.email);
         fetchProfile(session.user.id);
