@@ -221,6 +221,13 @@ export default function UserManagement() {
       );
 
       const { data: adminCheck } = await repairClient.rpc("is_admin", { _user_id: user.id });
+      if (!adminCheck) {
+        toast({
+          title: "Database admin role is missing",
+          description: "Run the old database SQL fix once for admin@chhaperia.com, then sign out and sign back in.",
+          variant: "destructive",
+        });
+      }
       return !!adminCheck;
     } catch {
       return false;
