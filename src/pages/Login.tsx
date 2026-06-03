@@ -45,43 +45,11 @@ export default function Login() {
     );
   }
 
-  if (user && role && role !== "pending") {
+  if (user && role) {
     if (role === "worker") return <Navigate to="/worker" replace />;
     if (role === "inventory_manager") return <Navigate to="/inventory" replace />;
     if (role === "slitting_manager") return <Navigate to="/slitting" replace />;
     return <Navigate to="/admin" replace />;
-  }
-
-  // User is pending — awaiting admin role assignment
-  if (user && role === "pending") {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-muted gap-6 p-4">
-        <Card className="w-full max-w-md shadow-xl border-0">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto mb-4">
-              <img src={logo} alt="Chhaperia Cables" className="h-16 w-auto mx-auto" />
-            </div>
-            <h1 className="text-2xl font-bold text-primary">Account Pending</h1>
-          </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <div className="bg-accent/50 rounded-lg p-6 space-y-2">
-              <p className="text-lg font-medium text-foreground">
-                Welcome, {profileName ?? "User"}!
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Your account has been created successfully. Please wait for an administrator to review and assign your role.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                You will be able to access the system once your role has been assigned.
-              </p>
-            </div>
-            <Button variant="outline" onClick={async () => { await authSignOut(); window.location.reload(); }}>
-              Sign Out
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   // User is authenticated but role hasn't loaded yet — brief wait
