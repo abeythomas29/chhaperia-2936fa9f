@@ -23,38 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileName, setProfileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const bootstrapSuperAdmin = async (sessionUser: User) => {
-    if (sessionUser.email?.toLowerCase() !== "admin@chhaperia.com") return;
-
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .eq("user_id", sessionUser.id)
-      .maybeSingle();
-
-    if (!existingProfile) {
-      await supabase.from("profiles").insert({
-        user_id: sessionUser.id,
-        name: "Super Admin",
-        employee_id: "ADMIN",
-        username: sessionUser.email,
-        requested_department: "worker",
-        status: "active",
-      } as never);
-    }
-
-    const { data: existingRoles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", sessionUser.id);
-
-    if (!existingRoles?.some((entry) => entry.role === "super_admin")) {
-      await supabase.from("user_roles").insert({
-        user_id: sessionUser.id,
-        role: "super_admin",
-      } as never);
-    }
-  };
 
   const fetchRoles = async (userId: string, retries = 3) => {
     const { data } = await supabase
@@ -106,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
         if (session?.user) {
           setTimeout(() => {
-            bootstrapSuperAdmin(session.user);
             fetchRoles(session.user.id);
             fetchProfile(session.user.id);
           }, 0);
@@ -132,7 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        bootstrapSuperAdmin(session.user);
         fetchRoles(session.user.id);
         fetchProfile(session.user.id);
       }
