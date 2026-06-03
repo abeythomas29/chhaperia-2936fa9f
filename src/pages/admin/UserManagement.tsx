@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Trash2, KeyRound, UserCheck, Upload } from "lucide-react";
+import { Pencil, Trash2, KeyRound, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -221,47 +221,9 @@ export default function UserManagement() {
     </div>
   );
 
-  const importLegacyUsers = async () => {
-    const legacy = [
-      { name: "abey", username: "abey@chhaperia.com", requested_department: "worker" },
-      { name: "abey thomas", username: "abey123@gmail.com", requested_department: "worker" },
-      { name: "abey thomas", username: "abey1234@gmail.com", requested_department: "worker" },
-      { name: "Abhishek", username: "abhishek@chhaperia.com", requested_department: "slitting_manager" },
-      { name: "Ganesh M Bisalalli", username: "Ganeshmb@chhaperia.com", requested_department: "worker" },
-      { name: "Gautam Saw", username: "Gautam@chhaperia.com", requested_department: "worker" },
-      { name: "Om Prakash", username: "op@chhaperia.com", requested_department: "slitting_manager" },
-      { name: "Pavitra", username: "pavitra@chhaperia.com", requested_department: "worker" },
-      { name: "Prakash", username: "prakash@chhaperia.com", requested_department: "slitting_manager" },
-      { name: "slitting work", username: "slitting@chhaperia.com", requested_department: "slitting_manager" },
-      { name: "Subhashini", username: "subhashini@chhaperia.com", requested_department: "worker" },
-    ];
-    setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("admin-bulk-import-users", {
-      body: { users: legacy, default_password: "Welcome@123" },
-    });
-    setSubmitting(false);
-    if (error) {
-      toast({ title: "Import failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    const created = (data?.results ?? []).filter((r: any) => r.status === "created").length;
-    const existed = (data?.results ?? []).filter((r: any) => r.status === "existed").length;
-    const errors = (data?.results ?? []).filter((r: any) => r.status === "error");
-    toast({
-      title: `Imported: ${created} new, ${existed} existed${errors.length ? `, ${errors.length} errors` : ""}`,
-      description: `Default password: Welcome@123${errors.length ? ` — ${errors[0].email}: ${errors[0].error}` : ""}`,
-    });
-    fetchUsers();
-  };
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">User Management</h1>
-        <Button onClick={importLegacyUsers} disabled={submitting} variant="outline">
-          <Upload className="h-4 w-4 mr-2" /> Import Legacy Users
-        </Button>
-      </div>
+      <h1 className="text-2xl font-bold">User Management</h1>
 
       {/* Pending Approval Section */}
       {pendingUsers.length > 0 && (
