@@ -38,8 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else if (retries > 0) {
       setTimeout(() => fetchRoles(userId, retries - 1), 1000);
     } else {
-      setRole("pending");
-      setRoles([]);
+      // No role assigned — default to worker (Production Manager) access
+      setRole("worker");
+      setRoles(["worker"]);
     }
   };
 
@@ -159,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin: roles.includes("admin") || roles.includes("super_admin"),
         isSuperAdmin: roles.includes("super_admin"),
         isWorker: roles.includes("worker"),
-        isPending: role === "pending" || (roles.length === 0 && !loading),
+        isPending: false,
         isInventoryManager: roles.includes("inventory_manager"),
         isSlittingManager: roles.includes("slitting_manager"),
         hasRole,
