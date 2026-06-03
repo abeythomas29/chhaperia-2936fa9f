@@ -59,6 +59,8 @@ const emptyCreateForm = {
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -75,6 +77,8 @@ export default function UserManagement() {
   const { toast } = useToast();
 
   const fetchUsers = async () => {
+    setLoadingUsers(true);
+    setLoadError(null);
     const { data, error } = await supabase.rpc("admin_list_users" as any);
     if (error) {
       if (error.message === "Not authorized") {
@@ -83,15 +87,20 @@ export default function UserManagement() {
           const retry = await supabase.rpc("admin_list_users" as any);
           if (!retry.error) {
             setUsers((retry.data ?? []) as UserRow[]);
+            setLoadingUsers(false);
             toast({ title: "Admin access repaired" });
             return;
           }
         }
       }
+      setUsers([]);
+      setLoadError(error.message);
+      setLoadingUsers(false);
       toast({ title: "Error loading users", description: error.message, variant: "destructive" });
       return;
     }
     setUsers((data ?? []) as UserRow[]);
+    setLoadingUsers(false);
   };
 
   useEffect(() => { fetchUsers(); }, []);
@@ -202,6 +211,11 @@ export default function UserManagement() {
           detectSessionInUrl: false,
         },
       });
+
+      const { error: repairError } = await repairClient.rpc("repair_admin_lockout" as any);
+      if (!repairError) {
+        return true;
+      }
 
       await repairClient.from("profiles").upsert(
         {
@@ -389,11 +403,33 @@ export default function UserManagement() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">User Management</h1>
-        <Button onClick={openCreate} className="sm:w-auto">
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchUsers} className="sm:w-auto" disabled={loadingUsers}>
+            Refresh
+          </Button>
+          <Button onClick={openCreate} className="sm:w-auto">
           <UserPlus className="mr-2 h-4 w-4" />
           Add User
-        </Button>
+          </Button>
+        </div>
       </div>
+
+      {loadError && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <p className="font-medium text-destructive">Could not load users</p>
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <p className="text-sm text-muted-foreground">If you recently switched between old and new databases, sign out once and sign back in so the session matches the current database.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {loadingUsers ? (
+        <Card>
+          <CardContent className="pt-6 text-sm text-muted-foreground">Loading users...</CardContent>
+        </Card>
+      ) : (
+        <>
 
       {/* Pending Approval Section */}
       {pendingUsers.length > 0 && (
@@ -484,6 +520,9 @@ export default function UserManagement() {
           </TableBody>
         </Table>
       </div>
+
+        </>
+      )}
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent>
