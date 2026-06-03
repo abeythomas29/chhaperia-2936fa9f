@@ -24,8 +24,7 @@ export default function InventoryManagerLayout() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isInventoryManager && isAdmin) return <Navigate to="/admin" replace />;
-  if (!isInventoryManager) return <Navigate to="/login" replace />;
+  if (!isInventoryManager && !isAdmin) return <Navigate to="/login" replace />;
 
   const navItems = [
     { to: "/inventory", label: "Add Stock", icon: ArrowDownToLine, end: true },
