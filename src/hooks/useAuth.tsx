@@ -74,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
         if (session?.user) {
           setTimeout(() => {
-            bootstrapSuperAdmin(session.user);
             fetchRoles(session.user.id);
             fetchProfile(session.user.id);
           }, 0);
@@ -100,7 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        bootstrapSuperAdmin(session.user);
         fetchRoles(session.user.id);
         fetchProfile(session.user.id);
       }
