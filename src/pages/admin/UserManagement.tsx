@@ -108,19 +108,59 @@ export default function UserManagement() {
     }
 
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("admin-create-user", {
-      body: {
-        name: createForm.name,
-        employee_id: createForm.employee_id,
-        email: createForm.username,
-        password: createForm.password,
-        requested_department: createForm.requested_department,
-        roles: createRoles,
+    const signupClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storageKey: `admin-create-user-${Date.now()}`,
       },
     });
 
-    if (error || data?.error) {
-      toast({ title: "Error creating user", description: data?.error ?? error?.message, variant: "destructive" });
+    const { data: authData, error: authError } = await signupClient.auth.signUp({
+      email: createForm.username.trim(),
+      password: createForm.password,
+      options: {
+        data: {
+          name: createForm.name.trim(),
+          employee_id: createForm.employee_id.trim(),
+          requested_department: createForm.requested_department,
+        },
+      },
+    });
+
+    if (authError || !authData.user) {
+      toast({ title: "Error creating user", description: authError?.message ?? "Could not create the login account.", variant: "destructive" });
+      setSubmitting(false);
+      return;
+    }
+
+    const userId = authData.user.id;
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        user_id: userId,
+        name: createForm.name.trim(),
+        employee_id: createForm.employee_id.trim(),
+        username: createForm.username.trim(),
+        requested_department: createForm.requested_department as any,
+        status: "active",
+      },
+      { onConflict: "user_id" },
+    );
+
+    if (profileError) {
+      toast({ title: "User account created, but profile setup failed", description: profileError.message, variant: "destructive" });
+      setSubmitting(false);
+      return;
+    }
+
+    const { error: roleError } = await supabase
+      .from("user_roles")
+      .insert(createRoles.map((role) => ({ user_id: userId, role })) as any);
+
+    if (roleError) {
+      toast({ title: "User account created, but role assignment failed", description: roleError.message, variant: "destructive" });
       setSubmitting(false);
       return;
     }
