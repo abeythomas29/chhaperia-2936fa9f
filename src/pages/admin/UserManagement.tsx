@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { createClient } from "@supabase/supabase-js";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Trash2, KeyRound, UserCheck } from "lucide-react";
+import { Pencil, Trash2, KeyRound, UserCheck, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const departmentLabels: Record<string, string> = {
   worker: "Production Manager",
@@ -45,23 +49,45 @@ interface UserRow {
   requested_department: string;
 }
 
+const emptyCreateForm = {
+  name: "",
+  employee_id: "",
+  username: "",
+  password: "",
+  requested_department: "worker",
+};
+
 export default function UserManagement() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [approveRoles, setApproveRoles] = useState<string[]>(["worker"]);
   const [editRoles, setEditRoles] = useState<string[]>([]);
+  const [createRoles, setCreateRoles] = useState<string[]>(["worker"]);
   const [newPassword, setNewPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", employee_id: "", username: "" });
+  const [createForm, setCreateForm] = useState(() => ({ ...emptyCreateForm }));
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   const fetchUsers = async () => {
     const { data, error } = await supabase.rpc("admin_list_users" as any);
     if (error) {
+      if (error.message === "Not authorized") {
+        const repaired = await attemptAdminRepair();
+        if (repaired) {
+          const retry = await supabase.rpc("admin_list_users" as any);
+          if (!retry.error) {
+            setUsers((retry.data ?? []) as UserRow[]);
+            toast({ title: "Admin access repaired" });
+            return;
+          }
+        }
+      }
       toast({ title: "Error loading users", description: error.message, variant: "destructive" });
       return;
     }
@@ -69,6 +95,144 @@ export default function UserManagement() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
+
+  const createUser = async () => {
+    if (!createForm.name || !createForm.employee_id || !createForm.username || !createForm.password) {
+      toast({ title: "Missing details", description: "Fill in all user fields before creating the account.", variant: "destructive" });
+      return;
+    }
+
+    if (createRoles.length === 0) {
+      toast({ title: "Missing roles", description: "Assign at least one role to the new user.", variant: "destructive" });
+      return;
+    }
+
+    setSubmitting(true);
+    const signupClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storageKey: `admin-create-user-${Date.now()}`,
+      },
+    });
+
+    const { data: authData, error: authError } = await signupClient.auth.signUp({
+      email: createForm.username.trim(),
+      password: createForm.password,
+      options: {
+        data: {
+          name: createForm.name.trim(),
+          employee_id: createForm.employee_id.trim(),
+          requested_department: createForm.requested_department,
+        },
+      },
+    });
+
+    if (authError || !authData.user) {
+      toast({ title: "Error creating user", description: authError?.message ?? "Could not create the login account.", variant: "destructive" });
+      setSubmitting(false);
+      return;
+    }
+
+    const userId = authData.user.id;
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        user_id: userId,
+        name: createForm.name.trim(),
+        employee_id: createForm.employee_id.trim(),
+        username: createForm.username.trim(),
+        requested_department: createForm.requested_department as any,
+        status: "active",
+      },
+      { onConflict: "user_id" },
+    );
+
+    if (profileError) {
+      toast({ title: "User account created, but profile setup failed", description: profileError.message, variant: "destructive" });
+      setSubmitting(false);
+      return;
+    }
+
+    const { error: roleError } = await supabase
+      .from("user_roles")
+      .insert(createRoles.map((role) => ({ user_id: userId, role })) as any);
+
+    if (roleError) {
+      toast({ title: "User account created, but role assignment failed", description: roleError.message, variant: "destructive" });
+      setSubmitting(false);
+      return;
+    }
+
+    setCreateDialogOpen(false);
+    setCreateForm({ ...emptyCreateForm });
+    setCreateRoles(["worker"]);
+    toast({ title: "User created successfully" });
+    setSubmitting(false);
+    fetchUsers();
+  };
+
+  const openCreate = () => {
+    setCreateForm({ ...emptyCreateForm });
+    setCreateRoles(["worker"]);
+    setCreateDialogOpen(true);
+  };
+
+  const attemptAdminRepair = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const user = sessionData.session?.user;
+      const email = user?.email?.toLowerCase();
+
+      if (!token || !user || email !== "admin@chhaperia.com") {
+        return false;
+      }
+
+      const repairClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
+
+      await repairClient.from("profiles").upsert(
+        {
+          user_id: user.id,
+          name: "Super Admin",
+          employee_id: "ADMIN",
+          username: user.email ?? "admin@chhaperia.com",
+          requested_department: "worker",
+          status: "active",
+        },
+        { onConflict: "user_id" },
+      );
+
+      await repairClient.from("user_roles").upsert(
+        { user_id: user.id, role: "super_admin" } as any,
+        { onConflict: "user_id,role" },
+      );
+
+      const { data: adminCheck } = await repairClient.rpc("is_admin", { _user_id: user.id });
+      if (!adminCheck) {
+        toast({
+          title: "Database admin role is missing",
+          description: "Run the old database SQL fix once for admin@chhaperia.com, then sign out and sign back in.",
+          variant: "destructive",
+        });
+      }
+      return !!adminCheck;
+    } catch {
+      return false;
+    }
+  };
 
   const openEdit = (user: UserRow) => {
     setSelectedUser(user);
@@ -223,7 +387,13 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">User Management</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold">User Management</h1>
+        <Button onClick={openCreate} className="sm:w-auto">
+          <UserPlus className="mr-2 h-4 w-4" />
+          Add User
+        </Button>
+      </div>
 
       {/* Pending Approval Section */}
       {pendingUsers.length > 0 && (
@@ -314,6 +484,41 @@ export default function UserManagement() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Full Name</Label><Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} /></div>
+            <div><Label>Employee ID</Label><Input value={createForm.employee_id} onChange={(e) => setCreateForm({ ...createForm, employee_id: e.target.value })} /></div>
+            <div><Label>Email</Label><Input type="email" value={createForm.username} onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })} /></div>
+            <div><Label>Temporary Password</Label><Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} /></div>
+            <div className="space-y-2">
+              <Label>Requested Department</Label>
+              <Select
+                value={createForm.requested_department}
+                onValueChange={(value) => setCreateForm({ ...createForm, requested_department: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRoles.slice(0, 3).map((role) => (
+                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Roles (select one or more)</Label>
+              <RoleCheckboxes selected={createRoles} onChange={setCreateRoles} />
+            </div>
+            <Button onClick={createUser} disabled={submitting || createRoles.length === 0} className="w-full">
+              Create User
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
