@@ -717,6 +717,11 @@ export type Database = {
       get_user_role: { Args: { _user_id: string }; Returns: string }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_bootstrap_super_admin_email: {
+        Args: { _email: string }
+        Returns: boolean
+      }
+      repair_admin_lockout: { Args: never; Returns: undefined }
     }
     Enums: {
       signup_department: "worker" | "inventory_manager" | "slitting_manager"
