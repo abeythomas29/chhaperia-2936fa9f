@@ -77,7 +77,91 @@ export default function SlittingLogs() {
   const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editEntry, setEditEntry] = useState<SlittingRow | null>(null);
+  const [editForm, setEditForm] = useState({ date: "", cut_width_mm: "", cut_quantity_produced: "", thickness_mm: "", gsm: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+  const [editH36, setEditH36] = useState<Head36Row | null>(null);
+  const [editH36Form, setEditH36Form] = useState({ date: "", rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", thickness_mm: "", gsm: "", notes: "" });
+  const [savingH36, setSavingH36] = useState(false);
   const { toast } = useToast();
+
+  const openEdit = (e: SlittingRow) => {
+    setEditEntry(e);
+    setEditForm({
+      date: e.date,
+      cut_width_mm: String(e.cut_width_mm ?? ""),
+      cut_quantity_produced: String(e.cut_quantity_produced ?? ""),
+      thickness_mm: e.thickness_mm != null ? String(e.thickness_mm) : "",
+      gsm: e.gsm != null ? String(e.gsm) : "",
+      notes: e.notes ?? "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editEntry) return;
+    setSaving(true);
+    const payload: any = {
+      date: editForm.date,
+      cut_width_mm: Number(editForm.cut_width_mm),
+      cut_quantity_produced: Number(editForm.cut_quantity_produced),
+      thickness_mm: editForm.thickness_mm ? Number(editForm.thickness_mm) : null,
+      notes: editForm.notes || null,
+    };
+    if (editForm.gsm) payload.gsm = Number(editForm.gsm);
+    const { error } = await supabase.from("slitting_entries").update(payload).eq("id", editEntry.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    } else {
+      setEntries((prev) => prev.map((r) => r.id === editEntry.id ? { ...r, ...payload } as SlittingRow : r));
+      setEditEntry(null);
+      toast({ title: "Entry updated" });
+    }
+  };
+
+  const openEditH36 = (h: Head36Row) => {
+    setEditH36(h);
+    setEditH36Form({
+      date: h.date,
+      rolls_taken: String(h.rolls_taken ?? ""),
+      rolls_produced: String(h.rolls_produced ?? ""),
+      roll_width_mm: h.roll_width_mm != null ? String(h.roll_width_mm) : "",
+      length_per_tape_mtr: h.length_per_tape_mtr != null ? String(h.length_per_tape_mtr) : "",
+      thickness_mm: h.thickness_mm != null ? String(h.thickness_mm) : "",
+      gsm: h.gsm != null ? String(h.gsm) : "",
+      notes: h.notes ?? "",
+    });
+  };
+
+  const handleSaveH36 = async () => {
+    if (!editH36) return;
+    setSavingH36(true);
+    const payload: any = {
+      date: editH36Form.date,
+      rolls_taken: Number(editH36Form.rolls_taken),
+      rolls_produced: Number(editH36Form.rolls_produced),
+      roll_width_mm: editH36Form.roll_width_mm ? Number(editH36Form.roll_width_mm) : null,
+      length_per_tape_mtr: editH36Form.length_per_tape_mtr ? Number(editH36Form.length_per_tape_mtr) : null,
+      thickness_mm: editH36Form.thickness_mm ? Number(editH36Form.thickness_mm) : null,
+      gsm: editH36Form.gsm ? Number(editH36Form.gsm) : null,
+      notes: editH36Form.notes || null,
+    };
+    const { error } = await supabase.from("head36_entries" as any).update(payload).eq("id", editH36.id);
+    setSavingH36(false);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    } else {
+      setHead36ByEntry((prev) => {
+        const next: Record<string, Head36Row[]> = {};
+        Object.entries(prev).forEach(([k, list]) => {
+          next[k] = list.map((r) => r.id === editH36.id ? { ...r, ...payload } as Head36Row : r);
+        });
+        return next;
+      });
+      setEditH36(null);
+      toast({ title: "36 Head entry updated" });
+    }
+  };
 
   const handleDelete = async (id: string) => {
     setDeleting(true);
