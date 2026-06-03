@@ -243,7 +243,7 @@ export default function ProductionEntry() {
 
     setSubmitted(true);
     setTimeout(() => {
-      setForm({ date: format(new Date(), "yyyy-MM-dd"), product_code_id: "", client_id: "", rolls_count: "", length_per_roll: "", width_per_roll: "", unit: "meters", thickness_mm: "", gsm: "", notes: "", swelling_speed: "", swelling_height: "", tensile_strength: "", elongation: "", surface_resistance: "", lab_report_included: false, raw_material_included: false, copper_wire_count: "", rope_diameter_mm: "", bundles_count: "", bundles_per_pallet: "", weight_per_pallet: "" });
+      setForm({ date: format(new Date(), "yyyy-MM-dd"), product_code_id: "", client_id: "", rolls_count: "", length_per_roll: "", width_per_roll: "", unit: "meters", thickness_mm: "", gsm: "", notes: "", swelling_speed: "", swelling_height: "", tensile_strength: "", elongation: "", surface_resistance: "", lab_report_included: false, raw_material_included: false, copper_wire_count: "", copper_woven: false, rope_diameter_mm: "", bundles_count: "", bundles_per_pallet: "", weight_per_pallet: "" });
       setThicknessRows([]);
       setSelectedCategory("");
       setMaterialUsage([]);
