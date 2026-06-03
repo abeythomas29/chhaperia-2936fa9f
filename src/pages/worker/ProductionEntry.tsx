@@ -57,6 +57,7 @@ export default function ProductionEntry() {
     lab_report_included: false,
     raw_material_included: false,
     copper_wire_count: "",
+    copper_woven: false,
     rope_diameter_mm: "",
     bundles_count: "",
     bundles_per_pallet: "",
@@ -242,7 +243,7 @@ export default function ProductionEntry() {
 
     setSubmitted(true);
     setTimeout(() => {
-      setForm({ date: format(new Date(), "yyyy-MM-dd"), product_code_id: "", client_id: "", rolls_count: "", length_per_roll: "", width_per_roll: "", unit: "meters", thickness_mm: "", gsm: "", notes: "", swelling_speed: "", swelling_height: "", tensile_strength: "", elongation: "", surface_resistance: "", lab_report_included: false, raw_material_included: false, copper_wire_count: "", rope_diameter_mm: "", bundles_count: "", bundles_per_pallet: "", weight_per_pallet: "" });
+      setForm({ date: format(new Date(), "yyyy-MM-dd"), product_code_id: "", client_id: "", rolls_count: "", length_per_roll: "", width_per_roll: "", unit: "meters", thickness_mm: "", gsm: "", notes: "", swelling_speed: "", swelling_height: "", tensile_strength: "", elongation: "", surface_resistance: "", lab_report_included: false, raw_material_included: false, copper_wire_count: "", copper_woven: false, rope_diameter_mm: "", bundles_count: "", bundles_per_pallet: "", weight_per_pallet: "" });
       setThicknessRows([]);
       setSelectedCategory("");
       setMaterialUsage([]);
@@ -487,10 +488,23 @@ export default function ProductionEntry() {
                 <Label className="text-sm font-semibold">Fiber Glass Tape Options</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs">No. of Copper Wires (woven)</Label>
-                    <Input type="number" min="0" step="1" value={form.copper_wire_count}
-                      onChange={(e) => setForm({ ...form, copper_wire_count: e.target.value })} placeholder="e.g. 12" />
+                    <Label className="text-xs">Copper woven?</Label>
+                    <Select value={form.copper_woven ? "yes" : "no"}
+                      onValueChange={(v) => setForm({ ...form, copper_woven: v === "yes", copper_wire_count: v === "yes" ? form.copper_wire_count : "" })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="yes">Yes</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+                  {form.copper_woven && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">No. of Copper Wires</Label>
+                      <Input type="number" min="0" step="1" value={form.copper_wire_count}
+                        onChange={(e) => setForm({ ...form, copper_wire_count: e.target.value })} placeholder="e.g. 12" />
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <Label className="text-xs">Raw material prepared here?</Label>
                     <Select value={form.raw_material_included ? "yes" : "no"}
