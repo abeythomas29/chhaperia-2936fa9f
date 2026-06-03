@@ -191,7 +191,7 @@ export default function Login() {
                 </div>
                 <div className="space-y-2">
                   <Label>Requested Department</Label>
-                  <Select value={signupDepartment} onValueChange={(value) => setSignupDepartment(value as "worker" | "inventory_manager" | "slitting_manager") }>
+                  <Select value={signupDepartment} onValueChange={(value) => setSignupDepartment(value as "worker" | "inventory_manager" | "slitting_manager" | "admin") }>
                     <SelectTrigger>
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
@@ -199,6 +199,7 @@ export default function Login() {
                       <SelectItem value="worker">Production Manager</SelectItem>
                       <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
                       <SelectItem value="slitting_manager">Slitting Manager</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
