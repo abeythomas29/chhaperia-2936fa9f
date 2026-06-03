@@ -565,6 +565,95 @@ export default function SlittingLogs() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={!!editEntry} onOpenChange={(o) => !o && setEditEntry(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Slitting Entry</DialogTitle>
+              <DialogDescription>Update details including the date for this slitting entry.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Cut Width (mm)</Label>
+                  <Input type="number" step="any" value={editForm.cut_width_mm} onChange={(e) => setEditForm({ ...editForm, cut_width_mm: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Length (mtr)</Label>
+                  <Input type="number" step="any" value={editForm.cut_quantity_produced} onChange={(e) => setEditForm({ ...editForm, cut_quantity_produced: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Thickness (mm)</Label>
+                  <Input type="number" step="any" value={editForm.thickness_mm} onChange={(e) => setEditForm({ ...editForm, thickness_mm: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>GSM</Label>
+                  <Input type="number" step="any" value={editForm.gsm} onChange={(e) => setEditForm({ ...editForm, gsm: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditEntry(null)}>Cancel</Button>
+              <Button onClick={handleSaveEdit} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!editH36} onOpenChange={(o) => !o && setEditH36(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit 36 Head Entry</DialogTitle>
+              <DialogDescription>Update details including the date for this 36 head production entry.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={editH36Form.date} onChange={(e) => setEditH36Form({ ...editH36Form, date: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Rolls Taken</Label>
+                  <Input type="number" step="any" value={editH36Form.rolls_taken} onChange={(e) => setEditH36Form({ ...editH36Form, rolls_taken: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rolls Produced</Label>
+                  <Input type="number" step="any" value={editH36Form.rolls_produced} onChange={(e) => setEditH36Form({ ...editH36Form, rolls_produced: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tape Width (mm)</Label>
+                  <Input type="number" step="any" value={editH36Form.roll_width_mm} onChange={(e) => setEditH36Form({ ...editH36Form, roll_width_mm: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Length/Tape (mtr)</Label>
+                  <Input type="number" step="any" value={editH36Form.length_per_tape_mtr} onChange={(e) => setEditH36Form({ ...editH36Form, length_per_tape_mtr: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Thickness (mm)</Label>
+                  <Input type="number" step="any" value={editH36Form.thickness_mm} onChange={(e) => setEditH36Form({ ...editH36Form, thickness_mm: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>GSM</Label>
+                  <Input type="number" step="any" value={editH36Form.gsm} onChange={(e) => setEditH36Form({ ...editH36Form, gsm: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Input value={editH36Form.notes} onChange={(e) => setEditH36Form({ ...editH36Form, notes: e.target.value })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditH36(null)}>Cancel</Button>
+              <Button onClick={handleSaveH36} disabled={savingH36}>{savingH36 ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </CardContent>
     </Card>
