@@ -24,8 +24,7 @@ export default function WorkerLayout() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isWorker && isAdmin) return <Navigate to="/admin" replace />;
-  if (!isWorker) return <Navigate to="/login" replace />;
+  if (!isWorker && !isAdmin) return <Navigate to="/login" replace />;
 
   const navItems = [
     { to: "/worker", label: "New Entry", icon: ClipboardList, end: true },
