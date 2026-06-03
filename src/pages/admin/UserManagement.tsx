@@ -340,7 +340,13 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">User Management</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold">User Management</h1>
+        <Button onClick={openCreate} className="sm:w-auto">
+          <UserPlus className="mr-2 h-4 w-4" />
+          Add User
+        </Button>
+      </div>
 
       {/* Pending Approval Section */}
       {pendingUsers.length > 0 && (
@@ -431,6 +437,41 @@ export default function UserManagement() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Full Name</Label><Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} /></div>
+            <div><Label>Employee ID</Label><Input value={createForm.employee_id} onChange={(e) => setCreateForm({ ...createForm, employee_id: e.target.value })} /></div>
+            <div><Label>Email</Label><Input type="email" value={createForm.username} onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })} /></div>
+            <div><Label>Temporary Password</Label><Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} /></div>
+            <div className="space-y-2">
+              <Label>Requested Department</Label>
+              <Select
+                value={createForm.requested_department}
+                onValueChange={(value) => setCreateForm({ ...createForm, requested_department: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRoles.slice(0, 3).map((role) => (
+                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Roles (select one or more)</Label>
+              <RoleCheckboxes selected={createRoles} onChange={setCreateRoles} />
+            </div>
+            <Button onClick={createUser} disabled={submitting || createRoles.length === 0} className="w-full">
+              Create User
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
