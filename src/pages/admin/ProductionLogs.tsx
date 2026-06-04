@@ -366,6 +366,7 @@ export default function ProductionLogs() {
               <TableHead className="text-right">Weight (kg)</TableHead>
               <TableHead className="text-right">GSM</TableHead>
               <TableHead className="text-right">Thickness (mm)</TableHead>
+              <TableHead>Raw Materials</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
