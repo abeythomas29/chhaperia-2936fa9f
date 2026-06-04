@@ -32,6 +32,7 @@ export default function Head36Entry() {
 
   const [form, setForm] = useState({
     slitting_entry_id: "",
+    entry_date: new Date().toISOString().slice(0, 10),
     rolls_taken: "",
     times_cut: "",
     rolls_per_cut: "",
