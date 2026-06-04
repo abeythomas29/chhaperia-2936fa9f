@@ -12,7 +12,7 @@ import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "l
 import { UNIT_OPTIONS } from "@/lib/units";
 
 interface ProductCode { id: string; code: string; category_id: string; }
-interface RollRow { width_mm: string; rolls_count: string; }
+interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
@@ -22,7 +22,7 @@ export default function SlittingEntryForm() {
   const [submitting, setSubmitting] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(true);
   const [rollsOpen, setRollsOpen] = useState(true);
-  const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", rolls_count: "" }]);
+  const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
 
   const [form, setForm] = useState({
     product_code_id: "",
@@ -62,17 +62,18 @@ export default function SlittingEntryForm() {
 
   // Output rolls calculations
   const rollLength = parseFloat(form.roll_length_mtr) || 0;
-  const validRollRows = rollRows.filter((r) => parseFloat(r.width_mm) > 0 && parseFloat(r.rolls_count) > 0);
-  const totalRolls = validRollRows.reduce((s, r) => s + (parseFloat(r.rolls_count) || 0), 0);
+  const rowRolls = (r: RollRow) => (parseFloat(r.times_cut) || 0) * (parseFloat(r.rolls_per_cut) || 0);
+  const validRollRows = rollRows.filter((r) => parseFloat(r.width_mm) > 0 && rowRolls(r) > 0);
+  const totalRolls = validRollRows.reduce((s, r) => s + rowRolls(r), 0);
   const totalLength = rollLength * totalRolls;
   const totalSqm = rollLength
-    ? validRollRows.reduce((s, r) => s + (parseFloat(r.width_mm) * rollLength / 1000) * parseFloat(r.rolls_count), 0)
+    ? validRollRows.reduce((s, r) => s + (parseFloat(r.width_mm) * rollLength / 1000) * rowRolls(r), 0)
     : 0;
   const totalKg = srcGsm > 0 && totalSqm > 0 ? (totalSqm * srcGsm) / 1000 : 0;
 
   const updateRollRow = (i: number, patch: Partial<RollRow>) =>
     setRollRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const addRollRow = () => setRollRows((rows) => [...rows, { width_mm: "", rolls_count: "" }]);
+  const addRollRow = () => setRollRows((rows) => [...rows, { width_mm: "", times_cut: "", rolls_per_cut: "" }]);
   const removeRollRow = (i: number) => setRollRows((rows) => rows.filter((_, idx) => idx !== i));
 
   // Area (sqm) is conserved when slitting — total meters can be more than source
@@ -102,18 +103,23 @@ export default function SlittingEntryForm() {
     setSubmitting(true);
 
     const sourceNote = `Source: ${srcWidth}mm × ${srcLength}m × ${srcRolls} rolls (${sourceQty.toFixed(2)} ${form.source_unit})`;
-    const rowsToInsert = validRollRows.map((r, idx) => ({
-      product_code_id: form.product_code_id,
-      source_quantity: idx === 0 ? sourceQty : 0,
-      cut_quantity_produced: rollLength ? rollLength * parseFloat(r.rolls_count) : parseFloat(r.rolls_count),
-      cut_width_mm: parseFloat(r.width_mm),
-      remaining_returned: 0,
-      thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
-      gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
-      unit: form.unit,
-      notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
-      slitting_manager_id: user.id,
-    }));
+    const rowsToInsert = validRollRows.map((r, idx) => {
+      const tc = parseFloat(r.times_cut) || 0;
+      const rpc = parseFloat(r.rolls_per_cut) || 0;
+      const rolls = tc * rpc;
+      return {
+        product_code_id: form.product_code_id,
+        source_quantity: idx === 0 ? sourceQty : 0,
+        cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
+        cut_width_mm: parseFloat(r.width_mm),
+        remaining_returned: 0,
+        thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
+        gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
+        unit: form.unit,
+        notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, `Cuts: ${tc} × ${rpc} rolls/cut`, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
+        slitting_manager_id: user.id,
+      };
+    });
 
     let { error } = await supabase.from("slitting_entries").insert(rowsToInsert as any);
 
@@ -133,7 +139,7 @@ export default function SlittingEntryForm() {
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
-      setRollRows([{ width_mm: "", rolls_count: "" }]);
+      setRollRows([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
     }
     setSubmitting(false);
   };
@@ -228,23 +234,38 @@ export default function SlittingEntryForm() {
               <p className="text-xs text-muted-foreground">
                 Add one row per roll width. Use multiple rows if some rolls came narrower than required.
               </p>
-              {rollRows.map((r, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Roll {idx + 1} Width (mm)</Label>
-                    <Input type="number" step="any" value={r.width_mm}
-                      onChange={(e) => updateRollRow(idx, { width_mm: e.target.value })} />
+              {rollRows.map((r, idx) => {
+                const tc = parseFloat(r.times_cut) || 0;
+                const rpc = parseFloat(r.rolls_per_cut) || 0;
+                const rolls = tc * rpc;
+                return (
+                  <div key={idx} className="space-y-2 border-l-2 pl-3">
+                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Roll {idx + 1} Width (mm)</Label>
+                        <Input type="number" step="any" value={r.width_mm}
+                          onChange={(e) => updateRollRow(idx, { width_mm: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Times Cut</Label>
+                        <Input type="number" step="any" value={r.times_cut}
+                          onChange={(e) => updateRollRow(idx, { times_cut: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Rolls per Cutting</Label>
+                        <Input type="number" step="any" value={r.rolls_per_cut}
+                          onChange={(e) => updateRollRow(idx, { rolls_per_cut: e.target.value })} />
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeRollRow(idx)} disabled={rollRows.length === 1}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {rolls > 0 && (
+                      <p className="text-xs text-muted-foreground">Total rolls: <span className="font-semibold text-foreground">{rolls.toLocaleString()}</span> ({tc} × {rpc})</p>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">No. of Rolls</Label>
-                    <Input type="number" step="any" value={r.rolls_count}
-                      onChange={(e) => updateRollRow(idx, { rolls_count: e.target.value })} />
-                  </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeRollRow(idx)} disabled={rollRows.length === 1}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
               <Button type="button" variant="outline" size="sm" onClick={addRollRow}>
                 <Plus className="h-4 w-4 mr-1" /> Add Roll
               </Button>
