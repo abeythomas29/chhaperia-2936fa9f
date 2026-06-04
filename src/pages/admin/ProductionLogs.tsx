@@ -35,6 +35,7 @@ interface LogEntry {
   notes: string | null;
   product_codes: { code: string; category_id: string | null } | null;
   profiles: { name: string } | null;
+  raw_material_usage: { quantity_used: number; raw_materials: { name: string; unit: string } | null }[] | null;
 }
 
 interface ProductCode {
