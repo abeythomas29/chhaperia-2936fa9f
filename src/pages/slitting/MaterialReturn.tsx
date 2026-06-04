@@ -75,12 +75,13 @@ export default function MaterialReturn() {
       unit: form.unit,
       notes: form.notes || null,
       returned_by: user.id,
+      created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
     } as any);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Return recorded" });
-      setForm({ slitting_entry_id: "", returned_quantity: "", unit: "meters", notes: "" });
+      setForm({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
       await load();
     }
     setSubmitting(false);
