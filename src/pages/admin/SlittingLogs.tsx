@@ -108,10 +108,12 @@ export default function SlittingLogs() {
       notes: editForm.notes || null,
     };
     if (editForm.gsm) payload.gsm = Number(editForm.gsm);
-    const { error } = await supabase.from("slitting_entries").update(payload).eq("id", editEntry.id);
+    const { data, error } = await supabase.from("slitting_entries").update(payload).eq("id", editEntry.id).select("id");
     setSaving(false);
     if (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Not updated", description: "No rows changed. You may not have permission (admin role required).", variant: "destructive" });
     } else {
       setEntries((prev) => prev.map((r) => r.id === editEntry.id ? { ...r, ...payload } as SlittingRow : r));
       setEditEntry(null);
