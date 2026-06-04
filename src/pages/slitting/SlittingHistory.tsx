@@ -299,7 +299,7 @@ export default function SlittingHistory() {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={e.id + "-h36"} className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={11} className="p-3">
+                        <TableCell colSpan={10} className="p-3">
                           <div className="text-xs font-semibold mb-2 text-muted-foreground">36 Head Production from this slitting entry</div>
                           {loadingHead36 === e.id ? (
                             <div className="flex items-center justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
