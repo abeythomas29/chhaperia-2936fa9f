@@ -47,15 +47,16 @@ export default function SlittingEntryForm() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("product_codes")
-        .select("id, code, category_id")
-        .eq("status", "active")
-        .order("code");
-      setProductCodes(data ?? []);
+      const [pc, cl] = await Promise.all([
+        supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
+        supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
+      ]);
+      setProductCodes(pc.data ?? []);
+      setClients((cl.data as Client[]) ?? []);
       setLoading(false);
     })();
   }, []);
+
 
   // Source calculations
   const srcWidth = parseFloat(form.source_width_mm) || 0;
