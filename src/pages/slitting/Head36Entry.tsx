@@ -85,7 +85,9 @@ export default function Head36Entry() {
 
   const width = parseFloat(form.roll_width_mm) || 0;
   const length = parseFloat(form.length_per_tape_mtr) || 0;
-  const rolls = parseFloat(form.rolls_produced) || 0;
+  const timesCut = parseFloat(form.times_cut) || 0;
+  const rollsPerCut = parseFloat(form.rolls_per_cut) || 0;
+  const rolls = timesCut * rollsPerCut;
 
   const totalLength = length * rolls;
   const totalSqm = width && length && rolls ? (width * length / 1000) * rolls : 0;
@@ -93,8 +95,8 @@ export default function Head36Entry() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.rolls_produced) {
-      toast({ title: "Missing fields", description: "Please enter rolls produced.", variant: "destructive" });
+    if (!timesCut || !rollsPerCut) {
+      toast({ title: "Missing fields", description: "Enter times roll cut and rolls per cutting.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
