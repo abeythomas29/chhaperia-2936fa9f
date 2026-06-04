@@ -110,6 +110,7 @@ export default function SlittingEntryForm() {
     setSubmitting(true);
 
     const sourceNote = `Source: ${srcWidth}mm × ${srcLength}m × ${srcRolls} rolls (${sourceQty.toFixed(2)} ${form.source_unit})`;
+    const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
     const rowsToInsert = validRollRows.map((r, idx) => {
       const tc = parseFloat(r.times_cut) || 0;
       const rpc = parseFloat(r.rolls_per_cut) || 0;
@@ -117,7 +118,7 @@ export default function SlittingEntryForm() {
       return {
         product_code_id: form.product_code_id,
         client_id: form.client_id || null,
-
+        date: isoDate,
         source_quantity: idx === 0 ? sourceQty : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
         cut_width_mm: parseFloat(r.width_mm),
@@ -127,16 +128,20 @@ export default function SlittingEntryForm() {
         unit: form.unit,
         notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, `Cuts: ${tc} × ${rpc} rolls/cut`, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
         slitting_manager_id: user.id,
-        created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
+        created_at: new Date(isoDate + "T12:00:00").toISOString(),
       };
     });
 
-    let { error } = await supabase.from("slitting_entries").insert(rowsToInsert as any);
+    const tryInsert = async (rows: any[]) => supabase.from("slitting_entries").insert(rows as any);
+    let { error } = await tryInsert(rowsToInsert);
 
-    if (error?.code === "PGRST204" && error.message.includes("'gsm' column")) {
-      const fallbackRows = rowsToInsert.map(({ gsm, ...row }) => row);
-      const fallbackResult = await supabase.from("slitting_entries").insert(fallbackRows as any);
-      error = fallbackResult.error;
+    if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
+      const fb = rowsToInsert.map(({ client_id, ...row }) => row);
+      ({ error } = await tryInsert(fb));
+    }
+    if (error?.code === "PGRST204" && /'gsm' column/.test(error.message)) {
+      const fb = rowsToInsert.map(({ gsm, client_id, ...row }) => row);
+      ({ error } = await tryInsert(fb));
     }
 
     if (error) {
