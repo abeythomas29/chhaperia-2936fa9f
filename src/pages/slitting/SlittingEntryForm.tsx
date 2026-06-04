@@ -103,18 +103,23 @@ export default function SlittingEntryForm() {
     setSubmitting(true);
 
     const sourceNote = `Source: ${srcWidth}mm × ${srcLength}m × ${srcRolls} rolls (${sourceQty.toFixed(2)} ${form.source_unit})`;
-    const rowsToInsert = validRollRows.map((r, idx) => ({
-      product_code_id: form.product_code_id,
-      source_quantity: idx === 0 ? sourceQty : 0,
-      cut_quantity_produced: rollLength ? rollLength * parseFloat(r.rolls_count) : parseFloat(r.rolls_count),
-      cut_width_mm: parseFloat(r.width_mm),
-      remaining_returned: 0,
-      thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
-      gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
-      unit: form.unit,
-      notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
-      slitting_manager_id: user.id,
-    }));
+    const rowsToInsert = validRollRows.map((r, idx) => {
+      const tc = parseFloat(r.times_cut) || 0;
+      const rpc = parseFloat(r.rolls_per_cut) || 0;
+      const rolls = tc * rpc;
+      return {
+        product_code_id: form.product_code_id,
+        source_quantity: idx === 0 ? sourceQty : 0,
+        cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
+        cut_width_mm: parseFloat(r.width_mm),
+        remaining_returned: 0,
+        thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
+        gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
+        unit: form.unit,
+        notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, `Cuts: ${tc} × ${rpc} rolls/cut`, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
+        slitting_manager_id: user.id,
+      };
+    });
 
     let { error } = await supabase.from("slitting_entries").insert(rowsToInsert as any);
 
