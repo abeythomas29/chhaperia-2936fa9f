@@ -85,14 +85,22 @@ export default function SlittingHistory() {
       return;
     }
     setExpandedId(entryId);
-    if (!head36Map[entryId]) {
+    if (!head36Map[entryId] || !returnsMap[entryId]) {
       setLoadingHead36(entryId);
-      const { data } = await supabase
-        .from("head36_entries" as any)
-        .select("id, date, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, total_quantity, unit, notes")
-        .eq("slitting_entry_id", entryId)
-        .order("date", { ascending: false });
-      setHead36Map((m) => ({ ...m, [entryId]: ((data as unknown) as Head36Row[]) ?? [] }));
+      const [h36Res, retRes] = await Promise.all([
+        supabase
+          .from("head36_entries" as any)
+          .select("id, date, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, total_quantity, unit, notes")
+          .eq("slitting_entry_id", entryId)
+          .order("date", { ascending: false }),
+        supabase
+          .from("slitting_returns" as any)
+          .select("id, date, returned_quantity, unit, notes")
+          .eq("slitting_entry_id", entryId)
+          .order("date", { ascending: false }),
+      ]);
+      setHead36Map((m) => ({ ...m, [entryId]: ((h36Res.data as unknown) as Head36Row[]) ?? [] }));
+      setReturnsMap((m) => ({ ...m, [entryId]: ((retRes.data as unknown) as ReturnRow[]) ?? [] }));
       setLoadingHead36(null);
     }
   };
