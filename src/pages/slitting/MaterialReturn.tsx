@@ -16,6 +16,7 @@ interface SlittingRow {
   date: string;
   source_quantity: number;
   cut_quantity_produced: number;
+  cut_width_mm: number;
   unit: string;
   product_codes: { code: string } | null;
 }
@@ -36,7 +37,7 @@ export default function MaterialReturn() {
     setLoading(true);
     const { data: entryData } = await supabase
       .from("slitting_entries")
-      .select("id, date, source_quantity, cut_quantity_produced, unit, product_codes(code)")
+      .select("id, date, source_quantity, cut_quantity_produced, cut_width_mm, unit, product_codes(code)")
       .order("date", { ascending: false })
       .limit(100);
     setEntries((entryData as unknown as SlittingRow[]) ?? []);
@@ -62,7 +63,9 @@ export default function MaterialReturn() {
   const newReturn = parseFloat(form.returned_quantity) || 0;
   const totalReturned = alreadyReturned + newReturn;
   const issued = selected ? Number(selected.source_quantity) : 0;
-  const produced = selected ? Number(selected.cut_quantity_produced) : 0;
+  const producedLength = selected ? Number(selected.cut_quantity_produced) : 0;
+  const cutWidthMm = selected ? Number(selected.cut_width_mm) : 0;
+  const produced = selected ? (cutWidthMm * producedLength) / 1000 : 0; // sqm
   const wastage = selected ? issued - produced - totalReturned : 0;
   const matched = selected && Math.abs(wastage) < 0.01;
 
@@ -148,15 +151,15 @@ export default function MaterialReturn() {
           {selected && (
             <div className="rounded-lg border p-3 space-y-2 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div><span className="text-muted-foreground">Issued (before production): </span><b>{issued.toLocaleString()} {selected.unit}</b></div>
-                <div><span className="text-muted-foreground">Produced: </span><b>{produced.toLocaleString()}</b></div>
+                <div><span className="text-muted-foreground">Issued (sqm): </span><b>{issued.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b></div>
+                <div><span className="text-muted-foreground">Produced (sqm): </span><b>{produced.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> <span className="text-xs text-muted-foreground">({cutWidthMm}mm × {producedLength}m)</span></div>
                 <div><span className="text-muted-foreground">Already Returned: </span><b>{alreadyReturned.toLocaleString()}</b></div>
                 <div><span className="text-muted-foreground">New Return: </span><b>{newReturn.toLocaleString()}</b></div>
               </div>
               <div className={`rounded-md p-2 text-center font-semibold ${matched ? "bg-green-500/10 text-green-700" : "bg-destructive/10 text-destructive"}`}>
                 {matched
                   ? "✓ Matched — No wastage (Issued = Produced + Returned)"
-                  : `Wastage = ${wastage.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selected.unit} (Issued − Produced − Returned)`}
+                  : `Wastage = ${wastage.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm (Issued − Produced − Already Returned)`}
               </div>
             </div>
           )}
