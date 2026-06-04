@@ -113,6 +113,7 @@ export default function Head36Entry() {
       unit: form.unit,
       notes: [form.notes, `Cuts: ${timesCut} × ${rollsPerCut} rolls/cut`].filter(Boolean).join(" | "),
       operator_id: user.id,
+      created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
     } as any);
     if (error) {
       const isMissingTable = (error as any).code === "PGRST205" || /head36_entries/i.test(error.message ?? "") && /schema cache|not find/i.test(error.message ?? "");
