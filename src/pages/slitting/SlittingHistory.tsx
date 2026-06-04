@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, History, Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, History, Pencil, Trash2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { format } from "date-fns";
 
 interface Head36Row {
@@ -68,6 +68,7 @@ export default function SlittingHistory() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [head36Map, setHead36Map] = useState<Record<string, Head36Row[]>>({});
   const [loadingHead36, setLoadingHead36] = useState<string | null>(null);
+  const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
 
   const toggleExpand = async (entryId: string) => {
     if (expandedId === entryId) {
@@ -233,6 +234,9 @@ export default function SlittingHistory() {
                       <TableCell className="text-muted-foreground text-xs max-w-xs truncate">{displayNotes || "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setReportEntry(e)} title="Report" className="text-primary hover:text-primary">
+                            <FileText className="h-4 w-4" />
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -353,6 +357,50 @@ export default function SlittingHistory() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" /> Lab Report
+              </DialogTitle>
+              <DialogDescription>
+                {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+              </DialogDescription>
+            </DialogHeader>
+            {reportEntry && (() => {
+              const note = (label: string) => {
+                if (!reportEntry.notes) return null;
+                const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+                return m ? m[1] : null;
+              };
+              const pairs: [string, string | null][] = [
+                ["GSM", reportEntry.gsm != null ? String(reportEntry.gsm) : note("GSM")],
+                ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : note("Thickness")],
+                ["Tensile Strength", note("Tensile")],
+                ["Elongation", note("Elongation")],
+                ["Swelling Height", note("Swelling Height")],
+                ["Swelling Speed", note("Swelling Speed")],
+                ["Surface Resistance", note("Surface Resistance")],
+              ];
+              return (
+                <div className="divide-y border rounded-md">
+                  {pairs.map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-sm text-muted-foreground">{k}</span>
+                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
+                        {v != null && v !== "" ? v : "N/A"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
