@@ -252,7 +252,7 @@ export default function SlittingHistory() {
                   <TableHead className="text-right">Length (mtr)</TableHead>
                   <TableHead className="text-right">Area (sqm)</TableHead>
                   <TableHead className="text-right">Weight (kg)</TableHead>
-                  <TableHead className="text-right">Returned Material</TableHead>
+                  
                   <TableHead className="text-right">Thickness (mm)</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
