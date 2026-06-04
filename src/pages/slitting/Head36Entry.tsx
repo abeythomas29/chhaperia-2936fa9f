@@ -33,7 +33,8 @@ export default function Head36Entry() {
   const [form, setForm] = useState({
     slitting_entry_id: "",
     rolls_taken: "",
-    rolls_produced: "",
+    times_cut: "",
+    rolls_per_cut: "",
     roll_width_mm: "",
     length_per_tape_mtr: "",
     unit: "meters",
@@ -84,7 +85,9 @@ export default function Head36Entry() {
 
   const width = parseFloat(form.roll_width_mm) || 0;
   const length = parseFloat(form.length_per_tape_mtr) || 0;
-  const rolls = parseFloat(form.rolls_produced) || 0;
+  const timesCut = parseFloat(form.times_cut) || 0;
+  const rollsPerCut = parseFloat(form.rolls_per_cut) || 0;
+  const rolls = timesCut * rollsPerCut;
 
   const totalLength = length * rolls;
   const totalSqm = width && length && rolls ? (width * length / 1000) * rolls : 0;
@@ -92,8 +95,8 @@ export default function Head36Entry() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.rolls_produced) {
-      toast({ title: "Missing fields", description: "Please enter rolls produced.", variant: "destructive" });
+    if (!timesCut || !rollsPerCut) {
+      toast({ title: "Missing fields", description: "Enter times roll cut and rolls per cutting.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -107,7 +110,7 @@ export default function Head36Entry() {
       thickness_mm: source?.thickness_mm ?? null,
       gsm: source?.gsm ?? null,
       unit: form.unit,
-      notes: form.notes || null,
+      notes: [form.notes, `Cuts: ${timesCut} × ${rollsPerCut} rolls/cut`].filter(Boolean).join(" | "),
       operator_id: user.id,
     } as any);
     if (error) {
@@ -118,7 +121,7 @@ export default function Head36Entry() {
       toast({ title: "Error", description, variant: "destructive" });
     } else {
       toast({ title: "36 Head entry saved" });
-      setForm({ ...form, rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", notes: "" });
+      setForm({ ...form, rolls_taken: "", times_cut: "", rolls_per_cut: "", roll_width_mm: "", length_per_tape_mtr: "", notes: "" });
     }
     setSubmitting(false);
   };
@@ -151,18 +154,26 @@ export default function Head36Entry() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label>Total Rolls Taken</Label>
               <Input type="number" step="any" value={form.rolls_taken}
                 onChange={(e) => setForm({ ...form, rolls_taken: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Total Rolls Produced *</Label>
-              <Input type="number" step="any" value={form.rolls_produced}
-                onChange={(e) => setForm({ ...form, rolls_produced: e.target.value })} required />
+              <Label>Times Roll Cut *</Label>
+              <Input type="number" step="any" value={form.times_cut}
+                onChange={(e) => setForm({ ...form, times_cut: e.target.value })} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Rolls per Cutting *</Label>
+              <Input type="number" step="any" value={form.rolls_per_cut}
+                onChange={(e) => setForm({ ...form, rolls_per_cut: e.target.value })} required />
             </div>
           </div>
+          {rolls > 0 && (
+            <p className="text-xs text-muted-foreground -mt-2">Total rolls produced: <span className="font-semibold text-foreground">{rolls.toLocaleString()}</span> ({timesCut} × {rollsPerCut})</p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

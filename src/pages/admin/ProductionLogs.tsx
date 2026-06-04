@@ -35,6 +35,7 @@ interface LogEntry {
   notes: string | null;
   product_codes: { code: string; category_id: string | null } | null;
   profiles: { name: string } | null;
+  raw_material_usage: { quantity_used: number; raw_materials: { name: string; unit: string } | null }[] | null;
 }
 
 interface ProductCode {
@@ -93,8 +94,8 @@ export default function ProductionLogs() {
   const fetchEntries = async () => {
     setLoading(true);
 
-    const fullSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, product_codes(code, category_id), profiles:worker_id(name)";
-    const basicSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, product_codes(code, category_id), profiles:worker_id(name)";
+    const fullSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+    const basicSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
 
     let { data, error } = await supabase
       .from("production_entries")
@@ -365,6 +366,7 @@ export default function ProductionLogs() {
               <TableHead className="text-right">Weight (kg)</TableHead>
               <TableHead className="text-right">GSM</TableHead>
               <TableHead className="text-right">Thickness (mm)</TableHead>
+              <TableHead>Raw Materials</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -415,6 +417,13 @@ export default function ProductionLogs() {
                   <TableCell className="text-right font-mono">{kg > 0 ? fmt(kg) : "—"}</TableCell>
                   <TableCell className="text-right font-mono">{gsm > 0 ? gsm : "—"}</TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
+                  <TableCell className="text-xs">
+                    {e.raw_material_usage && e.raw_material_usage.length > 0
+                      ? e.raw_material_usage.map((u, i) => (
+                          <div key={i}>{u.raw_materials?.name ?? "—"}: {u.quantity_used} {u.raw_materials?.unit ?? ""}</div>
+                        ))
+                      : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => setReportEntry(e)} title="Report" className="text-primary hover:text-primary">
@@ -560,15 +569,32 @@ export default function ProductionLogs() {
               ["Surface Resistance", get(reportEntry.surface_resistance, "Surface Resistance")],
             ];
             return (
-              <div className="divide-y border rounded-md">
-                {pairs.map(([k, v]) => (
-                  <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-sm text-muted-foreground">{k}</span>
-                    <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
-                      {v != null && v !== "" ? v : "N/A"}
-                    </span>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <div className="divide-y border rounded-md">
+                  {pairs.map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-sm text-muted-foreground">{k}</span>
+                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
+                        {v != null && v !== "" ? v : "N/A"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold mb-2">Raw Materials Used</p>
+                  {reportEntry.raw_material_usage && reportEntry.raw_material_usage.length > 0 ? (
+                    <div className="divide-y border rounded-md">
+                      {reportEntry.raw_material_usage.map((u, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-sm">{u.raw_materials?.name ?? "—"}</span>
+                          <span className="font-mono font-semibold">{u.quantity_used} {u.raw_materials?.unit ?? ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">None recorded</p>
+                  )}
+                </div>
               </div>
             );
           })()}
