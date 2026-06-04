@@ -90,7 +90,11 @@ export default function MaterialReturn() {
       ({ error } = await supabase.from("slitting_returns" as any).insert(fb));
     }
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      const isMissingTable = (error as any).code === "PGRST205" || /slitting_returns/i.test(error.message ?? "") && /schema cache|not find/i.test(error.message ?? "");
+      const description = isMissingTable
+        ? "Material Return table is not available in the backend schema cache yet. Please try again now that the cache has been refreshed."
+        : error.message;
+      toast({ title: "Error", description, variant: "destructive" });
     } else {
       toast({ title: "Return recorded" });
       setForm({ slitting_entry_id: "", client_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
