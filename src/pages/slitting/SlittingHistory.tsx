@@ -127,7 +127,38 @@ export default function SlittingHistory() {
       error = fallback.error;
     }
 
-    setEntries(error ? [] : ((data as unknown as SlittingRow[]) ?? []));
+    const nextEntries = error ? [] : ((data as unknown as SlittingRow[]) ?? []);
+    setEntries(nextEntries);
+
+    if (!error && nextEntries.length > 0) {
+      const entryIds = nextEntries.map((entry) => entry.id);
+      const { data: returnsData } = await supabase
+        .from("slitting_returns" as any)
+        .select("id, date, returned_quantity, unit, notes, slitting_entry_id")
+        .in("slitting_entry_id", entryIds)
+        .order("date", { ascending: false });
+
+      const groupedReturns = entryIds.reduce<Record<string, ReturnRow[]>>((acc, id) => {
+        acc[id] = [];
+        return acc;
+      }, {});
+
+      (((returnsData as unknown) as (ReturnRow & { slitting_entry_id: string })[]) ?? []).forEach((row) => {
+        if (!groupedReturns[row.slitting_entry_id]) groupedReturns[row.slitting_entry_id] = [];
+        groupedReturns[row.slitting_entry_id].push({
+          id: row.id,
+          date: row.date,
+          returned_quantity: row.returned_quantity,
+          unit: row.unit,
+          notes: row.notes,
+        });
+      });
+
+      setReturnsMap(groupedReturns);
+    } else {
+      setReturnsMap({});
+    }
+
     setLoading(false);
   };
 
@@ -221,6 +252,7 @@ export default function SlittingHistory() {
                   <TableHead className="text-right">Length (mtr)</TableHead>
                   <TableHead className="text-right">Area (sqm)</TableHead>
                   <TableHead className="text-right">Weight (kg)</TableHead>
+                  <TableHead className="text-right">Returned Material</TableHead>
                   <TableHead className="text-right">Thickness (mm)</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -249,6 +281,9 @@ export default function SlittingHistory() {
                       <TableCell className="text-right font-mono">{t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.kg > 0 ? t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {totalReturned > 0 ? `${totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${returns[0]?.unit ?? ""}` : "—"}
+                      </TableCell>
                       <TableCell className="text-right font-mono">{e.thickness_mm ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs max-w-xs truncate">{displayNotes || "—"}</TableCell>
                       <TableCell className="text-right">
@@ -267,7 +302,7 @@ export default function SlittingHistory() {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={e.id + "-h36"} className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={10} className="p-3">
+                        <TableCell colSpan={11} className="p-3">
                           <div className="text-xs font-semibold mb-2 text-muted-foreground">36 Head Production from this slitting entry</div>
                           {loadingHead36 === e.id ? (
                             <div className="flex items-center justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
@@ -303,7 +338,7 @@ export default function SlittingHistory() {
                           )}
 
                           <div className="text-xs font-semibold mt-4 mb-2 text-muted-foreground">
-                            Material Returns for this slitting entry
+                            Returned Material
                             {returns.length > 0 && (
                               <span className="ml-2 font-mono text-foreground">
                                 (Total: {totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} {returns[0]?.unit ?? ""})
