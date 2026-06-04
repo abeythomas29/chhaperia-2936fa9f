@@ -27,11 +27,13 @@ export default function Head36Entry() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [slittingEntries, setSlittingEntries] = useState<SlittingRow[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     slitting_entry_id: "",
+    client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
     rolls_taken: "",
     times_cut: "",
@@ -41,6 +43,7 @@ export default function Head36Entry() {
     unit: "meters",
     notes: "",
   });
+
 
   useEffect(() => {
     if (!user) return;
@@ -67,9 +70,12 @@ export default function Head36Entry() {
         return { ...r, gsm } as SlittingRow;
       });
       setSlittingEntries(rows);
+      const cl = await supabase.from("company_clients").select("id, name").eq("status", "active").order("name");
+      setClients((cl.data as any[]) ?? []);
       setLoading(false);
     })();
   }, [user]);
+
 
   const source = slittingEntries.find((s) => s.id === form.slitting_entry_id);
 
@@ -103,6 +109,8 @@ export default function Head36Entry() {
     setSubmitting(true);
     const { error } = await supabase.from("head36_entries" as any).insert({
       slitting_entry_id: form.slitting_entry_id || null,
+      client_id: form.client_id || null,
+
       product_code_id: source?.product_codes?.id ?? null,
       rolls_taken: parseFloat(form.rolls_taken) || 0,
       rolls_produced: rolls,
@@ -162,6 +170,17 @@ export default function Head36Entry() {
                 onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Client (Optional)</Label>
+            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">

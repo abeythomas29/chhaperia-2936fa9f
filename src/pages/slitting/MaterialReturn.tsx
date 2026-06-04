@@ -24,10 +24,12 @@ export default function MaterialReturn() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [entries, setEntries] = useState<SlittingRow[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [returns, setReturns] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+  const [form, setForm] = useState({ slitting_entry_id: "", client_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+
 
   const load = async () => {
     if (!user) return;
@@ -48,6 +50,8 @@ export default function MaterialReturn() {
       sums[r.slitting_entry_id] = (sums[r.slitting_entry_id] ?? 0) + Number(r.returned_quantity ?? 0);
     });
     setReturns(sums);
+    const { data: clData } = await supabase.from("company_clients").select("id, name").eq("status", "active").order("name");
+    setClients((clData as any[]) ?? []);
     setLoading(false);
   };
 
@@ -71,6 +75,7 @@ export default function MaterialReturn() {
     setSubmitting(true);
     const { error } = await supabase.from("slitting_returns" as any).insert({
       slitting_entry_id: form.slitting_entry_id,
+      client_id: form.client_id || null,
       returned_quantity: newReturn,
       unit: form.unit,
       notes: form.notes || null,
@@ -81,7 +86,8 @@ export default function MaterialReturn() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Return recorded" });
-      setForm({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+      setForm({ slitting_entry_id: "", client_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+
       await load();
     }
     setSubmitting(false);
@@ -116,6 +122,17 @@ export default function MaterialReturn() {
                 onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Client (Optional)</Label>
+            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
 
           {selected && (
             <div className="rounded-lg border p-3 space-y-2 text-sm">

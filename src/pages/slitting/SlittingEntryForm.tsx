@@ -12,12 +12,15 @@ import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "l
 import { UNIT_OPTIONS } from "@/lib/units";
 
 interface ProductCode { id: string; code: string; category_id: string; }
+interface Client { id: string; name: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [productCodes, setProductCodes] = useState<ProductCode[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(true);
@@ -26,7 +29,9 @@ export default function SlittingEntryForm() {
 
   const [form, setForm] = useState({
     product_code_id: "",
+    client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
+
     // Source product
     source_width_mm: "",
     source_length_mtr: "",
@@ -42,15 +47,16 @@ export default function SlittingEntryForm() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("product_codes")
-        .select("id, code, category_id")
-        .eq("status", "active")
-        .order("code");
-      setProductCodes(data ?? []);
+      const [pc, cl] = await Promise.all([
+        supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
+        supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
+      ]);
+      setProductCodes(pc.data ?? []);
+      setClients((cl.data as Client[]) ?? []);
       setLoading(false);
     })();
   }, []);
+
 
   // Source calculations
   const srcWidth = parseFloat(form.source_width_mm) || 0;
@@ -110,6 +116,8 @@ export default function SlittingEntryForm() {
       const rolls = tc * rpc;
       return {
         product_code_id: form.product_code_id,
+        client_id: form.client_id || null,
+
         source_quantity: idx === 0 ? sourceQty : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
         cut_width_mm: parseFloat(r.width_mm),
@@ -171,6 +179,17 @@ export default function SlittingEntryForm() {
                 onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Client (Optional)</Label>
+            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
 
           {/* Source Product */}
           <Collapsible open={sourceOpen} onOpenChange={setSourceOpen} className="border rounded-lg">

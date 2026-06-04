@@ -40,6 +40,7 @@ export type Database = {
       }
       head36_entries: {
         Row: {
+          client_id: string | null
           created_at: string
           date: string
           gsm: number | null
@@ -58,6 +59,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           date?: string
           gsm?: number | null
@@ -76,6 +78,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           date?: string
           gsm?: number | null
@@ -93,7 +96,15 @@ export type Database = {
           unit?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "head36_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "company_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_categories: {
         Row: {
@@ -511,6 +522,7 @@ export type Database = {
       }
       slitting_entries: {
         Row: {
+          client_id: string | null
           created_at: string
           cut_quantity_produced: number
           cut_width_mm: number
@@ -527,6 +539,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           cut_quantity_produced: number
           cut_width_mm: number
@@ -543,6 +556,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           cut_quantity_produced?: number
           cut_width_mm?: number
@@ -559,6 +573,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "slitting_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "company_clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "slitting_entries_product_code_id_fkey"
             columns: ["product_code_id"]
@@ -577,6 +598,7 @@ export type Database = {
       }
       slitting_returns: {
         Row: {
+          client_id: string | null
           created_at: string
           date: string
           id: string
@@ -588,6 +610,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           date?: string
           id?: string
@@ -599,6 +622,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           date?: string
           id?: string
@@ -609,7 +633,15 @@ export type Database = {
           unit?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "slitting_returns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "company_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       stock_issues: {
         Row: {

@@ -375,6 +375,31 @@ export default function ProductionEntry() {
             </Select>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>Client (Optional)</Label>
+              <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-secondary"><Plus className="h-3 w-3 mr-1" /> Add New</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Add Client</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. ABC Industries" /></div>
+                    <Button type="button" onClick={addClient} className="w-full bg-secondary hover:bg-secondary/90">Add</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+
           {/* Rope multi-thickness panel */}
           {(() => {
             const catName = categories.find((c) => c.id === selectedCategory)?.name?.toLowerCase() ?? "";
