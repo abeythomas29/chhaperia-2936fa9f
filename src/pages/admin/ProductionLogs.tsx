@@ -96,7 +96,9 @@ export default function ProductionLogs() {
     setLoading(true);
 
     const fullSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, raw_material_included, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
-    const basicSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, raw_material_included, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+    const midSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, raw_material_included, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+    const noRMISelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, product_codes(code, category_id), profiles:worker_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+    const minimalSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, product_codes(code, category_id), profiles:worker_id(name)";
 
     let { data, error } = await supabase
       .from("production_entries")
@@ -105,14 +107,16 @@ export default function ProductionLogs() {
       .limit(500);
 
     if (error) {
-      // Fall back if lab columns don't exist in this DB
-      const fallback = await supabase
-        .from("production_entries")
-        .select(basicSelect)
-        .order("date", { ascending: false })
-        .limit(500);
-      data = fallback.data as any;
-      error = fallback.error;
+      const fb = await supabase.from("production_entries").select(midSelect).order("date", { ascending: false }).limit(500);
+      data = fb.data as any; error = fb.error;
+    }
+    if (error) {
+      const fb = await supabase.from("production_entries").select(noRMISelect).order("date", { ascending: false }).limit(500);
+      data = fb.data as any; error = fb.error;
+    }
+    if (error) {
+      const fb = await supabase.from("production_entries").select(minimalSelect).order("date", { ascending: false }).limit(500);
+      data = fb.data as any; error = fb.error;
     }
 
     if (error) {
