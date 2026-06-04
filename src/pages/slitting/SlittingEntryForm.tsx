@@ -180,6 +180,17 @@ export default function SlittingEntryForm() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label>Client (Optional)</Label>
+            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+
           {/* Source Product */}
           <Collapsible open={sourceOpen} onOpenChange={setSourceOpen} className="border rounded-lg">
             <CollapsibleTrigger asChild>
