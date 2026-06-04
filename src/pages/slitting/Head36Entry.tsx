@@ -107,10 +107,11 @@ export default function Head36Entry() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("head36_entries" as any).insert({
+    const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
+    const payload: any = {
       slitting_entry_id: form.slitting_entry_id || null,
       client_id: form.client_id || null,
-
+      date: isoDate,
       product_code_id: source?.product_codes?.id ?? null,
       rolls_taken: parseFloat(form.rolls_taken) || 0,
       rolls_produced: rolls,
@@ -121,8 +122,13 @@ export default function Head36Entry() {
       unit: form.unit,
       notes: [form.notes, `Cuts: ${timesCut} × ${rollsPerCut} rolls/cut`].filter(Boolean).join(" | "),
       operator_id: user.id,
-      created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
-    } as any);
+      created_at: new Date(isoDate + "T12:00:00").toISOString(),
+    };
+    let { error } = await supabase.from("head36_entries" as any).insert(payload);
+    if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
+      const { client_id, ...fb } = payload;
+      ({ error } = await supabase.from("head36_entries" as any).insert(fb));
+    }
     if (error) {
       const isMissingTable = (error as any).code === "PGRST205" || /head36_entries/i.test(error.message ?? "") && /schema cache|not find/i.test(error.message ?? "");
       const description = isMissingTable
