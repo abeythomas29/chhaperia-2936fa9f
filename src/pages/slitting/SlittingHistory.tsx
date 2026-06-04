@@ -275,7 +275,9 @@ export default function SlittingHistory() {
                           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </Button>
                       </TableCell>
-                      <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
+                      <TableCell>{format(new Date(e.date), "dd/MM/yy")} {returns.length > 0 && (
+                        <span className="ml-1 inline-flex items-center justify-center rounded-full bg-orange-500 text-white text-[10px] font-bold h-4 w-4" title="Return process happened">R</span>
+                      )}</TableCell>
                       <TableCell className="font-medium">{e.product_codes?.code ?? "—"}</TableCell>
                       <TableCell>{e.cut_width_mm} mm</TableCell>
                       <TableCell className="text-right font-mono">{t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
