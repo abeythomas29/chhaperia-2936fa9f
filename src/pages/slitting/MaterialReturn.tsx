@@ -16,6 +16,7 @@ interface SlittingRow {
   date: string;
   source_quantity: number;
   cut_quantity_produced: number;
+  cut_width_mm: number;
   unit: string;
   product_codes: { code: string } | null;
 }
