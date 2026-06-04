@@ -138,10 +138,12 @@ export default function SlittingHistory() {
       notes: editForm.notes || null,
     };
     if (editForm.gsm) payload.gsm = Number(editForm.gsm);
-    const { error } = await supabase.from("slitting_entries").update(payload).eq("id", editEntry.id);
+    const { data, error } = await supabase.from("slitting_entries").update(payload).eq("id", editEntry.id).select("id");
     setSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Not updated", description: "No rows changed. You may not have permission to edit this entry.", variant: "destructive" });
     } else {
       toast({ title: "Entry updated" });
       setEditEntry(null);
