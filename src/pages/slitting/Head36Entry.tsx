@@ -109,6 +109,8 @@ export default function Head36Entry() {
     setSubmitting(true);
     const { error } = await supabase.from("head36_entries" as any).insert({
       slitting_entry_id: form.slitting_entry_id || null,
+      client_id: form.client_id || null,
+
       product_code_id: source?.product_codes?.id ?? null,
       rolls_taken: parseFloat(form.rolls_taken) || 0,
       rolls_produced: rolls,
