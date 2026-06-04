@@ -151,15 +151,15 @@ export default function MaterialReturn() {
           {selected && (
             <div className="rounded-lg border p-3 space-y-2 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div><span className="text-muted-foreground">Issued (before production): </span><b>{issued.toLocaleString()} {selected.unit}</b></div>
-                <div><span className="text-muted-foreground">Produced: </span><b>{produced.toLocaleString()}</b></div>
+                <div><span className="text-muted-foreground">Issued (sqm): </span><b>{issued.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b></div>
+                <div><span className="text-muted-foreground">Produced (sqm): </span><b>{produced.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> <span className="text-xs text-muted-foreground">({cutWidthMm}mm × {producedLength}m)</span></div>
                 <div><span className="text-muted-foreground">Already Returned: </span><b>{alreadyReturned.toLocaleString()}</b></div>
                 <div><span className="text-muted-foreground">New Return: </span><b>{newReturn.toLocaleString()}</b></div>
               </div>
               <div className={`rounded-md p-2 text-center font-semibold ${matched ? "bg-green-500/10 text-green-700" : "bg-destructive/10 text-destructive"}`}>
                 {matched
                   ? "✓ Matched — No wastage (Issued = Produced + Returned)"
-                  : `Wastage = ${wastage.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selected.unit} (Issued − Produced − Returned)`}
+                  : `Wastage = ${wastage.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm (Issued − Produced − Already Returned)`}
               </div>
             </div>
           )}
