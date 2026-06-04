@@ -68,6 +68,7 @@ export default function SlittingHistory() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [head36Map, setHead36Map] = useState<Record<string, Head36Row[]>>({});
   const [loadingHead36, setLoadingHead36] = useState<string | null>(null);
+  const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
 
   const toggleExpand = async (entryId: string) => {
     if (expandedId === entryId) {
