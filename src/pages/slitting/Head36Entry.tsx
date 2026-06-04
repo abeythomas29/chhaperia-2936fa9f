@@ -33,7 +33,8 @@ export default function Head36Entry() {
   const [form, setForm] = useState({
     slitting_entry_id: "",
     rolls_taken: "",
-    rolls_produced: "",
+    times_cut: "",
+    rolls_per_cut: "",
     roll_width_mm: "",
     length_per_tape_mtr: "",
     unit: "meters",
