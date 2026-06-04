@@ -50,6 +50,8 @@ export default function MaterialReturn() {
       sums[r.slitting_entry_id] = (sums[r.slitting_entry_id] ?? 0) + Number(r.returned_quantity ?? 0);
     });
     setReturns(sums);
+    const { data: clData } = await supabase.from("company_clients").select("id, name").eq("status", "active").order("name");
+    setClients((clData as any[]) ?? []);
     setLoading(false);
   };
 
@@ -73,6 +75,7 @@ export default function MaterialReturn() {
     setSubmitting(true);
     const { error } = await supabase.from("slitting_returns" as any).insert({
       slitting_entry_id: form.slitting_entry_id,
+      client_id: form.client_id || null,
       returned_quantity: newReturn,
       unit: form.unit,
       notes: form.notes || null,
@@ -83,7 +86,8 @@ export default function MaterialReturn() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Return recorded" });
-      setForm({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+      setForm({ slitting_entry_id: "", client_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
+
       await load();
     }
     setSubmitting(false);
