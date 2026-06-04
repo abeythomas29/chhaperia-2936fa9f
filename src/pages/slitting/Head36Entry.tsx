@@ -110,7 +110,7 @@ export default function Head36Entry() {
       thickness_mm: source?.thickness_mm ?? null,
       gsm: source?.gsm ?? null,
       unit: form.unit,
-      notes: form.notes || null,
+      notes: [form.notes, `Cuts: ${timesCut} × ${rollsPerCut} rolls/cut`].filter(Boolean).join(" | "),
       operator_id: user.id,
     } as any);
     if (error) {
