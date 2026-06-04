@@ -9,8 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, FileText } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+
+interface RawMaterialUsage {
+  quantity_used: number;
+  raw_materials: { name: string; unit: string } | null;
+}
 
 interface HistoryEntry {
   id: string;
@@ -22,8 +28,16 @@ interface HistoryEntry {
   thickness_mm: number | null;
   product_code_id: string;
   client_id: string | null;
+  notes: string | null;
+  gsm: number | null;
+  tensile_strength: number | null;
+  elongation: number | null;
+  swelling_height: number | null;
+  swelling_speed: number | null;
+  surface_resistance: number | null;
   product_codes: { code: string } | null;
   company_clients: { name: string } | null;
+  raw_material_usage: RawMaterialUsage[] | null;
 }
 
 export default function ProductionHistory() {
@@ -44,24 +58,30 @@ export default function ProductionHistory() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Report dialog
+  const [reportEntry, setReportEntry] = useState<HistoryEntry | null>(null);
+
   const fetchHistory = async () => {
     if (!user) return;
     setLoading(true);
+    const fullSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, gsm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance, product_codes(code), company_clients:client_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+    const basicSelect = "id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, notes, product_codes(code), company_clients:client_id(name), raw_material_usage(quantity_used, raw_materials(name, unit))";
+
     let { data, error } = await supabase
       .from("production_entries")
-      .select("id, date, rolls_count, quantity_per_roll, total_quantity, unit, thickness_mm, product_code_id, client_id, product_codes(code), company_clients:client_id(name)")
+      .select(fullSelect)
       .eq("worker_id", user.id)
       .order("date", { ascending: false })
       .limit(200);
 
-    if (error && error.message?.includes("thickness_mm")) {
+    if (error) {
       const fallback = await supabase
         .from("production_entries")
-        .select("id, date, rolls_count, quantity_per_roll, total_quantity, unit, product_code_id, client_id, product_codes(code), company_clients:client_id(name)")
+        .select(basicSelect)
         .eq("worker_id", user.id)
         .order("date", { ascending: false })
         .limit(200);
-      data = fallback.data as unknown as typeof data;
+      data = fallback.data as any;
       error = fallback.error;
     }
 
@@ -139,15 +159,16 @@ export default function ProductionHistory() {
               <TableHead className="text-right">Rolls</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Unit</TableHead>
+              <TableHead>Raw Materials</TableHead>
               <TableHead className="text-right">Thickness (mm)</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : entries.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No entries yet</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No entries yet</TableCell></TableRow>
             ) : (
               entries.map((e) => (
                 <TableRow key={e.id}>
@@ -157,9 +178,19 @@ export default function ProductionHistory() {
                   <TableCell className="text-right">{e.rolls_count}</TableCell>
                   <TableCell className="text-right font-semibold">{e.total_quantity ?? (e.rolls_count * e.quantity_per_roll)} {e.unit}</TableCell>
                   <TableCell>{e.unit}</TableCell>
+                  <TableCell className="text-xs">
+                    {e.raw_material_usage && e.raw_material_usage.length > 0
+                      ? e.raw_material_usage.map((u, i) => (
+                          <div key={i}>{u.raw_materials?.name ?? "—"}: {u.quantity_used} {u.raw_materials?.unit ?? ""}</div>
+                        ))
+                      : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setReportEntry(e)} title="Report" className="text-primary hover:text-primary">
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -216,6 +247,72 @@ export default function ProductionHistory() {
               <Button onClick={handleSaveEdit} disabled={saving}>
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Report Dialog */}
+        <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" /> Report
+              </DialogTitle>
+              <DialogDescription>
+                {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+              </DialogDescription>
+            </DialogHeader>
+            {reportEntry && (() => {
+              const parseNote = (label: string) => {
+                if (!reportEntry.notes) return null;
+                const re = new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i");
+                const m = reportEntry.notes.match(re);
+                return m ? m[1] : null;
+              };
+              const get = (col: number | null | undefined, label: string) =>
+                col != null ? String(col) : parseNote(label);
+              const pairs: [string, string | null][] = [
+                ["GSM", get(reportEntry.gsm, "GSM")],
+                ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : parseNote("Thickness")],
+                ["Tensile Strength", get(reportEntry.tensile_strength, "Tensile")],
+                ["Elongation", get(reportEntry.elongation, "Elongation")],
+                ["Swelling Height", get(reportEntry.swelling_height, "Swelling Height")],
+                ["Swelling Speed", get(reportEntry.swelling_speed, "Swelling Speed")],
+                ["Surface Resistance", get(reportEntry.surface_resistance, "Surface Resistance")],
+              ];
+              const materials = reportEntry.raw_material_usage ?? [];
+              return (
+                <div className="space-y-4">
+                  <div className="divide-y border rounded-md">
+                    {pairs.map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-sm text-muted-foreground">{k}</span>
+                        <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
+                          {v != null && v !== "" ? v : "N/A"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold mb-2">Raw Materials Used</p>
+                    {materials.length > 0 ? (
+                      <div className="divide-y border rounded-md">
+                        {materials.map((u, i) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                            <span className="text-sm">{u.raw_materials?.name ?? "—"}</span>
+                            <span className="font-mono font-semibold">{u.quantity_used} {u.raw_materials?.unit ?? ""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">None recorded</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
