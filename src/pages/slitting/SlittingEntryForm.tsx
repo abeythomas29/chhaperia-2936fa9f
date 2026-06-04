@@ -12,7 +12,7 @@ import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "l
 import { UNIT_OPTIONS } from "@/lib/units";
 
 interface ProductCode { id: string; code: string; category_id: string; }
-interface RollRow { width_mm: string; rolls_count: string; }
+interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
