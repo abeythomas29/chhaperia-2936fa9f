@@ -252,7 +252,7 @@ export default function SlittingHistory() {
                   <TableHead className="text-right">Length (mtr)</TableHead>
                   <TableHead className="text-right">Area (sqm)</TableHead>
                   <TableHead className="text-right">Weight (kg)</TableHead>
-                  <TableHead className="text-right">Returned Material</TableHead>
+                  
                   <TableHead className="text-right">Thickness (mm)</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -281,9 +281,6 @@ export default function SlittingHistory() {
                       <TableCell className="text-right font-mono">{t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.kg > 0 ? t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {totalReturned > 0 ? `${totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${returns[0]?.unit ?? ""}` : "—"}
-                      </TableCell>
                       <TableCell className="text-right font-mono">{e.thickness_mm ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs max-w-xs truncate">{displayNotes || "—"}</TableCell>
                       <TableCell className="text-right">
@@ -302,7 +299,7 @@ export default function SlittingHistory() {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={e.id + "-h36"} className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={11} className="p-3">
+                        <TableCell colSpan={10} className="p-3">
                           <div className="text-xs font-semibold mb-2 text-muted-foreground">36 Head Production from this slitting entry</div>
                           {loadingHead36 === e.id ? (
                             <div className="flex items-center justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
@@ -337,38 +334,6 @@ export default function SlittingHistory() {
                             </Table>
                           )}
 
-                          <div className="text-xs font-semibold mt-4 mb-2 text-muted-foreground">
-                            Returned Material
-                            {returns.length > 0 && (
-                              <span className="ml-2 font-mono text-foreground">
-                                (Total: {totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} {returns[0]?.unit ?? ""})
-                              </span>
-                            )}
-                          </div>
-                          {loadingHead36 === e.id ? null : returns.length === 0 ? (
-                            <p className="text-muted-foreground text-xs italic py-2">No material returns recorded for this slitting entry yet.</p>
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-xs">Date</TableHead>
-                                  <TableHead className="text-xs text-right">Returned Qty</TableHead>
-                                  <TableHead className="text-xs">Unit</TableHead>
-                                  <TableHead className="text-xs">Notes</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {returns.map((r) => (
-                                  <TableRow key={r.id}>
-                                    <TableCell className="text-xs">{format(new Date(r.date), "dd/MM/yy")}</TableCell>
-                                    <TableCell className="text-xs text-right font-mono">{r.returned_quantity}</TableCell>
-                                    <TableCell className="text-xs">{r.unit}</TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -461,6 +426,9 @@ export default function SlittingHistory() {
                 const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
                 return m ? m[1] : null;
               };
+              const returns = returnsMap[reportEntry.id] ?? [];
+              const totalReturned = returns.reduce((s, r) => s + (r.returned_quantity || 0), 0);
+              const returnUnit = returns[0]?.unit ?? "";
               const pairs: [string, string | null][] = [
                 ["GSM", reportEntry.gsm != null ? String(reportEntry.gsm) : note("GSM")],
                 ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : note("Thickness")],
@@ -469,6 +437,7 @@ export default function SlittingHistory() {
                 ["Swelling Height", note("Swelling Height")],
                 ["Swelling Speed", note("Swelling Speed")],
                 ["Surface Resistance", note("Surface Resistance")],
+                ["Returned Material", totalReturned > 0 ? `${totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${returnUnit}`.trim() : null],
               ];
               return (
                 <div className="divide-y border rounded-md">
