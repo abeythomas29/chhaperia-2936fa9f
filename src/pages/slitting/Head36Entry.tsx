@@ -154,18 +154,26 @@ export default function Head36Entry() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label>Total Rolls Taken</Label>
               <Input type="number" step="any" value={form.rolls_taken}
                 onChange={(e) => setForm({ ...form, rolls_taken: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Total Rolls Produced *</Label>
-              <Input type="number" step="any" value={form.rolls_produced}
-                onChange={(e) => setForm({ ...form, rolls_produced: e.target.value })} required />
+              <Label>Times Roll Cut *</Label>
+              <Input type="number" step="any" value={form.times_cut}
+                onChange={(e) => setForm({ ...form, times_cut: e.target.value })} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Rolls per Cutting *</Label>
+              <Input type="number" step="any" value={form.rolls_per_cut}
+                onChange={(e) => setForm({ ...form, rolls_per_cut: e.target.value })} required />
             </div>
           </div>
+          {rolls > 0 && (
+            <p className="text-xs text-muted-foreground -mt-2">Total rolls produced: <span className="font-semibold text-foreground">{rolls.toLocaleString()}</span> ({timesCut} × {rollsPerCut})</p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
