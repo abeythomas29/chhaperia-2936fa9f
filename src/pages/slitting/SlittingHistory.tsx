@@ -334,38 +334,6 @@ export default function SlittingHistory() {
                             </Table>
                           )}
 
-                          <div className="text-xs font-semibold mt-4 mb-2 text-muted-foreground">
-                            Returned Material
-                            {returns.length > 0 && (
-                              <span className="ml-2 font-mono text-foreground">
-                                (Total: {totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} {returns[0]?.unit ?? ""})
-                              </span>
-                            )}
-                          </div>
-                          {loadingHead36 === e.id ? null : returns.length === 0 ? (
-                            <p className="text-muted-foreground text-xs italic py-2">No material returns recorded for this slitting entry yet.</p>
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-xs">Date</TableHead>
-                                  <TableHead className="text-xs text-right">Returned Qty</TableHead>
-                                  <TableHead className="text-xs">Unit</TableHead>
-                                  <TableHead className="text-xs">Notes</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {returns.map((r) => (
-                                  <TableRow key={r.id}>
-                                    <TableCell className="text-xs">{format(new Date(r.date), "dd/MM/yy")}</TableCell>
-                                    <TableCell className="text-xs text-right font-mono">{r.returned_quantity}</TableCell>
-                                    <TableCell className="text-xs">{r.unit}</TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          )}
                         </TableCell>
                       </TableRow>
                     )}
