@@ -27,7 +27,7 @@ export default function MaterialReturn() {
   const [returns, setReturns] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ slitting_entry_id: "", returned_quantity: "", unit: "meters", notes: "" });
+  const [form, setForm] = useState({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
 
   const load = async () => {
     if (!user) return;
@@ -75,12 +75,13 @@ export default function MaterialReturn() {
       unit: form.unit,
       notes: form.notes || null,
       returned_by: user.id,
+      created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
     } as any);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Return recorded" });
-      setForm({ slitting_entry_id: "", returned_quantity: "", unit: "meters", notes: "" });
+      setForm({ slitting_entry_id: "", entry_date: new Date().toISOString().slice(0, 10), returned_quantity: "", unit: "meters", notes: "" });
       await load();
     }
     setSubmitting(false);
@@ -95,18 +96,25 @@ export default function MaterialReturn() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Select Slitting Entry *</Label>
-            <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Choose a slitting source" /></SelectTrigger>
-              <SelectContent>
-                {entries.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.source_quantity} {e.unit}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
+            <div className="space-y-2">
+              <Label>Select Slitting Entry *</Label>
+              <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Choose a slitting source" /></SelectTrigger>
+                <SelectContent>
+                  {entries.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.source_quantity} {e.unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input type="date" value={form.entry_date}
+                onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
+            </div>
           </div>
 
           {selected && (

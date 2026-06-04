@@ -32,6 +32,7 @@ export default function Head36Entry() {
 
   const [form, setForm] = useState({
     slitting_entry_id: "",
+    entry_date: new Date().toISOString().slice(0, 10),
     rolls_taken: "",
     times_cut: "",
     rolls_per_cut: "",
@@ -112,6 +113,7 @@ export default function Head36Entry() {
       unit: form.unit,
       notes: [form.notes, `Cuts: ${timesCut} × ${rollsPerCut} rolls/cut`].filter(Boolean).join(" | "),
       operator_id: user.id,
+      created_at: form.entry_date ? new Date(form.entry_date + "T12:00:00").toISOString() : new Date().toISOString(),
     } as any);
     if (error) {
       const isMissingTable = (error as any).code === "PGRST205" || /head36_entries/i.test(error.message ?? "") && /schema cache|not find/i.test(error.message ?? "");
@@ -135,23 +137,30 @@ export default function Head36Entry() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Source Slitting Entry *</Label>
-            <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Choose source rolls" /></SelectTrigger>
-              <SelectContent>
-                {slittingEntries.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.cut_width_mm}mm — {e.cut_quantity_produced} {e.unit}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {source && (
-              <p className="text-xs text-muted-foreground">
-                Thickness: {source.thickness_mm ?? "—"} mm · GSM: {source.gsm ?? "—"} (from slitting entry)
-              </p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
+            <div className="space-y-2">
+              <Label>Source Slitting Entry *</Label>
+              <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Choose source rolls" /></SelectTrigger>
+                <SelectContent>
+                  {slittingEntries.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.cut_width_mm}mm — {e.cut_quantity_produced} {e.unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {source && (
+                <p className="text-xs text-muted-foreground">
+                  Thickness: {source.thickness_mm ?? "—"} mm · GSM: {source.gsm ?? "—"} (from slitting entry)
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input type="date" value={form.entry_date}
+                onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
