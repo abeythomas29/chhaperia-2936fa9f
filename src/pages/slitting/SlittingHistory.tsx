@@ -232,6 +232,8 @@ export default function SlittingHistory() {
                   const displayNotes = (e.notes ?? "").split("|").map((s) => s.trim()).filter((s) => s && !/^gsm\s*[:\-]/i.test(s)).join(" | ");
                   const isExpanded = expandedId === e.id;
                   const head36 = head36Map[e.id] ?? [];
+                  const returns = returnsMap[e.id] ?? [];
+                  const totalReturned = returns.reduce((s, r) => s + (r.returned_quantity || 0), 0);
                   return (
                     <Fragment key={e.id}>
                     {/* main row */}
