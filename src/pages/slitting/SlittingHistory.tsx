@@ -281,9 +281,6 @@ export default function SlittingHistory() {
                       <TableCell className="text-right font-mono">{t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right font-mono">{t.kg > 0 ? t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {totalReturned > 0 ? `${totalReturned.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${returns[0]?.unit ?? ""}` : "—"}
-                      </TableCell>
                       <TableCell className="text-right font-mono">{e.thickness_mm ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs max-w-xs truncate">{displayNotes || "—"}</TableCell>
                       <TableCell className="text-right">
