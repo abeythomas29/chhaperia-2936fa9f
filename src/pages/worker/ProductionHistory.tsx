@@ -110,7 +110,7 @@ export default function ProductionHistory() {
   const handleSaveEdit = async () => {
     if (!editEntry) return;
     setSaving(true);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("production_entries")
       .update({
         date: editDate,
@@ -119,11 +119,14 @@ export default function ProductionHistory() {
         unit: editUnit,
         thickness_mm: editThickness ? Number(editThickness) : null,
       })
-      .eq("id", editEntry.id);
+      .eq("id", editEntry.id)
+      .select("id");
 
     setSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Not updated", description: "No rows changed. You may not have permission to edit this entry.", variant: "destructive" });
     } else {
       toast({ title: "Entry updated successfully" });
       setEditEntry(null);
