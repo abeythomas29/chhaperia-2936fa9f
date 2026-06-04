@@ -96,18 +96,25 @@ export default function MaterialReturn() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Select Slitting Entry *</Label>
-            <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Choose a slitting source" /></SelectTrigger>
-              <SelectContent>
-                {entries.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.source_quantity} {e.unit}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
+            <div className="space-y-2">
+              <Label>Select Slitting Entry *</Label>
+              <Select value={form.slitting_entry_id} onValueChange={(v) => setForm({ ...form, slitting_entry_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Choose a slitting source" /></SelectTrigger>
+                <SelectContent>
+                  {entries.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {format(new Date(e.date), "dd/MM/yy")} — {e.product_codes?.code ?? "—"} — {e.source_quantity} {e.unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input type="date" value={form.entry_date}
+                onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
+            </div>
           </div>
 
           {selected && (
