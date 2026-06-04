@@ -561,15 +561,32 @@ export default function ProductionLogs() {
               ["Surface Resistance", get(reportEntry.surface_resistance, "Surface Resistance")],
             ];
             return (
-              <div className="divide-y border rounded-md">
-                {pairs.map(([k, v]) => (
-                  <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-sm text-muted-foreground">{k}</span>
-                    <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
-                      {v != null && v !== "" ? v : "N/A"}
-                    </span>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <div className="divide-y border rounded-md">
+                  {pairs.map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-sm text-muted-foreground">{k}</span>
+                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
+                        {v != null && v !== "" ? v : "N/A"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold mb-2">Raw Materials Used</p>
+                  {reportEntry.raw_material_usage && reportEntry.raw_material_usage.length > 0 ? (
+                    <div className="divide-y border rounded-md">
+                      {reportEntry.raw_material_usage.map((u, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-sm">{u.raw_materials?.name ?? "—"}</span>
+                          <span className="font-mono font-semibold">{u.quantity_used} {u.raw_materials?.unit ?? ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">None recorded</p>
+                  )}
+                </div>
               </div>
             );
           })()}
