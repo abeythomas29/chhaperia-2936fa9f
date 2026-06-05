@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Layers } from "lucide-react";
 import { UNIT_OPTIONS } from "@/lib/units";
@@ -179,12 +180,12 @@ export default function Head36Entry() {
 
           <div className="space-y-2">
             <Label>Client (Optional)</Label>
-            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.client_id}
+              onValueChange={(v) => setForm({ ...form, client_id: v })}
+              placeholder="Select client (optional)"
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
 
 

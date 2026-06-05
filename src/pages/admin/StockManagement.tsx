@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -569,19 +570,18 @@ export default function StockManagement() {
             </div>
             <div className="space-y-2">
               <Label>Product Code</Label>
-              <Select value={issueProductCodeId} onValueChange={(v) => { setIssueProductCodeId(v); const s = summaries.find(s => s.product_code_id === v); if (s) setIssueUnit(s.unit); }}>
-                <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                <SelectContent>
-                  {productCodes.map((p) => {
-                    const stock = summaries.find(s => s.product_code_id === p.id);
-                    return (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.code} {stock ? `(Available: ${stock.available.toLocaleString()} ${stock.unit})` : ""}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={issueProductCodeId}
+                onValueChange={(v) => { setIssueProductCodeId(v); const s = summaries.find(s => s.product_code_id === v); if (s) setIssueUnit(s.unit); }}
+                placeholder="Select product"
+                options={productCodes.map((p) => {
+                  const stock = summaries.find(s => s.product_code_id === p.id);
+                  return {
+                    value: p.id,
+                    label: `${p.code}${stock ? ` (Available: ${stock.available.toLocaleString()} ${stock.unit})` : ""}`,
+                  };
+                })}
+              />
               {issueProductCodeId && (() => {
                 const stock = summaries.find(s => s.product_code_id === issueProductCodeId);
                 if (!stock) return null;
@@ -596,14 +596,12 @@ export default function StockManagement() {
             </div>
             <div className="space-y-2">
               <Label>Client</Label>
-              <Select value={issueClientId} onValueChange={setIssueClientId}>
-                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={issueClientId}
+                onValueChange={setIssueClientId}
+                placeholder="Select client"
+                options={clients.map((c) => ({ value: c.id, label: c.name }))}
+              />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">

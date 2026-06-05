@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CheckCircle, ShoppingCart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -249,12 +250,12 @@ export default function SalesEntry() {
               </Button>
             </div>
             {!useManualClient ? (
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={clientId}
+                onValueChange={setClientId}
+                placeholder="Select client"
+                options={clients.map((c) => ({ value: c.id, label: c.name }))}
+              />
             ) : (
               <Input
                 value={manualClientName}
@@ -286,12 +287,12 @@ export default function SalesEntry() {
           ) : (
             <div>
               <Label>Product Code</Label>
-              <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                <SelectContent>
-                  {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={productId}
+                onValueChange={setProductId}
+                placeholder="Select product"
+                options={products.map((p) => ({ value: p.id, label: p.code }))}
+              />
               {productId && (
                 <p className="text-xs text-muted-foreground mt-1">
                   {loadingAvailable

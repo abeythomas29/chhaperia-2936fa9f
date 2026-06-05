@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "lucide-react";
@@ -183,12 +184,12 @@ export default function SlittingEntryForm() {
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
             <div className="space-y-2">
               <Label>Product Code *</Label>
-              <Select value={form.product_code_id} onValueChange={(v) => setForm({ ...form, product_code_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Select product code" /></SelectTrigger>
-                <SelectContent>
-                  {productCodes.map((pc) => <SelectItem key={pc.id} value={pc.id}>{pc.code}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={form.product_code_id}
+                onValueChange={(v) => setForm({ ...form, product_code_id: v })}
+                placeholder="Select product code"
+                options={productCodes.map((pc) => ({ value: pc.id, label: pc.code }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Date *</Label>
@@ -199,12 +200,12 @@ export default function SlittingEntryForm() {
 
           <div className="space-y-2">
             <Label>Client (Optional)</Label>
-            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.client_id}
+              onValueChange={(v) => setForm({ ...form, client_id: v })}
+              placeholder="Select client (optional)"
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
 
 

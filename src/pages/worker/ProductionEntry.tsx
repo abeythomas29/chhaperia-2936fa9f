@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -332,10 +333,12 @@ export default function ProductionEntry() {
                 </DialogContent>
               </Dialog>
             </div>
-            <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-              <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
-              <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              value={selectedCategory}
+              onValueChange={handleCategoryChange}
+              placeholder="Select a category"
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
 
           <div>
@@ -350,10 +353,12 @@ export default function ProductionEntry() {
                   <div className="space-y-4">
                     <div>
                       <Label>Category</Label>
-                      <Select value={newProductCat} onValueChange={setNewProductCat}>
-                        <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                        <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={newProductCat}
+                        onValueChange={setNewProductCat}
+                        placeholder="Select category"
+                        options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                      />
                     </div>
                     <div><Label>Code</Label><Input value={newProductCode} onChange={(e) => setNewProductCode(e.target.value)} placeholder="e.g. CHSCWWBT 18" /></div>
                     <Button type="button" onClick={addProductCode} className="w-full bg-secondary hover:bg-secondary/90">Add</Button>
@@ -361,18 +366,14 @@ export default function ProductionEntry() {
                 </DialogContent>
               </Dialog>
             </div>
-            <Select value={form.product_code_id} onValueChange={(v) => setForm({ ...form, product_code_id: v })}>
-              <SelectTrigger><SelectValue placeholder={selectedCategory ? "Select product code" : "Select a category first"} /></SelectTrigger>
-              <SelectContent>
-                {filteredProductCodes.length === 0 ? (
-                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                    {selectedCategory ? "No products in this category" : "Select a category first"}
-                  </div>
-                ) : (
-                  filteredProductCodes.map((p) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)
-                )}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.product_code_id}
+              onValueChange={(v) => setForm({ ...form, product_code_id: v })}
+              placeholder={selectedCategory ? "Select product code" : "Select a category first"}
+              disabled={!selectedCategory}
+              emptyText={selectedCategory ? "No products in this category" : "Select a category first"}
+              options={filteredProductCodes.map((p) => ({ value: p.id, label: p.code }))}
+            />
           </div>
 
           <div>
@@ -391,12 +392,12 @@ export default function ProductionEntry() {
                 </DialogContent>
               </Dialog>
             </div>
-            <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.client_id}
+              onValueChange={(v) => setForm({ ...form, client_id: v })}
+              placeholder="Select client (optional)"
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
 
 
