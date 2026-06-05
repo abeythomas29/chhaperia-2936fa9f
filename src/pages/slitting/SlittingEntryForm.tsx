@@ -14,6 +14,7 @@ import { UNIT_OPTIONS } from "@/lib/units";
 interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
+interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
@@ -26,16 +27,14 @@ export default function SlittingEntryForm() {
   const [sourceOpen, setSourceOpen] = useState(true);
   const [rollsOpen, setRollsOpen] = useState(true);
   const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
+  const [sourceRows, setSourceRows] = useState<SourceRow[]>([{ width_mm: "", length_mtr: "", rolls: "" }]);
 
   const [form, setForm] = useState({
     product_code_id: "",
     client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
 
-    // Source product
-    source_width_mm: "",
-    source_length_mtr: "",
-    source_rolls: "",
+    // Source product (shared)
     source_gsm: "",
     source_thickness_mm: "",
     source_unit: "meters",
@@ -58,14 +57,27 @@ export default function SlittingEntryForm() {
   }, []);
 
 
-  // Source calculations
-  const srcWidth = parseFloat(form.source_width_mm) || 0;
-  const srcLength = parseFloat(form.source_length_mtr) || 0;
-  const srcRolls = parseFloat(form.source_rolls) || 0;
+  // Source calculations (summed across all source rows)
   const srcGsm = parseFloat(form.source_gsm) || 0;
-  const sourceSqm = (srcWidth / 1000) * srcLength * srcRolls;
-  const sourceKg = sourceSqm * srcGsm / 1000;
-  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : srcLength * srcRolls);
+  const validSourceRows = sourceRows.filter(
+    (s) => parseFloat(s.width_mm) > 0 && parseFloat(s.length_mtr) > 0 && parseFloat(s.rolls) > 0
+  );
+  const sourceSqm = validSourceRows.reduce(
+    (sum, s) => sum + (parseFloat(s.width_mm) / 1000) * parseFloat(s.length_mtr) * parseFloat(s.rolls),
+    0
+  );
+  const sourceMeters = validSourceRows.reduce(
+    (sum, s) => sum + parseFloat(s.length_mtr) * parseFloat(s.rolls),
+    0
+  );
+  const sourceKg = (sourceSqm * srcGsm) / 1000;
+  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : sourceMeters);
+
+  const updateSourceRow = (i: number, patch: Partial<SourceRow>) =>
+    setSourceRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addSourceRow = () => setSourceRows((rows) => [...rows, { width_mm: "", length_mtr: "", rolls: "" }]);
+  const removeSourceRow = (i: number) => setSourceRows((rows) => rows.filter((_, idx) => idx !== i));
+
 
   // Output rolls calculations
   const rollLength = parseFloat(form.roll_length_mtr) || 0;
