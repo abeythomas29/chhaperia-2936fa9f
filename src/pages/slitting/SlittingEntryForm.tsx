@@ -220,22 +220,47 @@ export default function SlittingEntryForm() {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3 space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Source Width (mm)</Label>
-                  <Input type="number" step="any" value={form.source_width_mm}
-                    onChange={(e) => setForm({ ...form, source_width_mm: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Source Length (mtr)</Label>
-                  <Input type="number" step="any" value={form.source_length_mtr}
-                    onChange={(e) => setForm({ ...form, source_length_mtr: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">No. of Rolls</Label>
-                  <Input type="number" step="any" value={form.source_rolls}
-                    onChange={(e) => setForm({ ...form, source_rolls: e.target.value })} />
-                </div>
+              <p className="text-xs text-muted-foreground">
+                Add one row per source roll. Use multiple rows if rolls have different dimensions.
+              </p>
+              {sourceRows.map((s, idx) => {
+                const w = parseFloat(s.width_mm) || 0;
+                const l = parseFloat(s.length_mtr) || 0;
+                const n = parseFloat(s.rolls) || 0;
+                const rowSqm = (w / 1000) * l * n;
+                return (
+                  <div key={idx} className="space-y-2 border-l-2 pl-3">
+                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
+                        <Input type="number" step="any" value={s.width_mm}
+                          onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Source Length (mtr)</Label>
+                        <Input type="number" step="any" value={s.length_mtr}
+                          onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">No. of Rolls</Label>
+                        <Input type="number" step="any" value={s.rolls}
+                          onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {rowSqm > 0 && (
+                      <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+                    )}
+                  </div>
+                );
+              })}
+              <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
+                <Plus className="h-4 w-4 mr-1" /> Add Roll
+              </Button>
+
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
                   <Label className="text-xs">GSM</Label>
                   <Input type="number" step="any" value={form.source_gsm}
@@ -257,6 +282,7 @@ export default function SlittingEntryForm() {
                 </div>
               </div>
             </CollapsibleContent>
+
           </Collapsible>
 
           {/* Output Rolls */}
