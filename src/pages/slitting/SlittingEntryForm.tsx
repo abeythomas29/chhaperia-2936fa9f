@@ -14,6 +14,7 @@ import { UNIT_OPTIONS } from "@/lib/units";
 interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
+interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
@@ -26,16 +27,14 @@ export default function SlittingEntryForm() {
   const [sourceOpen, setSourceOpen] = useState(true);
   const [rollsOpen, setRollsOpen] = useState(true);
   const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
+  const [sourceRows, setSourceRows] = useState<SourceRow[]>([{ width_mm: "", length_mtr: "", rolls: "" }]);
 
   const [form, setForm] = useState({
     product_code_id: "",
     client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
 
-    // Source product
-    source_width_mm: "",
-    source_length_mtr: "",
-    source_rolls: "",
+    // Source product (shared)
     source_gsm: "",
     source_thickness_mm: "",
     source_unit: "meters",
@@ -58,14 +57,27 @@ export default function SlittingEntryForm() {
   }, []);
 
 
-  // Source calculations
-  const srcWidth = parseFloat(form.source_width_mm) || 0;
-  const srcLength = parseFloat(form.source_length_mtr) || 0;
-  const srcRolls = parseFloat(form.source_rolls) || 0;
+  // Source calculations (summed across all source rows)
   const srcGsm = parseFloat(form.source_gsm) || 0;
-  const sourceSqm = (srcWidth / 1000) * srcLength * srcRolls;
-  const sourceKg = sourceSqm * srcGsm / 1000;
-  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : srcLength * srcRolls);
+  const validSourceRows = sourceRows.filter(
+    (s) => parseFloat(s.width_mm) > 0 && parseFloat(s.length_mtr) > 0 && parseFloat(s.rolls) > 0
+  );
+  const sourceSqm = validSourceRows.reduce(
+    (sum, s) => sum + (parseFloat(s.width_mm) / 1000) * parseFloat(s.length_mtr) * parseFloat(s.rolls),
+    0
+  );
+  const sourceMeters = validSourceRows.reduce(
+    (sum, s) => sum + parseFloat(s.length_mtr) * parseFloat(s.rolls),
+    0
+  );
+  const sourceKg = (sourceSqm * srcGsm) / 1000;
+  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : sourceMeters);
+
+  const updateSourceRow = (i: number, patch: Partial<SourceRow>) =>
+    setSourceRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addSourceRow = () => setSourceRows((rows) => [...rows, { width_mm: "", length_mtr: "", rolls: "" }]);
+  const removeSourceRow = (i: number) => setSourceRows((rows) => rows.filter((_, idx) => idx !== i));
+
 
   // Output rolls calculations
   const rollLength = parseFloat(form.roll_length_mtr) || 0;
@@ -109,7 +121,7 @@ export default function SlittingEntryForm() {
 
     setSubmitting(true);
 
-    const sourceNote = `Source: ${srcWidth}mm × ${srcLength}m × ${srcRolls} rolls (${sourceQty.toFixed(2)} ${form.source_unit})`;
+    const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
     const rowsToInsert = validRollRows.map((r, idx) => {
       const tc = parseFloat(r.times_cut) || 0;
@@ -150,10 +162,10 @@ export default function SlittingEntryForm() {
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
       setForm({
         ...form,
-        source_width_mm: "", source_length_mtr: "", source_rolls: "",
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
+      setSourceRows([{ width_mm: "", length_mtr: "", rolls: "" }]);
       setRollRows([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
     }
     setSubmitting(false);
@@ -208,22 +220,47 @@ export default function SlittingEntryForm() {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3 space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Source Width (mm)</Label>
-                  <Input type="number" step="any" value={form.source_width_mm}
-                    onChange={(e) => setForm({ ...form, source_width_mm: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Source Length (mtr)</Label>
-                  <Input type="number" step="any" value={form.source_length_mtr}
-                    onChange={(e) => setForm({ ...form, source_length_mtr: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">No. of Rolls</Label>
-                  <Input type="number" step="any" value={form.source_rolls}
-                    onChange={(e) => setForm({ ...form, source_rolls: e.target.value })} />
-                </div>
+              <p className="text-xs text-muted-foreground">
+                Add one row per source roll. Use multiple rows if rolls have different dimensions.
+              </p>
+              {sourceRows.map((s, idx) => {
+                const w = parseFloat(s.width_mm) || 0;
+                const l = parseFloat(s.length_mtr) || 0;
+                const n = parseFloat(s.rolls) || 0;
+                const rowSqm = (w / 1000) * l * n;
+                return (
+                  <div key={idx} className="space-y-2 border-l-2 pl-3">
+                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
+                        <Input type="number" step="any" value={s.width_mm}
+                          onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Source Length (mtr)</Label>
+                        <Input type="number" step="any" value={s.length_mtr}
+                          onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">No. of Rolls</Label>
+                        <Input type="number" step="any" value={s.rolls}
+                          onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {rowSqm > 0 && (
+                      <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+                    )}
+                  </div>
+                );
+              })}
+              <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
+                <Plus className="h-4 w-4 mr-1" /> Add Roll
+              </Button>
+
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
                   <Label className="text-xs">GSM</Label>
                   <Input type="number" step="any" value={form.source_gsm}
@@ -245,6 +282,7 @@ export default function SlittingEntryForm() {
                 </div>
               </div>
             </CollapsibleContent>
+
           </Collapsible>
 
           {/* Output Rolls */}
