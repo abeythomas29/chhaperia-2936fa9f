@@ -162,10 +162,10 @@ export default function SlittingEntryForm() {
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
       setForm({
         ...form,
-        source_width_mm: "", source_length_mtr: "", source_rolls: "",
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
+      setSourceRows([{ width_mm: "", length_mtr: "", rolls: "" }]);
       setRollRows([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
     }
     setSubmitting(false);
