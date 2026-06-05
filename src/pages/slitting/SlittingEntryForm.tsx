@@ -71,7 +71,7 @@ export default function SlittingEntryForm() {
     0
   );
   const sourceKg = (sourceSqm * srcGsm) / 1000;
-  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqm" ? sourceSqm : sourceMeters);
+  const sourceQty = form.source_unit === "kg" ? sourceKg : (form.source_unit === "sqmtr" ? sourceSqm : sourceMeters);
 
   const updateSourceRow = (i: number, patch: Partial<SourceRow>) =>
     setSourceRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
