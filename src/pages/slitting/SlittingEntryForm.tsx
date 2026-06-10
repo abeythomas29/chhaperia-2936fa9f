@@ -124,6 +124,7 @@ export default function SlittingEntryForm() {
 
     const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
+    const batchId = (globalThis.crypto && "randomUUID" in globalThis.crypto) ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const rowsToInsert = validRollRows.map((r, idx) => {
       const tc = parseFloat(r.times_cut) || 0;
       const rpc = parseFloat(r.rolls_per_cut) || 0;
@@ -139,6 +140,7 @@ export default function SlittingEntryForm() {
         thickness_mm: form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null,
         gsm: form.source_gsm ? parseFloat(form.source_gsm) : null,
         unit: form.unit,
+        batch_id: batchId,
         notes: [form.notes, `Roll ${idx + 1} of ${validRollRows.length}`, sourceNote, `Cuts: ${tc} × ${rpc} rolls/cut`, rollLength ? `RollLength: ${rollLength}m` : "", form.source_gsm ? `GSM: ${form.source_gsm}` : ""].filter(Boolean).join(" | "),
         slitting_manager_id: user.id,
         created_at: new Date(isoDate + "T12:00:00").toISOString(),
