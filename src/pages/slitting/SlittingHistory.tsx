@@ -109,7 +109,7 @@ export default function SlittingHistory() {
   const fetchEntries = async () => {
     if (!user) return;
     setLoading(true);
-    const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, remaining_returned, thickness_mm, gsm, unit, notes, product_codes(code)";
+    const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, remaining_returned, thickness_mm, gsm, unit, notes, batch_id, product_codes(code)";
     const basicSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, remaining_returned, thickness_mm, unit, notes, product_codes(code)";
 
     let { data, error } = await supabase
@@ -139,20 +139,34 @@ export default function SlittingHistory() {
         .in("slitting_entry_id", entryIds)
         .order("date", { ascending: false });
 
-      const groupedReturns = entryIds.reduce<Record<string, ReturnRow[]>>((acc, id) => {
-        acc[id] = [];
-        return acc;
-      }, {});
-
+      // Build returns keyed by anchor row id
+      const returnsByAnchor: Record<string, ReturnRow[]> = {};
       (((returnsData as unknown) as (ReturnRow & { slitting_entry_id: string })[]) ?? []).forEach((row) => {
-        if (!groupedReturns[row.slitting_entry_id]) groupedReturns[row.slitting_entry_id] = [];
-        groupedReturns[row.slitting_entry_id].push({
+        (returnsByAnchor[row.slitting_entry_id] ||= []).push({
           id: row.id,
           date: row.date,
           returned_quantity: row.returned_quantity,
           unit: row.unit,
           notes: row.notes,
         });
+      });
+
+      // Propagate to all sibling rows that share a batch_id with the anchor
+      const groupedReturns: Record<string, ReturnRow[]> = {};
+      entryIds.forEach((id) => { groupedReturns[id] = []; });
+      nextEntries.forEach((row) => {
+        // Find any returns attached to any row in the same batch
+        const siblings = row.batch_id
+          ? nextEntries.filter((r) => r.batch_id === row.batch_id).map((r) => r.id)
+          : [row.id];
+        const merged: ReturnRow[] = [];
+        const seen = new Set<string>();
+        siblings.forEach((sid) => {
+          (returnsByAnchor[sid] ?? []).forEach((rr) => {
+            if (!seen.has(rr.id)) { seen.add(rr.id); merged.push(rr); }
+          });
+        });
+        groupedReturns[row.id] = merged;
       });
 
       setReturnsMap(groupedReturns);
