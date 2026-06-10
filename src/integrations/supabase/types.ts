@@ -522,6 +522,7 @@ export type Database = {
       }
       slitting_entries: {
         Row: {
+          batch_id: string | null
           client_id: string | null
           created_at: string
           cut_quantity_produced: number
@@ -539,6 +540,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch_id?: string | null
           client_id?: string | null
           created_at?: string
           cut_quantity_produced: number
@@ -556,6 +558,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch_id?: string | null
           client_id?: string | null
           created_at?: string
           cut_quantity_produced?: number
