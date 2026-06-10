@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, PackageOpen } from "lucide-react";
-import { UNIT_OPTIONS } from "@/lib/units";
+
 import { format } from "date-fns";
 
 interface SlittingRow {
