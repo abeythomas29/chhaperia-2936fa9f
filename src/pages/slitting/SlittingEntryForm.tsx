@@ -158,6 +158,10 @@ export default function SlittingEntryForm() {
       const fb = rowsToInsert.map(({ gsm, client_id, ...row }) => row);
       ({ error } = await tryInsert(fb));
     }
+    if (error?.code === "PGRST204" && /'batch_id' column/.test(error.message)) {
+      const fb = rowsToInsert.map(({ batch_id, ...row }) => row);
+      ({ error } = await tryInsert(fb));
+    }
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
