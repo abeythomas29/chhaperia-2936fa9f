@@ -234,20 +234,17 @@ export default function MaterialReturn() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Returned Quantity *</Label>
+              <Label>Returned Quantity (sqm) *</Label>
               <Input type="number" step="any" value={form.returned_quantity}
                 onChange={(e) => setForm({ ...form, returned_quantity: e.target.value })} required />
             </div>
             <div className="space-y-2">
               <Label>Unit</Label>
-              <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {UNIT_OPTIONS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input value="Square Meters (sqmtr)" disabled />
+              <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match Issued/Produced totals.</p>
             </div>
           </div>
+
 
           <div className="space-y-2">
             <Label>Notes</Label>
