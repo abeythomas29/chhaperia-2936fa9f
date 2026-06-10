@@ -43,6 +43,7 @@ interface SlittingRow {
   gsm: number | null;
   unit: string;
   notes: string | null;
+  batch_id: string | null;
   product_codes: { code: string } | null;
 }
 
