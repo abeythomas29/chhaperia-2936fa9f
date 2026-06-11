@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,10 @@ interface SlittingRow {
   unit: string;
   product_codes: { code: string } | null;
 }
+
+type SlittingReturnInsert = Database["public"]["Tables"]["slitting_returns"]["Insert"];
+type SlittingReturnRow = Database["public"]["Tables"]["slitting_returns"]["Row"];
+type ClientRow = Database["public"]["Tables"]["company_clients"]["Row"];
 
 interface Batch {
   key: string;
@@ -84,7 +89,7 @@ export default function MaterialReturn() {
     notes: "",
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
@@ -103,11 +108,11 @@ export default function MaterialReturn() {
     writeCachedRows(nextRows);
 
     const { data: retData } = await supabase
-      .from("slitting_returns" as any)
+      .from("slitting_returns")
       .select("slitting_entry_id, returned_quantity")
       .limit(5000);
     const sums: Record<string, number> = {};
-    ((retData as any[]) ?? []).forEach((row) => {
+    ((retData as SlittingReturnRow[] | null) ?? []).forEach((row) => {
       sums[row.slitting_entry_id] = (sums[row.slitting_entry_id] ?? 0) + Number(row.returned_quantity ?? 0);
     });
     setReturnsByRow(sums);
@@ -117,13 +122,13 @@ export default function MaterialReturn() {
       .select("id, name")
       .eq("status", "active")
       .order("name");
-    setClients((clData as any[]) ?? []);
+    setClients((clData as ClientRow[] | null) ?? []);
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
-    load();
-  }, [user]);
+    void load();
+  }, [load]);
 
   const batches = useMemo<Batch[]>(() => {
     const groups = new Map<string, SlittingRow[]>();
@@ -194,7 +199,7 @@ export default function MaterialReturn() {
 
     setSubmitting(true);
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
-    const payload: any = {
+    const payload: SlittingReturnInsert = {
       slitting_entry_id: selected.anchorId,
       client_id: form.client_id || null,
       date: isoDate,
@@ -205,10 +210,10 @@ export default function MaterialReturn() {
       created_at: new Date(isoDate + "T12:00:00").toISOString(),
     };
 
-    let { error } = await supabase.from("slitting_returns" as any).insert(payload);
+    let { error } = await supabase.from("slitting_returns").insert(payload);
     if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
       const { client_id, ...fallbackPayload } = payload;
-      ({ error } = await supabase.from("slitting_returns" as any).insert(fallbackPayload));
+      ({ error } = await supabase.from("slitting_returns").insert(fallbackPayload));
     }
 
     if (error) {
