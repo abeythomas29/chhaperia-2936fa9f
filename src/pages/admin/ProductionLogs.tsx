@@ -710,8 +710,15 @@ export default function ProductionLogs() {
               </div>
             );
           })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setH36Entry(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* LR (Lab Report) Dialog */}
       <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
