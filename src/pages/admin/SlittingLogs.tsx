@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Scissors, Search, Trash2, Layers, CalendarIcon, FileText, Pencil } from "lucide-react";
+import { Loader2, Scissors, Search, Trash2, Layers, CalendarIcon, Pencil, Download } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +63,15 @@ interface Head36Row {
   operator_id: string;
 }
 
+interface ReturnRow {
+  id: string;
+  date: string;
+  slitting_entry_id: string;
+  returned_quantity: number;
+  unit: string;
+  notes: string | null;
+}
+
 export default function SlittingLogs() {
   const [entries, setEntries] = useState<SlittingRow[]>([]);
   const [managers, setManagers] = useState<Record<string, string>>({});
@@ -76,7 +85,7 @@ export default function SlittingLogs() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
-  const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
+  // reportEntry removed — replaced with RM/36P status circles
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editEntry, setEditEntry] = useState<SlittingRow | null>(null);
@@ -85,6 +94,8 @@ export default function SlittingLogs() {
   const [editH36, setEditH36] = useState<Head36Row | null>(null);
   const [editH36Form, setEditH36Form] = useState({ date: "", rolls_taken: "", rolls_produced: "", roll_width_mm: "", length_per_tape_mtr: "", thickness_mm: "", gsm: "", notes: "" });
   const [savingH36, setSavingH36] = useState(false);
+  const [returnsByEntry, setReturnsByEntry] = useState<Record<string, ReturnRow[]>>({});
+  const [rmOpen, setRmOpen] = useState<SlittingRow | null>(null);
   const { toast } = useToast();
 
   const openEdit = (e: SlittingRow) => {
@@ -242,6 +253,17 @@ export default function SlittingLogs() {
           (ops ?? []).forEach((p: any) => { opMap[p.user_id] = p.name; });
           setHead36Operators(opMap);
         }
+
+        // Fetch slitting returns linked to these slitting entries
+        const { data: rets } = await supabase
+          .from("slitting_returns")
+          .select("id, date, slitting_entry_id, returned_quantity, unit, notes")
+          .in("slitting_entry_id", slittingIds);
+        const retGrouped: Record<string, ReturnRow[]> = {};
+        ((rets as unknown as ReturnRow[]) ?? []).forEach((r) => {
+          (retGrouped[r.slitting_entry_id] ||= []).push(r);
+        });
+        setReturnsByEntry(retGrouped);
       }
       setLoading(false);
     })();
@@ -292,12 +314,49 @@ export default function SlittingLogs() {
     );
   }
 
+  const exportCSV = () => {
+    const rows: (string | number)[][] = [
+      ["Date", "Product", "Client", "Manager", "Cut Width (mm)", "Source Qty", "Unit", "Length (mtr)", "Area (sqm)", "Weight (kg)", "GSM", "Thickness (mm)", "Notes"],
+      ...filtered.map((e) => {
+        const t = computeTotals(e);
+        const gsm = e.gsm ?? parseNum(e.notes, "GSM");
+        return [
+          e.date,
+          e.product_codes?.code ?? "",
+          e.company_clients?.name ?? "",
+          managers[e.slitting_manager_id] ?? "",
+          e.cut_width_mm,
+          e.source_quantity,
+          e.unit,
+          t.lengthMtr.toFixed(2),
+          t.sqm.toFixed(2),
+          t.kg > 0 ? t.kg.toFixed(2) : "",
+          gsm > 0 ? gsm : "",
+          e.thickness_mm ?? "",
+          (e.notes ?? "").replace(/[\r\n,]+/g, " "),
+        ];
+      }),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `slitting_logs_${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Scissors className="h-5 w-5" /> Slitting Logs
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Scissors className="h-5 w-5" /> Slitting Logs
+          </CardTitle>
+          <Button onClick={exportCSV} variant="outline" size="sm">
+            <Download className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -397,22 +456,13 @@ export default function SlittingLogs() {
                   const gsm = e.gsm ?? parseNum(e.notes, "GSM");
                   const h36s = head36ByEntry[e.id] ?? [];
                   const has36 = h36s.length > 0;
+                  const rms = returnsByEntry[e.id] ?? [];
+                  const hasRm = rms.length > 0;
                   return (
                     <TableRow key={e.id}>
                       <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{e.product_codes?.code ?? "—"}</span>
-                          {has36 && (
-                            <Badge
-                              onClick={() => setHead36Open(e)}
-                              className="cursor-pointer bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                              title="View 36 Head production details"
-                            >
-                              <Layers className="h-3 w-3 mr-1" /> 36
-                            </Badge>
-                          )}
-                        </div>
+                        <span>{e.product_codes?.code ?? "—"}</span>
                       </TableCell>
                       <TableCell>{e.company_clients?.name ?? "—"}</TableCell>
                       <TableCell>{managers[e.slitting_manager_id] ?? "—"}</TableCell>
@@ -424,10 +474,29 @@ export default function SlittingLogs() {
                       <TableCell className="text-right font-mono">{gsm > 0 ? gsm : "—"}</TableCell>
                       <TableCell className="text-right font-mono">{e.thickness_mm ?? "—"}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setReportEntry(e)} title="Report" className="text-primary hover:text-primary">
-                            <FileText className="h-4 w-4" />
-                          </Button>
+                        <div className="flex justify-end items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setRmOpen(e)}
+                            title={hasRm ? `${rms.length} material return(s) — click to view` : "No material returns recorded"}
+                            className={cn(
+                              "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                              hasRm ? "bg-emerald-500" : "bg-red-500"
+                            )}
+                          >
+                            RM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHead36Open(e)}
+                            title={has36 ? `${h36s.length} 36-head production entry(ies) — click to view` : "No 36-head production recorded"}
+                            className={cn(
+                              "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                              has36 ? "bg-emerald-500" : "bg-red-500"
+                            )}
+                          >
+                            36P
+                          </button>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -530,46 +599,41 @@ export default function SlittingLogs() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
-          <DialogContent>
+        <Dialog open={!!rmOpen} onOpenChange={(open) => !open && setRmOpen(null)}>
+          <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" /> Lab Report
+                <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">RM</span>
+                Material Returns — {rmOpen?.product_codes?.code ?? "—"}
               </DialogTitle>
               <DialogDescription>
-                {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+                Slitting entry dated {rmOpen ? format(new Date(rmOpen.date), "dd/MM/yy") : ""} · Cut width {rmOpen?.cut_width_mm} mm
               </DialogDescription>
             </DialogHeader>
-            {reportEntry && (() => {
-              const note = (label: string) => {
-                if (!reportEntry.notes) return null;
-                const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
-                return m ? m[1] : null;
-              };
-              const pairs: [string, string | null][] = [
-                ["GSM", reportEntry.gsm != null ? String(reportEntry.gsm) : note("GSM")],
-                ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : note("Thickness")],
-                ["Tensile Strength", note("Tensile")],
-                ["Elongation", note("Elongation")],
-                ["Swelling Height", note("Swelling Height")],
-                ["Swelling Speed", note("Swelling Speed")],
-                ["Surface Resistance", note("Surface Resistance")],
-              ];
+            {rmOpen && (() => {
+              const list = returnsByEntry[rmOpen.id] ?? [];
+              if (!list.length) return <p className="text-muted-foreground text-sm">No material returns recorded for this slitting entry.</p>;
+              const total = list.reduce((s, r) => s + (Number(r.returned_quantity) || 0), 0);
               return (
-                <div className="divide-y border rounded-md">
-                  {pairs.map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-sm text-muted-foreground">{k}</span>
-                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
-                        {v != null && v !== "" ? v : "N/A"}
-                      </span>
+                <div className="space-y-3">
+                  <div className="bg-muted rounded p-3 text-center">
+                    <p className="text-xs text-muted-foreground">Total Returned</p>
+                    <p className="text-xl font-bold text-primary">{total.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">{list[0]?.unit ?? ""}</span></p>
+                  </div>
+                  {list.map((r) => (
+                    <div key={r.id} className="border rounded-lg p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{format(new Date(r.date), "dd/MM/yy")}</span>
+                        <span className="font-mono font-semibold">{Number(r.returned_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {r.unit}</span>
+                      </div>
+                      {r.notes && <p className="text-xs text-muted-foreground">{r.notes}</p>}
                     </div>
                   ))}
                 </div>
               );
             })()}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
+              <Button variant="outline" onClick={() => setRmOpen(null)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

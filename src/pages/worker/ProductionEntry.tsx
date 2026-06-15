@@ -171,6 +171,7 @@ export default function ProductionEntry() {
 
     // Lab fields don't exist as columns in this DB — fold them into notes
     const labParts: string[] = [];
+    if (form.width_per_roll) labParts.push(`Width: ${form.width_per_roll}`);
     if (form.gsm) labParts.push(`GSM: ${form.gsm}`);
     if (form.swelling_speed) labParts.push(`Swelling Speed: ${form.swelling_speed}`);
     if (form.swelling_height) labParts.push(`Swelling Height: ${form.swelling_height}`);

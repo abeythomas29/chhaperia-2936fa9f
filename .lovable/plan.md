@@ -1,63 +1,49 @@
+## 1. Admin Production Logs (`src/pages/admin/ProductionLogs.tsx`)
 
-## Problem
+- Remove the **Qty/Roll** and **Total** columns from the table header, body, and CSV export. Keep **Length (mtr)** and **Area (sqm)** columns as the source of truth.
+- Update `colSpan` for the empty/loading rows from 16 → 14.
+- No DB changes; underlying `quantity_per_roll`/`total_quantity` stay in the database and continue to drive the existing length/area derivation.
+- Lab-report (FileText) icon stays on this panel — RM/36P circles are slitting-only (see §4).
 
-When one slitting submission produces multiple rows (different cut widths), only the **first row** stores the full `source_quantity` and the other rows store 0. In Material Return, this shows up as 4 separate entries — one with the real source quantity and three with "0 source / negative wastage". The user wants these merged back into one source on the return screen.
+## 2. Production Entry — Roll Width input + auto Weight
 
-## Approach
+File: `src/pages/worker/ProductionEntry.tsx`
 
-Tag every row created together with a shared `batch_id`, then group by batch in Material Return.
+- Add a new optional input **"Roll Width (mm)"** alongside the existing roll/qty/GSM fields.
+- On submit, persist the width into the entry's `notes` field using the existing `Width: <value>` marker the logs already parse (`parseNum("Width")` in ProductionLogs line 405). No schema change needed.
+- Auto-compute and display **Weight (kg)** in the form using:
 
-### 1. Database
+  ```text
+  weight_kg = length_m × (width_mm / 1000) × gsm / 1000
+  ```
 
-Add to `slitting_entries`:
-- `batch_id uuid` (nullable, indexed) — shared by all rows saved in the same submission.
+  where `length_m = rolls × qty_per_roll` when unit is meters. Shown as a read-only preview next to the inputs.
+- The Production Logs table already derives Area and Weight from width + GSM via the same formula, so existing rows with `Width:` in notes will start showing correct values automatically.
 
-Backfill existing data: for each `slitting_manager_id + date + product_code_id + (source_quantity>0 anchor)` group, assign a single `batch_id` to all sibling rows that were inserted together (rows with `source_quantity > 0` start a new batch; following sibling rows with `source_quantity = 0` within the same insert window share that batch).
+## 3. Admin Slitting Logs — CSV export
 
-### 2. Slitting Entry Form
+File: `src/pages/admin/SlittingLogs.tsx`
 
-When saving multi-row submissions, generate one `crypto.randomUUID()` and attach it to every inserted row as `batch_id`.
+- Add an **Export CSV** button in the header (mirroring Production Logs): icon `Download`, variant outline, `sm` size.
+- `exportCSV()` outputs the currently filtered rows with columns: Date, Source Product, Client, Operator, Source Qty, Unit, Thickness (mm), Cut Width (mm), Cut Length (mtr), Cut Qty Produced, Notes.
+- Filename: `slitting_logs_<yyyy-MM-dd>.csv`.
 
-### 3. Material Return — selection dropdown
+## 4. Slitting Logs — replace lab-report icon with RM + 36P status circles
 
-Fetch slitting rows, then group client-side by `batch_id` (rows without a batch fall back to their own id). For each batch build a synthetic option:
+File: `src/pages/admin/SlittingLogs.tsx`
 
-```
-dd/mm/yy — PRODUCT CODE — total source qty unit  (4 widths)
-```
+- Remove the existing FileText "Report" button and its `reportEntry` dialog block.
+- Add two small circular badges in the Actions cell for each row:
+  - **RM** — green when `slitting_returns` exist for this slitting entry, red otherwise.
+  - **36P** — green when `head36_entries` exist for this slitting entry (already loaded into `head36ByEntry`), red otherwise.
+- Each circle is a clickable `Button` (rounded-full, 28px, white text, `RM` / `36P` label). Clicking opens a popup dialog (same style as the prior Report dialog) listing the relevant records:
+  - RM dialog: date, returned quantity, unit, notes from `slitting_returns`.
+  - 36P dialog: date, operator, output qty, notes from `head36_entries`.
+- "Returns exist" data: extend the existing slitting-entry fetch to also pull `slitting_returns` grouped by `slitting_entry_id` (mirrors the existing `head36ByEntry` map) so the green/red state and popup contents come from one query, no per-row fetches.
 
-`source_quantity` for the batch = sum across rows (only the anchor row carries it, so the sum is the true issued amount).
+## Technical notes
 
-### 4. Material Return — summary panel
-
-After selecting a batch, show:
-
-- **Issued (sqm)** = anchor row source converted to sqm (already in sqm today)
-- **Produced (sqm)** = sum of `(cut_width_mm/1000) × cut_quantity_produced` across all rows in the batch
-- **Already Returned** = sum of existing `slitting_returns.returned_quantity` for **any** row in the batch
-- **Thickness Breakdown** list, one line per distinct `(cut_width_mm, thickness_mm)`:
-  - `12 mm · 0.10 mm — 960 sqm produced`
-  - `15 mm · 0.10 mm — 225 sqm produced`
-  - `15 mm · 0.10 mm — 960 sqm produced` (separate entries kept if widths repeat with same thickness, merged if identical)
-- **Wastage** = Issued − Produced − Already Returned
-
-### 5. Saving the return
-
-Store the return against the **anchor row** (the one with `source_quantity > 0`) of the batch, so existing `slitting_returns.slitting_entry_id` schema stays unchanged. Because History/Logs aggregate returns by `slitting_entry_id`, also propagate the "R" marker to siblings by, in History/Logs queries, joining returns through `batch_id`:
-
-- In `SlittingHistory.tsx` and `SlittingLogs.tsx`, when building `returnsMap`, group returns by `batch_id` (look up via the row's batch) so every sibling row in the same batch shows the **R** badge and shares the return list.
-
-### 6. Out of scope
-
-- No change to 36 Head, Production, Sales, or Stock screens.
-- No change to how slitting rows are created at the row level (still one DB row per cut width).
-- Existing return entries continue to work because they already point to the anchor row.
-
-## Files to change
-
-- `supabase/migrations/...` — add `batch_id` column + index + backfill.
-- `src/pages/slitting/SlittingEntryForm.tsx` — generate and insert shared `batch_id`.
-- `src/pages/slitting/MaterialReturn.tsx` — group by batch, merged summary with thickness breakdown, save against anchor.
-- `src/pages/slitting/SlittingHistory.tsx` — share returns/R badge across batch siblings.
-- `src/pages/admin/SlittingLogs.tsx` — same R-badge propagation (if it shows the marker).
-
+- No database migrations.
+- No changes to Material Return logic or its localStorage cache keys.
+- Weight formula is identical to the one already used in `ProductionLogs.tsx` (`(width/1000) * length * gsm / 1000`), so values stay consistent across entry and logs.
+- All visual additions reuse existing shadcn primitives (`Button`, `Dialog`, `Badge`-style rounded button) and the project's orange/dark-blue tokens — no hardcoded colors; green/red use `bg-emerald-500` / `bg-red-500` utility for the circle fill since they are status indicators, not theme surfaces.
