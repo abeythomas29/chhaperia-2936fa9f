@@ -710,8 +710,48 @@ export default function ProductionLogs() {
               </div>
             );
           })()}
+      {/* LR (Lab Report) Dialog */}
+      <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">LR</span>
+              Lab Report
+            </DialogTitle>
+            <DialogDescription>
+              {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {reportEntry && (() => {
+            const parseNoteNum = (label: string): number => {
+              if (!reportEntry.notes) return 0;
+              const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+              return m ? parseFloat(m[1]) : 0;
+            };
+            const fields: { label: string; value: string | number | null; unit?: string }[] = [
+              { label: "GSM", value: reportEntry.gsm ?? (parseNoteNum("GSM") || null) },
+              { label: "Thickness", value: reportEntry.thickness_mm, unit: "mm" },
+              { label: "Tensile Strength", value: reportEntry.tensile_strength ?? (parseNoteNum("Tensile") || null) },
+              { label: "Elongation", value: reportEntry.elongation ?? (parseNoteNum("Elongation") || null), unit: "%" },
+              { label: "Swelling Height", value: reportEntry.swelling_height ?? (parseNoteNum("Swelling Height") || null) },
+              { label: "Swelling Speed", value: reportEntry.swelling_speed ?? (parseNoteNum("Swelling Speed") || null) },
+              { label: "Surface Resistance", value: reportEntry.surface_resistance ?? (parseNoteNum("Surface Resistance") || null) },
+            ].filter((f) => f.value != null && f.value !== "" && f.value !== 0);
+            return fields.length > 0 ? (
+              <div className="divide-y border rounded-md">
+                {fields.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm">{f.label}</span>
+                    <span className="font-mono font-semibold">{f.value}{f.unit ? ` ${f.unit}` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">No lab report data recorded for this entry.</p>
+            );
+          })()}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setH36Entry(null)}>Close</Button>
+            <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
