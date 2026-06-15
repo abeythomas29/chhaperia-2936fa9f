@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Scissors, Search, Trash2, Layers, CalendarIcon, Pencil, Download } from "lucide-react";
+import { Loader2, Scissors, Search, Trash2, Layers, CalendarIcon, Pencil, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -96,6 +96,8 @@ export default function SlittingLogs() {
   const [savingH36, setSavingH36] = useState(false);
   const [returnsByEntry, setReturnsByEntry] = useState<Record<string, ReturnRow[]>>({});
   const [rmOpen, setRmOpen] = useState<SlittingRow | null>(null);
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const { toast } = useToast();
 
   const openEdit = (e: SlittingRow) => {
@@ -294,6 +296,11 @@ export default function SlittingLogs() {
     );
   });
 
+  useEffect(() => { setPage(1); }, [search, productFilter, categoryFilter, dateFrom, dateTo, itemsPerPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
   const totals = filtered.reduce(
     (acc, e) => {
       const t = computeTotals(e);
@@ -451,7 +458,7 @@ export default function SlittingLogs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((e) => {
+                {paginated.map((e) => {
                   const t = computeTotals(e);
                   const gsm = e.gsm ?? parseNum(e.notes, "GSM");
                   return (
@@ -502,6 +509,36 @@ export default function SlittingLogs() {
                 })}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {filtered.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                Showing {(page - 1) * itemsPerPage + 1}–{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length} entries
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Rows per page</span>
+                <Select value={String(itemsPerPage)} onValueChange={(v) => setItemsPerPage(Number(v))}>
+                  <SelectTrigger className="h-8 w-[80px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100, 200].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm font-medium min-w-[3rem] text-center">Page {page} of {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
         )}
 
