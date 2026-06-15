@@ -449,8 +449,6 @@ export default function ProductionLogs() {
                   <TableCell>{e.company_clients?.name ?? "—"}</TableCell>
                   <TableCell>{e.profiles?.name ?? "—"}</TableCell>
                   <TableCell className="text-right">{e.rolls_count}</TableCell>
-                  <TableCell className="text-right">{e.quantity_per_roll} sqmtr</TableCell>
-                  <TableCell className="text-right font-semibold">{e.total_quantity != null ? `${e.total_quantity} ${e.unit}` : "—"}</TableCell>
                   <TableCell>{e.unit}</TableCell>
                   <TableCell className="text-right font-mono">{lengthMtr > 0 ? fmt(lengthMtr) : "—"}</TableCell>
                   <TableCell className="text-right font-mono">{sqm > 0 ? fmt(sqm) : "—"}</TableCell>
