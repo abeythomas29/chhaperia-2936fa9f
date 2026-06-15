@@ -379,6 +379,7 @@ export default function SlittingLogs() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Product</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Manager</TableHead>
                   <TableHead>Cut Width</TableHead>
                   <TableHead className="text-right">Rolls</TableHead>
