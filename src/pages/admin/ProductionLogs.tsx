@@ -187,6 +187,8 @@ export default function ProductionLogs() {
     return matchesSearch && matchesFrom && matchesTo && matchesCategory;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
 
   const toggleSelectAll = () => {
