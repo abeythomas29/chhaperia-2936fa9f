@@ -167,6 +167,10 @@ export default function ProductionLogs() {
     fetchHead36();
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, categoryFilter]);
+
   const filtered = entries.filter((e) => {
     const s = search.toLowerCase();
     const matchesSearch =
