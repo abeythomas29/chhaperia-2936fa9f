@@ -27,7 +27,9 @@ interface SlittingRow {
   unit: string;
   notes: string | null;
   slitting_manager_id: string;
+  client_id?: string | null;
   product_codes: { code: string; category_id?: string | null } | null;
+  company_clients?: { name: string } | null;
 }
 
 const parseNum = (notes: string | null, label: string): number => {
@@ -182,8 +184,8 @@ export default function SlittingLogs() {
 
   useEffect(() => {
     (async () => {
-      const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, gsm, unit, notes, slitting_manager_id, product_codes(code, category_id)";
-      const basicSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, unit, notes, slitting_manager_id, product_codes(code, category_id)";
+      const fullSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, gsm, unit, notes, slitting_manager_id, client_id, product_codes(code, category_id), company_clients:client_id(name)";
+      const basicSelect = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, thickness_mm, unit, notes, slitting_manager_id, client_id, product_codes(code, category_id), company_clients:client_id(name)";
 
       let { data, error } = await supabase
         .from("slitting_entries")
@@ -265,6 +267,7 @@ export default function SlittingLogs() {
     return (
       (e.product_codes?.code ?? "").toLowerCase().includes(q) ||
       (managers[e.slitting_manager_id] ?? "").toLowerCase().includes(q) ||
+      (e.company_clients?.name ?? "").toLowerCase().includes(q) ||
       (e.notes ?? "").toLowerCase().includes(q)
     );
   });
@@ -376,6 +379,7 @@ export default function SlittingLogs() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Product</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Manager</TableHead>
                   <TableHead>Cut Width</TableHead>
                   <TableHead className="text-right">Rolls</TableHead>
@@ -410,6 +414,7 @@ export default function SlittingLogs() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>{e.company_clients?.name ?? "—"}</TableCell>
                       <TableCell>{managers[e.slitting_manager_id] ?? "—"}</TableCell>
                       <TableCell>{e.cut_width_mm} mm</TableCell>
                       <TableCell className="text-right font-mono">{t.rolls > 0 ? t.rolls.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</TableCell>
