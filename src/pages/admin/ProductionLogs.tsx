@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Download, Search, Pencil, Trash2, CalendarIcon, FlaskConical } from "lucide-react";
+import { Download, Search, Pencil, Trash2, CalendarIcon, FlaskConical, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -70,6 +70,10 @@ export default function ProductionLogs() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 25;
 
   // Edit state
   const [editEntry, setEditEntry] = useState<LogEntry | null>(null);
@@ -163,6 +167,10 @@ export default function ProductionLogs() {
     fetchHead36();
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, categoryFilter]);
+
   const filtered = entries.filter((e) => {
     const s = search.toLowerCase();
     const matchesSearch =
@@ -179,6 +187,8 @@ export default function ProductionLogs() {
     return matchesSearch && matchesFrom && matchesTo && matchesCategory;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
 
   const toggleSelectAll = () => {
@@ -424,7 +434,7 @@ export default function ProductionLogs() {
               </TableRow>
 
             ) : (
-              filtered.map((e) => {
+              paginated.map((e) => {
                 const parseNum = (label: string) => {
                   if (!e.notes) return 0;
                   const m = e.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
@@ -533,6 +543,35 @@ export default function ProductionLogs() {
         </Table>
       </div>
 
+      {/* Pagination */}
+      {filtered.length > 0 && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            Showing {(page - 1) * itemsPerPage + 1}–{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length} entries
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            </Button>
+            <span className="text-sm font-medium min-w-[3rem] text-center">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={!!editEntry} onOpenChange={(open) => !open && setEditEntry(null)}>
