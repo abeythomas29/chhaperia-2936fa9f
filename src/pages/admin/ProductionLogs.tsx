@@ -607,85 +607,95 @@ export default function ProductionLogs() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Report Dialog */}
-      <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+      {/* RM (Raw Material) Dialog */}
+      <Dialog open={!!rmEntry} onOpenChange={(open) => !open && setRmEntry(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" /> Report
+              <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">RM</span>
+              Raw Material
             </DialogTitle>
             <DialogDescription>
-              {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+              {rmEntry?.product_codes?.code ?? "—"} · {rmEntry ? format(new Date(rmEntry.date), "dd/MM/yyyy") : ""}
             </DialogDescription>
           </DialogHeader>
-          {reportEntry && (() => {
-            const parseNote = (label: string) => {
-              if (!reportEntry.notes) return null;
-              const re = new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i");
-              const m = reportEntry.notes.match(re);
-              return m ? m[1] : null;
-            };
-            const get = (col: number | null | undefined, label: string) =>
-              col != null ? String(col) : parseNote(label);
-            const pairs: [string, string | null][] = [
-              ["GSM", get(reportEntry.gsm, "GSM")],
-              ["Thickness (mm)", reportEntry.thickness_mm != null ? String(reportEntry.thickness_mm) : parseNote("Thickness")],
-              ["Tensile Strength", get(reportEntry.tensile_strength, "Tensile")],
-              ["Elongation", get(reportEntry.elongation, "Elongation")],
-              ["Swelling Height", get(reportEntry.swelling_height, "Swelling Height")],
-              ["Swelling Speed", get(reportEntry.swelling_speed, "Swelling Speed")],
-              ["Surface Resistance", get(reportEntry.surface_resistance, "Surface Resistance")],
-            ];
-            const noteHasRawMaterialFlag = /raw\s*material\s*used\s*[:\-]*\s*yes/i.test(reportEntry.notes ?? "");
+          {rmEntry && (() => {
+            const noteHasRawMaterialFlag = /raw\s*material\s*used\s*[:\-]*\s*yes/i.test(rmEntry.notes ?? "");
             const noteCopperWires = (() => {
-              const m = (reportEntry.notes ?? "").match(/copper\s*wires\s*[:\-]*\s*([^|]+)/i);
+              const m = (rmEntry.notes ?? "").match(/copper\s*wires\s*[:\-]*\s*([^|]+)/i);
               return m?.[1]?.trim() ?? null;
             })();
-            const materialLines = reportEntry.raw_material_usage && reportEntry.raw_material_usage.length > 0
-              ? reportEntry.raw_material_usage.map((u) => ({
+            const materialLines = rmEntry.raw_material_usage && rmEntry.raw_material_usage.length > 0
+              ? rmEntry.raw_material_usage.map((u) => ({
                   label: u.raw_materials?.name ?? "—",
                   value: `${u.quantity_used} ${u.raw_materials?.unit ?? ""}`.trim(),
                 }))
               : noteCopperWires
                 ? [{ label: "Copper Wires", value: noteCopperWires }]
-                : (reportEntry.raw_material_included || noteHasRawMaterialFlag)
+                : (rmEntry.raw_material_included || noteHasRawMaterialFlag)
                   ? [{ label: "Raw Material", value: "Used" }]
                   : [];
+            return materialLines.length > 0 ? (
+              <div className="divide-y border rounded-md">
+                {materialLines.map((u, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm">{u.label}</span>
+                    <span className="font-mono font-semibold">{u.value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">No raw material data recorded for this entry.</p>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRmEntry(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 36P (36-Head Production) Dialog */}
+      <Dialog open={!!h36Entry} onOpenChange={(open) => !open && setH36Entry(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">36P</span>
+              36-Head Production
+            </DialogTitle>
+            <DialogDescription>
+              {h36Entry?.product_codes?.code ?? "—"} · linked 36-head production entries for this product
+            </DialogDescription>
+          </DialogHeader>
+          {h36Entry && (() => {
+            const list = head36ByProduct[h36Entry.product_code_id] ?? [];
+            if (list.length === 0) {
+              return <p className="text-sm text-muted-foreground py-4 text-center">No 36-head production recorded for this product.</p>;
+            }
             return (
-              <div className="space-y-4">
-                <div className="divide-y border rounded-md">
-                  {pairs.map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-sm text-muted-foreground">{k}</span>
-                      <span className={`font-mono ${v != null && v !== "" ? "font-semibold" : "text-muted-foreground"}`}>
-                        {v != null && v !== "" ? v : "N/A"}
-                      </span>
+              <div className="space-y-2">
+                {list.map((h: any) => (
+                  <div key={h.id} className="border rounded-md p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{format(new Date(h.date), "dd/MM/yy")}</span>
+                      <span className="text-xs text-muted-foreground">Rolls produced: {h.rolls_produced ?? "—"}</span>
                     </div>
-                  ))}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold mb-2">Raw Materials Used</p>
-                  {materialLines.length > 0 ? (
-                    <div className="divide-y border rounded-md">
-                      {materialLines.map((u, i) => (
-                        <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-sm">{u.label}</span>
-                          <span className="font-mono font-semibold">{u.value}</span>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div><span className="text-muted-foreground">Tape Width:</span> <span className="font-mono">{h.roll_width_mm ?? "—"} mm</span></div>
+                      <div><span className="text-muted-foreground">Length/Tape:</span> <span className="font-mono">{h.length_per_tape_mtr ?? "—"} mtr</span></div>
+                      <div><span className="text-muted-foreground">Thickness:</span> <span className="font-mono">{h.thickness_mm ?? "—"} mm</span></div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">None recorded</p>
-                  )}
-                </div>
+                    {h.notes && <p className="text-xs text-muted-foreground italic">{h.notes}</p>}
+                  </div>
+                ))}
               </div>
             );
           })()}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
+            <Button variant="outline" onClick={() => setH36Entry(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
     </div>
   );
