@@ -296,6 +296,11 @@ export default function SlittingLogs() {
     );
   });
 
+  useEffect(() => { setPage(1); }, [search, productFilter, categoryFilter, dateFrom, dateTo, itemsPerPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
   const totals = filtered.reduce(
     (acc, e) => {
       const t = computeTotals(e);
