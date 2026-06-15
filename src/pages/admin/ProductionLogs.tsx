@@ -409,19 +409,19 @@ export default function ProductionLogs() {
               <TableHead className="text-right">Weight (kg)</TableHead>
               <TableHead className="text-right">GSM</TableHead>
               <TableHead className="text-right">Thickness (mm)</TableHead>
-              <TableHead>Raw Materials</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">No entries found</TableCell>
+                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">No entries found</TableCell>
               </TableRow>
+
             ) : (
               filtered.map((e) => {
                 const parseNum = (label: string) => {
@@ -471,46 +471,25 @@ export default function ProductionLogs() {
                   <TableCell className="text-right font-mono">{kg > 0 ? fmt(kg) : "—"}</TableCell>
                   <TableCell className="text-right font-mono">{gsm > 0 ? gsm : "—"}</TableCell>
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
-                  <TableCell className="text-xs">
-                    {materialLines.length > 0
-                      ? materialLines.map((line, i) => (
-                          <div key={i}>{line}</div>
-                        ))
-                      : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-1">
                       {(() => {
                         const hasRm = materialLines.length > 0;
-                        const h36s = head36ByProduct[e.product_code_id] ?? [];
-                        const has36 = h36s.length > 0;
                         return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRmEntry(e)}
-                              title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                hasRm ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              RM
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setH36Entry(e)}
-                              title={has36 ? `${h36s.length} 36-head production entry(ies) — click to view` : "No 36-head production recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                has36 ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              36P
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => setRmEntry(e)}
+                            title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
+                            className={cn(
+                              "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                              hasRm ? "bg-emerald-500" : "bg-red-500"
+                            )}
+                          >
+                            RM
+                          </button>
                         );
                       })()}
+
                       <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                         <Pencil className="h-4 w-4" />
                       </Button>
