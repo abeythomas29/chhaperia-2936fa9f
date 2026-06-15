@@ -454,10 +454,6 @@ export default function SlittingLogs() {
                 {filtered.map((e) => {
                   const t = computeTotals(e);
                   const gsm = e.gsm ?? parseNum(e.notes, "GSM");
-                  const h36s = head36ByEntry[e.id] ?? [];
-                  const has36 = h36s.length > 0;
-                  const rms = returnsByEntry[e.id] ?? [];
-                  const hasRm = rms.length > 0;
                   return (
                     <TableRow key={e.id}>
                       <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
