@@ -458,7 +458,7 @@ export default function SlittingLogs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((e) => {
+                {paginated.map((e) => {
                   const t = computeTotals(e);
                   const gsm = e.gsm ?? parseNum(e.notes, "GSM");
                   return (
