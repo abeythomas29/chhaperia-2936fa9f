@@ -1,61 +1,32 @@
 ## Goal
+Bring back the lab report icon in Production Logs, re-add the 36P icon there too, make the RM / 36P / LR status circles correctly turn **green when data exists and red when not**, and confirm the Slitting Logs export is present and visible.
 
-Split the current Inventory Manager into two distinct roles:
+## Changes
 
-- **Inventory Manager** — raw materials only (stock in/out, usage, inventory view). No sales access.
-- **Sales Manager** *(new)* — sales entry, edit, delete, and sales history only.
+### 1. Production Logs — restore Lab Report (LR) icon
+- Add `reportEntry` state and a `LR` status button next to RM in the Actions column.
+- Green when `hasReport` is true (any of: gsm, thickness_mm, tensile_strength, elongation, swelling_height, swelling_speed, surface_resistance from columns OR parsed from notes), red otherwise.
+- Clicking opens a dialog listing each lab field with its value (skipping empty ones), styled like the existing RM dialog.
 
-Existing inventory managers keep their current role; admin assigns Sales Manager separately.
+### 2. Production Logs — restore 36P icon
+- Re-add the 36P status button next to RM/LR using existing `head36ByProduct` state.
+- Clicking opens the existing 36-Head Production dialog.
 
-## Database changes (migration)
+### 3. Fix "green when data exists" for RM and 36P
+Investigate why circles stay red despite data:
 
-1. Add `sales_manager` to the `app_role` enum.
-2. Add `sales_manager` to the `signup_department` enum.
-3. Update `handle_new_user()` trigger function to map the new `sales_manager` signup option.
-4. Add RLS policies on `sales` table allowing users with role `sales_manager` to SELECT / INSERT / UPDATE / DELETE (mirroring current inventory_manager policies).
-5. Remove sales INSERT/UPDATE/DELETE permission from `inventory_manager` policies on the `sales` table (keep SELECT only if needed, otherwise drop entirely). Admin/super_admin policies stay.
+- **RM**: confirm `raw_material_usage(quantity_used, raw_materials(name, unit))` join returns rows. If the join silently fails (RLS on `raw_materials` / `raw_material_usage` blocking reads for admins), green never triggers. Plan: verify RLS allows admins to SELECT both tables; if not, add admin SELECT policies. Also treat `raw_material_included = true` as green even without usage rows.
+- **36P**: current logic groups `head36_entries` by `slitting_entries.product_code_id`, so a production entry only goes green if some slitting entry for the **same product code** has 36P data. This is the source of confusion — production and 36P aren't actually linked that way. Fix: scope the green state to production entries whose product code has at least one 36P run, and update the button title to read "36-head production exists for this product code".
 
-## Frontend changes
-
-**`src/hooks/auth-context.ts`**
-- Add `isSalesManager: boolean`.
-
-**`src/hooks/useAuth.tsx`**
-- Add `"sales_manager"` to signup zod enum and priority array.
-- Expose `isSalesManager: roles.includes("sales_manager")`.
-
-**`src/App.tsx`**
-- New route group `/sales` using a new `SalesManagerLayout`, with:
-  - `index` → `SalesEntry`
-  - `history` → `SalesHistory`
-- Remove `sales` and `sales-history` routes from `/inventory`.
-
-**`src/layouts/SalesManagerLayout.tsx`** *(new)*
-- Header + nav like other layouts. Tabs: Record Sale, Sales History.
-- Guards: redirect non-sales-manager (admin → `/admin`, else `/login`).
-
-**`src/layouts/InventoryManagerLayout.tsx`**
-- Remove Record Sale and Sales History nav items.
-
-**`src/pages/Login.tsx`**
-- Add `sales_manager` to enum, state, signup dropdown ("Sales Manager").
-- Redirect `sales_manager` → `/sales`.
-
-**`src/pages/admin/UserManagement.tsx`**
-- Add `sales_manager: "Sales Manager"` to label maps and role options.
+### 4. Slitting Logs — export
+- The Export CSV button already exists in the header (top-right of the card). Verify it's rendered and clickable; if anything is hiding it, fix the layout so it sits next to the title like in Production Logs.
+- No new export format unless requested.
 
 ## Out of scope
+- Changing how 36P entries are linked to production at the DB level.
+- Adding lab fields to the Edit dialog (only the read-only LR view dialog is added).
 
-- Existing inventory managers are not auto-granted the new role. Admin must assign it via User Management.
-- Admin panel `/admin/sales` (SalesHistory view) stays as-is for admins.
-
-## Files touched
-
-- new migration
-- `src/hooks/auth-context.ts`
-- `src/hooks/useAuth.tsx`
-- `src/App.tsx`
-- `src/layouts/SalesManagerLayout.tsx` (new)
-- `src/layouts/InventoryManagerLayout.tsx`
-- `src/pages/Login.tsx`
-- `src/pages/admin/UserManagement.tsx`
+## Technical notes
+- Files: `src/pages/admin/ProductionLogs.tsx`, `src/pages/admin/SlittingLogs.tsx`.
+- Possible migration: SELECT policy for `admin` / `super_admin` on `raw_materials` and `raw_material_usage` if missing — only added if a quick `supabase--read_query` confirms the join returns empty for known entries.
+- Icon: reuse `FileText` (or text "LR") to match the RM/36P circle pattern (`h-7 w-7 rounded-full`, emerald-500 / red-500).

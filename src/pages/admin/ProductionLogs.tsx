@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Download, Search, Pencil, Trash2, CalendarIcon } from "lucide-react";
+import { Download, Search, Pencil, Trash2, CalendarIcon, FlaskConical } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -86,9 +86,10 @@ export default function ProductionLogs() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // RM (Raw Material) + 36P (36-head Production) status dialogs
+  // RM (Raw Material) + 36P (36-head Production) + LR (Lab Report) status dialogs
   const [rmEntry, setRmEntry] = useState<LogEntry | null>(null);
   const [h36Entry, setH36Entry] = useState<LogEntry | null>(null);
+  const [reportEntry, setReportEntry] = useState<LogEntry | null>(null);
   const [head36ByProduct, setHead36ByProduct] = useState<Record<string, any[]>>({});
 
   // Dropdowns
@@ -475,18 +476,44 @@ export default function ProductionLogs() {
                     <div className="flex justify-end items-center gap-1">
                       {(() => {
                         const hasRm = materialLines.length > 0;
+                        const h36s = head36ByProduct[e.product_code_id] ?? [];
+                        const has36 = h36s.length > 0;
                         return (
-                          <button
-                            type="button"
-                            onClick={() => setRmEntry(e)}
-                            title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
-                            className={cn(
-                              "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                              hasRm ? "bg-emerald-500" : "bg-red-500"
-                            )}
-                          >
-                            RM
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setRmEntry(e)}
+                              title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
+                              className={cn(
+                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                                hasRm ? "bg-emerald-500" : "bg-red-500"
+                              )}
+                            >
+                              RM
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReportEntry(e)}
+                              title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
+                              className={cn(
+                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                                hasReport ? "bg-emerald-500" : "bg-red-500"
+                              )}
+                            >
+                              LR
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setH36Entry(e)}
+                              title={has36 ? `${h36s.length} 36-head production entry(ies) for this product code — click to view` : "No 36-head production recorded for this product code"}
+                              className={cn(
+                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                                has36 ? "bg-emerald-500" : "bg-red-500"
+                              )}
+                            >
+                              36P
+                            </button>
+                          </>
                         );
                       })()}
 
@@ -685,6 +712,53 @@ export default function ProductionLogs() {
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setH36Entry(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* LR (Lab Report) Dialog */}
+      <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
+
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">LR</span>
+              Lab Report
+            </DialogTitle>
+            <DialogDescription>
+              {reportEntry?.product_codes?.code ?? "—"} · {reportEntry ? format(new Date(reportEntry.date), "dd/MM/yyyy") : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {reportEntry && (() => {
+            const parseNoteNum = (label: string): number => {
+              if (!reportEntry.notes) return 0;
+              const m = reportEntry.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+              return m ? parseFloat(m[1]) : 0;
+            };
+            const fields: { label: string; value: string | number | null; unit?: string }[] = [
+              { label: "GSM", value: reportEntry.gsm ?? (parseNoteNum("GSM") || null) },
+              { label: "Thickness", value: reportEntry.thickness_mm, unit: "mm" },
+              { label: "Tensile Strength", value: reportEntry.tensile_strength ?? (parseNoteNum("Tensile") || null) },
+              { label: "Elongation", value: reportEntry.elongation ?? (parseNoteNum("Elongation") || null), unit: "%" },
+              { label: "Swelling Height", value: reportEntry.swelling_height ?? (parseNoteNum("Swelling Height") || null) },
+              { label: "Swelling Speed", value: reportEntry.swelling_speed ?? (parseNoteNum("Swelling Speed") || null) },
+              { label: "Surface Resistance", value: reportEntry.surface_resistance ?? (parseNoteNum("Surface Resistance") || null) },
+            ].filter((f) => f.value != null && f.value !== 0);
+            return fields.length > 0 ? (
+              <div className="divide-y border rounded-md">
+                {fields.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm">{f.label}</span>
+                    <span className="font-mono font-semibold">{f.value}{f.unit ? ` ${f.unit}` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">No lab report data recorded for this entry.</p>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportEntry(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
