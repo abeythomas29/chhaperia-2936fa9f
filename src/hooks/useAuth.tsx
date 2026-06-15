@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data && data.length > 0) {
       const userRoles = data.map((r) => r.role);
       setRoles(userRoles);
-      const priority = ["super_admin", "admin", "worker", "inventory_manager", "slitting_manager"];
+      const priority = ["super_admin", "admin", "worker", "inventory_manager", "slitting_manager", "sales_manager"];
       const primary = priority.find((p) => userRoles.includes(p)) ?? userRoles[0];
       setRole(primary);
       return;
