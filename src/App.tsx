@@ -9,6 +9,7 @@ import AdminLayout from "./layouts/AdminLayout";
 import WorkerLayout from "./layouts/WorkerLayout";
 import InventoryManagerLayout from "./layouts/InventoryManagerLayout";
 import SlittingManagerLayout from "./layouts/SlittingManagerLayout";
+import SalesManagerLayout from "./layouts/SalesManagerLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import ProductionLogs from "./pages/admin/ProductionLogs";
 import StockManagement from "./pages/admin/StockManagement";
