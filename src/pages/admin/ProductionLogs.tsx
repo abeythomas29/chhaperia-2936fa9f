@@ -36,6 +36,7 @@ interface LogEntry {
   raw_material_included: boolean | null;
   product_codes: { code: string; category_id: string | null } | null;
   profiles: { name: string } | null;
+  company_clients: { name: string } | null;
   raw_material_usage: { quantity_used: number; raw_materials: { name: string; unit: string } | null }[] | null;
 }
 
