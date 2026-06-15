@@ -71,6 +71,10 @@ export default function ProductionLogs() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 25;
+
   // Edit state
   const [editEntry, setEditEntry] = useState<LogEntry | null>(null);
   const [editDate, setEditDate] = useState("");
