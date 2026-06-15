@@ -31,6 +31,15 @@ export default function SalesManagerLayout() {
     { to: "/sales", label: "Record Sale", icon: ShoppingCart, end: true },
     { to: "/sales/history", label: "Sales History", icon: ListOrdered, end: false },
   ];
+  if (isSlittingManager) {
+    navItems.push({ to: "/slitting", label: "Slitting", icon: Scissors, end: false });
+  }
+  if (isInventoryManager) {
+    navItems.push({ to: "/inventory", label: "Inventory", icon: Package, end: false });
+  }
+  if (isWorker) {
+    navItems.push({ to: "/worker", label: "Production", icon: ClipboardList, end: false });
+  }
 
   return (
     <div className="min-h-screen bg-background">
