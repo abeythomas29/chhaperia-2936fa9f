@@ -182,19 +182,36 @@ export default function ProductionLogs() {
   };
 
   const exportCSV = () => {
+    const parseNoteNum = (notes: string | null, label: string) => {
+      if (!notes) return 0;
+      const m = notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+      return m ? parseFloat(m[1]) : 0;
+    };
     const rows = [
-      ["Date", "Product Code", "Client", "Production Manager", "Rolls", "Qty/Roll", "Total", "Unit", "Thickness (mm)"],
-      ...filtered.map((e) => [
-        e.date,
-        e.product_codes?.code ?? "",
-        e.company_clients?.name ?? "",
-        e.profiles?.name ?? "",
-        e.rolls_count,
-        e.quantity_per_roll,
-        e.total_quantity ?? "",
-        e.unit,
-        e.thickness_mm ?? "",
-      ]),
+      ["Date", "Product Code", "Client", "Production Manager", "Rolls", "Unit", "Length (mtr)", "Area (sqm)", "Weight (kg)", "GSM", "Thickness (mm)"],
+      ...filtered.map((e) => {
+        const total = e.total_quantity ?? (e.rolls_count * e.quantity_per_roll);
+        const isMeters = e.unit === "meters";
+        const isKg = e.unit === "kg";
+        const lengthMtr = isMeters ? total : 0;
+        const width = parseNoteNum(e.notes, "Width") || parseNoteNum(e.notes, "RollWidth");
+        const gsm = e.gsm ?? parseNoteNum(e.notes, "GSM");
+        const sqm = width > 0 && lengthMtr > 0 ? (width / 1000) * lengthMtr : 0;
+        const kg = isKg ? total : (gsm > 0 && sqm > 0 ? (sqm * gsm) / 1000 : 0);
+        return [
+          e.date,
+          e.product_codes?.code ?? "",
+          e.company_clients?.name ?? "",
+          e.profiles?.name ?? "",
+          e.rolls_count,
+          e.unit,
+          lengthMtr > 0 ? lengthMtr.toFixed(2) : "",
+          sqm > 0 ? sqm.toFixed(2) : "",
+          kg > 0 ? kg.toFixed(2) : "",
+          gsm > 0 ? gsm : "",
+          e.thickness_mm ?? "",
+        ];
+      }),
     ];
     const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
