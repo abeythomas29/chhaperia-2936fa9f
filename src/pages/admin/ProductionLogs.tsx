@@ -207,12 +207,12 @@ export default function ProductionLogs() {
       ["Date", "Product Code", "Client", "Production Manager", "Rolls", "Unit", "Length (mtr)", "Area (sqm)", "Weight (kg)", "GSM", "Thickness (mm)"],
       ...filtered.map((e) => {
         const total = e.total_quantity ?? (e.rolls_count * e.quantity_per_roll);
-        const isMeters = e.unit === "meters";
         const isKg = e.unit === "kg";
-        const lengthMtr = isMeters ? total : 0;
         const width = parseNoteNum(e.notes, "Width") || parseNoteNum(e.notes, "RollWidth");
         const gsm = e.gsm ?? parseNoteNum(e.notes, "GSM");
-        const sqm = width > 0 && lengthMtr > 0 ? (width / 1000) * lengthMtr : 0;
+        // quantity_per_roll is stored as area-per-roll (length × width/1000) when width is provided, so total = area (sqm).
+        const sqm = width > 0 ? total : 0;
+        const lengthMtr = width > 0 ? (total * 1000) / width : (e.unit === "meters" ? total : 0);
         const kg = isKg ? total : (gsm > 0 && sqm > 0 ? (sqm * gsm) / 1000 : 0);
         return [
           e.date,
@@ -430,12 +430,12 @@ export default function ProductionLogs() {
                   return m ? parseFloat(m[1]) : 0;
                 };
                 const total = e.total_quantity ?? (e.rolls_count * e.quantity_per_roll);
-                const isMeters = e.unit === "meters";
                 const isKg = e.unit === "kg";
-                const lengthMtr = isMeters ? total : 0;
                 const width = parseNum("Width") || parseNum("RollWidth");
                 const gsm = e.gsm ?? parseNum("GSM");
-                const sqm = width > 0 && lengthMtr > 0 ? (width / 1000) * lengthMtr : 0;
+                // quantity_per_roll = length × width/1000 (area per roll), so total = total area in sqm
+                const sqm = width > 0 ? total : 0;
+                const lengthMtr = width > 0 ? (total * 1000) / width : (e.unit === "meters" ? total : 0);
                 const kg = isKg ? total : (gsm > 0 && sqm > 0 ? (sqm * gsm) / 1000 : 0);
                 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
                 const noteHasRawMaterialFlag = /raw\s*material\s*used\s*[:\-]*\s*yes/i.test(e.notes ?? "");
