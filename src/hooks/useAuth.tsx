@@ -10,7 +10,7 @@ const signUpSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters").max(72, "Password is too long"),
   name: z.string().trim().min(1, "Name is required").max(100, "Name is too long"),
   employeeId: z.string().trim().min(1, "Employee ID is required").max(50, "Employee ID is too long"),
-  requestedDepartment: z.enum(["worker", "inventory_manager", "slitting_manager"]),
+  requestedDepartment: z.enum(["worker", "inventory_manager", "slitting_manager", "sales_manager"]),
 });
 
 
