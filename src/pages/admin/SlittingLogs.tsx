@@ -96,6 +96,8 @@ export default function SlittingLogs() {
   const [savingH36, setSavingH36] = useState(false);
   const [returnsByEntry, setReturnsByEntry] = useState<Record<string, ReturnRow[]>>({});
   const [rmOpen, setRmOpen] = useState<SlittingRow | null>(null);
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const { toast } = useToast();
 
   const openEdit = (e: SlittingRow) => {
