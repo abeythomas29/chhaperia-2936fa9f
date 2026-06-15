@@ -189,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isPending: role === "pending" || (roles.length === 0 && !loading),
         isInventoryManager: roles.includes("inventory_manager"),
         isSlittingManager: roles.includes("slitting_manager"),
+        isSalesManager: roles.includes("sales_manager"),
         hasRole,
       }}
     >
