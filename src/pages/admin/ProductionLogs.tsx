@@ -73,7 +73,7 @@ export default function ProductionLogs() {
 
   // Pagination
   const [page, setPage] = useState(1);
-  const itemsPerPage = 25;
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Edit state
   const [editEntry, setEditEntry] = useState<LogEntry | null>(null);
