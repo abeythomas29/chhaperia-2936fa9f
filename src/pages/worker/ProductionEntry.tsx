@@ -580,9 +580,13 @@ export default function ProductionEntry() {
             const sqm: number | null = rolls > 0 && len > 0 && wid > 0 ? rolls * len * wid : null;
             const mtr: number | null = rolls > 0 && len > 0 ? rolls * len : null;
             const kg: number | null = sqm !== null && gsmVal > 0 ? (sqm * gsmVal) / 1000 : null;
+            // Per-roll preview when rolls is missing
+            const sqmPerRoll: number | null = len > 0 && wid > 0 ? len * wid : null;
+            const kgPerRoll: number | null = sqmPerRoll !== null && gsmVal > 0 ? (sqmPerRoll * gsmVal) / 1000 : null;
             const base = totalQuantity;
             const fmt = (n: number | null, u: string) =>
               n === null ? <span className="text-muted-foreground">—</span> : <>{n.toLocaleString(undefined, { maximumFractionDigits: 4 })} <span className="text-xs font-normal text-muted-foreground">{u}</span></>;
+            const showPerRoll = rolls === 0 && (sqmPerRoll !== null || kgPerRoll !== null);
             return (
               <div className="bg-muted rounded-lg p-4 space-y-2">
                 <p className="text-sm text-muted-foreground text-center">Total Quantity {thicknessRows.length > 0 ? "(single-row preview)" : ""}</p>
@@ -592,6 +596,15 @@ export default function ProductionEntry() {
                   <div><p className="text-xs text-muted-foreground">Square Meters</p><p className="text-base font-semibold">{fmt(sqm, "sqmtr")}</p></div>
                   <div><p className="text-xs text-muted-foreground">Kilograms</p><p className="text-base font-semibold">{fmt(kg, "kg")}</p></div>
                 </div>
+                {showPerRoll && (
+                  <div className="pt-2 border-t border-border">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Per-roll preview (enter Number of Rolls for total)</p>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div><p className="text-xs text-muted-foreground">Area / Roll</p><p className="text-sm font-semibold">{fmt(sqmPerRoll, "sqmtr")}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Weight / Roll</p><p className="text-sm font-semibold">{fmt(kgPerRoll, "kg")}</p></div>
+                    </div>
+                  </div>
+                )}
                 {!gsmVal && (
                   <p className="text-xs text-center text-muted-foreground italic">Enter GSM to compute kg</p>
                 )}
