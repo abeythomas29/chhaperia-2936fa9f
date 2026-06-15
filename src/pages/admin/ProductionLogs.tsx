@@ -387,8 +387,6 @@ export default function ProductionLogs() {
               <TableHead>Client</TableHead>
               <TableHead>Production Manager</TableHead>
               <TableHead className="text-right">Rolls</TableHead>
-              <TableHead className="text-right">Qty/Roll</TableHead>
-              <TableHead className="text-right">Total</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead className="text-right">Length (mtr)</TableHead>
               <TableHead className="text-right">Area (sqm)</TableHead>
