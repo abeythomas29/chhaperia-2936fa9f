@@ -85,7 +85,7 @@ export default function SlittingLogs() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
-  const [reportEntry, setReportEntry] = useState<SlittingRow | null>(null);
+  // reportEntry removed — replaced with RM/36P status circles
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editEntry, setEditEntry] = useState<SlittingRow | null>(null);
