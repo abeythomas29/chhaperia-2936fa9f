@@ -414,6 +414,7 @@ export default function SlittingLogs() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>{e.company_clients?.name ?? "—"}</TableCell>
                       <TableCell>{managers[e.slitting_manager_id] ?? "—"}</TableCell>
                       <TableCell>{e.cut_width_mm} mm</TableCell>
                       <TableCell className="text-right font-mono">{t.rolls > 0 ? t.rolls.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</TableCell>
