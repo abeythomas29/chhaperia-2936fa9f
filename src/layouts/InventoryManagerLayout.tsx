@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function InventoryManagerLayout() {
-  const { user, loading, signOut, profileName, isAdmin, isWorker, isInventoryManager } = useAuth();
+  const { user, loading, signOut, profileName, isAdmin, isWorker, isInventoryManager, isSalesManager, isSlittingManager } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
