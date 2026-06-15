@@ -253,6 +253,17 @@ export default function SlittingLogs() {
           (ops ?? []).forEach((p: any) => { opMap[p.user_id] = p.name; });
           setHead36Operators(opMap);
         }
+
+        // Fetch slitting returns linked to these slitting entries
+        const { data: rets } = await supabase
+          .from("slitting_returns")
+          .select("id, date, slitting_entry_id, returned_quantity, unit, notes")
+          .in("slitting_entry_id", slittingIds);
+        const retGrouped: Record<string, ReturnRow[]> = {};
+        ((rets as unknown as ReturnRow[]) ?? []).forEach((r) => {
+          (retGrouped[r.slitting_entry_id] ||= []).push(r);
+        });
+        setReturnsByEntry(retGrouped);
       }
       setLoading(false);
     })();
