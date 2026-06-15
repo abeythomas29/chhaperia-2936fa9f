@@ -743,7 +743,7 @@ export default function ProductionLogs() {
               { label: "Swelling Height", value: reportEntry.swelling_height ?? (parseNoteNum("Swelling Height") || null) },
               { label: "Swelling Speed", value: reportEntry.swelling_speed ?? (parseNoteNum("Swelling Speed") || null) },
               { label: "Surface Resistance", value: reportEntry.surface_resistance ?? (parseNoteNum("Surface Resistance") || null) },
-            ].filter((f) => f.value != null && f.value !== "" && f.value !== 0);
+            ].filter((f) => f.value != null && f.value !== 0);
             return fields.length > 0 ? (
               <div className="divide-y border rounded-md">
                 {fields.map((f, i) => (
