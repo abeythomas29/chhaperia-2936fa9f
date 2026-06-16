@@ -387,7 +387,7 @@ export default function ProductionLogs() {
         )}
       </div>
 
-      <div className="border rounded-lg w-full">
+      <div className="hidden md:block border rounded-lg w-full overflow-x-auto">
         <Table className="w-full table-auto text-xs sm:text-sm [&_th]:px-2 [&_td]:px-2 [&_th]:py-2 [&_td]:py-2 [&_th]:whitespace-normal [&_td]:break-words">
           <TableHeader>
             <TableRow>
