@@ -373,6 +373,7 @@ export default function RawMaterials() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10"></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead className="text-right">Current Stock</TableHead>
@@ -382,19 +383,89 @@ export default function RawMaterials() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No raw materials found</TableCell></TableRow>
-              ) : filtered.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="font-medium">{m.name}</TableCell>
-                  <TableCell>{m.unit}</TableCell>
-                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
-                  <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(m.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No raw materials found</TableCell></TableRow>
+              ) : filtered.map((m) => {
+                const isExpanded = expandedMaterials.has(m.id);
+                // Build variants by thickness from stockEntries (all, not filtered by search/date)
+                const matEntries = stockEntries.filter((e) => e.raw_material_id === m.id);
+                const variantMap = new Map<string, { in: number; out: number }>();
+                matEntries.forEach((e) => {
+                  const key = e.thickness_mm != null ? `${e.thickness_mm} mm` : "No thickness";
+                  const v = variantMap.get(key) ?? { in: 0, out: 0 };
+                  if (e.kind === "out") v.out += Number(e.quantity) || 0;
+                  else v.in += Number(e.quantity) || 0;
+                  variantMap.set(key, v);
+                });
+                const variants = Array.from(variantMap.entries())
+                  .map(([label, v]) => ({ label, in: v.in, out: v.out, net: v.in - v.out }))
+                  .sort((a, b) => {
+                    const an = parseFloat(a.label); const bn = parseFloat(b.label);
+                    if (isNaN(an) && isNaN(bn)) return a.label.localeCompare(b.label);
+                    if (isNaN(an)) return 1;
+                    if (isNaN(bn)) return -1;
+                    return an - bn;
+                  });
+                const toggle = () => {
+                  setExpandedMaterials((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                    return next;
+                  });
+                };
+                return (
+                  <>
+                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={toggle}>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(ev) => { ev.stopPropagation(); toggle(); }}>
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="font-medium">{m.name}</TableCell>
+                      <TableCell>{m.unit}</TableCell>
+                      <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
+                      <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
+                      <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(m.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow key={`${m.id}-variants`} className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell></TableCell>
+                        <TableCell colSpan={5}>
+                          {variants.length === 0 ? (
+                            <div className="text-sm text-muted-foreground py-2">No variant data yet — add stock entries with thickness to see breakdown.</div>
+                          ) : (
+                            <div className="py-2">
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness</div>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Thickness</TableHead>
+                                    <TableHead className="text-right">In</TableHead>
+                                    <TableHead className="text-right">Out</TableHead>
+                                    <TableHead className="text-right">Balance</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {variants.map((v) => (
+                                    <TableRow key={v.label}>
+                                      <TableCell className="font-medium">{v.label}</TableCell>
+                                      <TableCell className="text-right font-mono text-secondary">+{v.in.toLocaleString()} {m.unit}</TableCell>
+                                      <TableCell className="text-right font-mono text-destructive">−{v.out.toLocaleString()} {m.unit}</TableCell>
+                                      <TableCell className="text-right font-mono font-semibold">{v.net.toLocaleString()} {m.unit}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
