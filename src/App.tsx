@@ -28,6 +28,7 @@ import SalesEntry from "./pages/inventory/SalesEntry";
 import SalesHistory from "./pages/inventory/SalesHistory";
 import SlittingEntry from "./pages/slitting/SlittingEntry";
 import SlittingHistory from "./pages/slitting/SlittingHistory";
+import Head36History from "./pages/slitting/Head36History";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 
