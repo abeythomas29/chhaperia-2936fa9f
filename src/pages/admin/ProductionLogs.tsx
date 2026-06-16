@@ -150,7 +150,6 @@ export default function ProductionLogs() {
   useEffect(() => {
     fetchEntries();
     fetchDropdowns();
-    fetchHead36();
   }, []);
 
   useEffect(() => {
