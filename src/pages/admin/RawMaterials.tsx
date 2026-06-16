@@ -517,10 +517,10 @@ export default function RawMaterials() {
                     {isOut ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <Fragment key={m.id}>
+                      <>
                         <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </Fragment>
+                      </>
                     )}
                   </TableCell>
                 </TableRow>
