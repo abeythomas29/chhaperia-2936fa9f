@@ -439,7 +439,8 @@ export default function SlittingLogs() {
         {filtered.length === 0 ? (
           <p className="text-muted-foreground text-center py-6">No slitting entries.</p>
         ) : (
-          <div className="w-full">
+          <>
+          <div className="hidden md:block w-full overflow-x-auto">
             <Table className="w-full table-auto text-xs sm:text-sm [&_th]:px-2 [&_td]:px-2 [&_th]:py-2 [&_td]:py-2 [&_th]:whitespace-normal [&_td]:break-words">
               <TableHeader>
                 <TableRow>
@@ -510,6 +511,58 @@ export default function SlittingLogs() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-3">
+            {paginated.map((e) => {
+              const t = computeTotals(e);
+              const gsm = e.gsm ?? parseNum(e.notes, "GSM");
+              const h36s = head36ByEntry[e.id] ?? [];
+              const has36 = h36s.length > 0;
+              return (
+                <div key={e.id} className="border rounded-lg p-3 bg-card">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm">{e.product_codes?.code ?? "—"}</span>
+                        <span className="text-xs text-muted-foreground">{format(new Date(e.date), "dd/MM/yy")}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
+                        {(e.company_clients?.name ?? "—")} · {(managers[e.slitting_manager_id] ?? "—")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setHead36Open(e)}
+                        title={has36 ? `${h36s.length} 36-head production entry(ies)` : "No 36-head production recorded"}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center",
+                          has36 ? "bg-emerald-500" : "bg-red-500"
+                        )}
+                      >36P</button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)} title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(e.id)} title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div><div className="text-muted-foreground">Cut Width</div><div className="font-mono">{e.cut_width_mm} mm</div></div>
+                    <div><div className="text-muted-foreground">Rolls</div><div className="font-mono">{t.rolls > 0 ? t.rolls.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</div></div>
+                    <div><div className="text-muted-foreground">Thickness</div><div className="font-mono">{e.thickness_mm ?? "—"}</div></div>
+                    <div><div className="text-muted-foreground">Length (m)</div><div className="font-mono">{t.lengthMtr.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+                    <div><div className="text-muted-foreground">Area (sqm)</div><div className="font-mono">{t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+                    <div><div className="text-muted-foreground">Weight (kg)</div><div className="font-mono">{t.kg > 0 ? t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</div></div>
+                    <div><div className="text-muted-foreground">GSM</div><div className="font-mono">{gsm > 0 ? gsm : "—"}</div></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
 
         {filtered.length > 0 && (
