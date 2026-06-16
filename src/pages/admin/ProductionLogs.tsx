@@ -90,11 +90,9 @@ export default function ProductionLogs() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // RM (Raw Material) + 36P (36-head Production) + LR (Lab Report) status dialogs
+  // RM (Raw Material) + LR (Lab Report) status dialogs
   const [rmEntry, setRmEntry] = useState<LogEntry | null>(null);
-  const [h36Entry, setH36Entry] = useState<LogEntry | null>(null);
   const [reportEntry, setReportEntry] = useState<LogEntry | null>(null);
-  const [head36ByProduct, setHead36ByProduct] = useState<Record<string, any[]>>({});
 
   // Dropdowns
   const [productCodes, setProductCodes] = useState<ProductCode[]>([]);
@@ -148,23 +146,10 @@ export default function ProductionLogs() {
     setCategories(cats ?? []);
   };
 
-  const fetchHead36 = async () => {
-    const { data } = await supabase
-      .from("head36_entries" as any)
-      .select("id, date, slitting_entry_id, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, thickness_mm, gsm, unit, notes, slitting_entries:slitting_entry_id(product_code_id)");
-    const grouped: Record<string, any[]> = {};
-    ((data as any[]) ?? []).forEach((h) => {
-      const pid = h.slitting_entries?.product_code_id;
-      if (!pid) return;
-      (grouped[pid] ||= []).push(h);
-    });
-    setHead36ByProduct(grouped);
-  };
 
   useEffect(() => {
     fetchEntries();
     fetchDropdowns();
-    fetchHead36();
   }, []);
 
   useEffect(() => {
@@ -402,8 +387,8 @@ export default function ProductionLogs() {
         )}
       </div>
 
-      <div className="border rounded-lg">
-        <Table>
+      <div className="border rounded-lg overflow-x-auto">
+        <Table className="min-w-[1000px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
@@ -484,48 +469,28 @@ export default function ProductionLogs() {
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-1">
-                      {(() => {
-                        const hasRm = materialLines.length > 0;
-                        const h36s = head36ByProduct[e.product_code_id] ?? [];
-                        const has36 = h36s.length > 0;
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRmEntry(e)}
-                              title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                hasRm ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              RM
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setReportEntry(e)}
-                              title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                hasReport ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              LR
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setH36Entry(e)}
-                              title={has36 ? `${h36s.length} 36-head production entry(ies) for this product code — click to view` : "No 36-head production recorded for this product code"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                has36 ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              36P
-                            </button>
-                          </>
-                        );
-                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setRmEntry(e)}
+                        title={materialLines.length > 0 ? "Raw material recorded — click to view" : "No raw material recorded"}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                          materialLines.length > 0 ? "bg-emerald-500" : "bg-red-500"
+                        )}
+                      >
+                        RM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportEntry(e)}
+                        title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                          hasReport ? "bg-emerald-500" : "bg-red-500"
+                        )}
+                      >
+                        LR
+                      </button>
 
                       <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                         <Pencil className="h-4 w-4" />
@@ -726,47 +691,7 @@ export default function ProductionLogs() {
         </DialogContent>
       </Dialog>
 
-      {/* 36P (36-Head Production) Dialog */}
-      <Dialog open={!!h36Entry} onOpenChange={(open) => !open && setH36Entry(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">36P</span>
-              36-Head Production
-            </DialogTitle>
-            <DialogDescription>
-              {h36Entry?.product_codes?.code ?? "—"} · linked 36-head production entries for this product
-            </DialogDescription>
-          </DialogHeader>
-          {h36Entry && (() => {
-            const list = head36ByProduct[h36Entry.product_code_id] ?? [];
-            if (list.length === 0) {
-              return <p className="text-sm text-muted-foreground py-4 text-center">No 36-head production recorded for this product.</p>;
-            }
-            return (
-              <div className="space-y-2">
-                {list.map((h: any) => (
-                  <div key={h.id} className="border rounded-md p-3 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{format(new Date(h.date), "dd/MM/yy")}</span>
-                      <span className="text-xs text-muted-foreground">Rolls produced: {h.rolls_produced ?? "—"}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div><span className="text-muted-foreground">Tape Width:</span> <span className="font-mono">{h.roll_width_mm ?? "—"} mm</span></div>
-                      <div><span className="text-muted-foreground">Length/Tape:</span> <span className="font-mono">{h.length_per_tape_mtr ?? "—"} mtr</span></div>
-                      <div><span className="text-muted-foreground">Thickness:</span> <span className="font-mono">{h.thickness_mm ?? "—"} mm</span></div>
-                    </div>
-                    {h.notes && <p className="text-xs text-muted-foreground italic">{h.notes}</p>}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setH36Entry(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* LR (Lab Report) Dialog */}
       <Dialog open={!!reportEntry} onOpenChange={(open) => !open && setReportEntry(null)}>
