@@ -508,6 +508,95 @@ export default function ProductionLogs() {
         </Table>
       </div>
 
+      {/* Mobile card view */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No entries found</div>
+        ) : (
+          paginated.map((e) => {
+            const parseNum = (label: string) => {
+              if (!e.notes) return 0;
+              const m = e.notes.match(new RegExp(`${label}\\s*[:\\-]*\\s*([\\d.]+)`, "i"));
+              return m ? parseFloat(m[1]) : 0;
+            };
+            const total = e.total_quantity ?? (e.rolls_count * e.quantity_per_roll);
+            const isKg = e.unit === "kg";
+            const width = parseNum("Width") || parseNum("RollWidth");
+            const gsm = e.gsm ?? parseNum("GSM");
+            const sqm = width > 0 ? total : 0;
+            const lengthMtr = width > 0 ? (total * 1000) / width : (e.unit === "meters" ? total : 0);
+            const kg = isKg ? total : (gsm > 0 && sqm > 0 ? (sqm * gsm) / 1000 : 0);
+            const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
+            const noteHasRawMaterialFlag = /raw\s*material\s*used\s*[:\-]*\s*yes/i.test(e.notes ?? "");
+            const noteCopperWires = (() => {
+              const m = (e.notes ?? "").match(/copper\s*wires\s*[:\-]*\s*([^|]+)/i);
+              return m?.[1]?.trim() ?? null;
+            })();
+            const hasMaterial = (e.raw_material_usage && e.raw_material_usage.length > 0) || !!noteCopperWires || !!e.raw_material_included || noteHasRawMaterialFlag;
+            const hasReport =
+              e.gsm != null || e.thickness_mm != null || e.tensile_strength != null || e.elongation != null ||
+              e.swelling_height != null || e.swelling_speed != null || e.surface_resistance != null ||
+              parseNum("GSM") || parseNum("Tensile") || parseNum("Elongation") ||
+              parseNum("Swelling Height") || parseNum("Swelling Speed") || parseNum("Surface Resistance");
+            const d = new Date(e.date);
+            const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+            return (
+              <div key={e.id} className="border rounded-lg p-3 bg-card">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Checkbox checked={selectedIds.has(e.id)} onCheckedChange={() => toggleSelect(e.id)} aria-label="Select row" />
+                      <span className="font-semibold text-sm">{e.product_codes?.code ?? "—"}</span>
+                      <span className="text-xs text-muted-foreground">{dateStr}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1 truncate">
+                      {(e.company_clients?.name ?? "—")} · {(e.profiles?.name ?? "—")}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setRmEntry(e)}
+                      title={hasMaterial ? "Raw material recorded — click to view" : "No raw material recorded"}
+                      className={cn(
+                        "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center",
+                        hasMaterial ? "bg-emerald-500" : "bg-red-500"
+                      )}
+                    >RM</button>
+                    <button
+                      type="button"
+                      onClick={() => setReportEntry(e)}
+                      title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
+                      className={cn(
+                        "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center",
+                        hasReport ? "bg-emerald-500" : "bg-red-500"
+                      )}
+                    >LR</button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)} title="Edit">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(e.id)} title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div><div className="text-muted-foreground">Rolls</div><div className="font-mono">{e.rolls_count}</div></div>
+                  <div><div className="text-muted-foreground">Unit</div><div>{e.unit}</div></div>
+                  <div><div className="text-muted-foreground">Thickness</div><div className="font-mono">{e.thickness_mm ?? "—"}</div></div>
+                  <div><div className="text-muted-foreground">Length (m)</div><div className="font-mono">{lengthMtr > 0 ? fmt(lengthMtr) : "—"}</div></div>
+                  <div><div className="text-muted-foreground">Area (sqm)</div><div className="font-mono">{sqm > 0 ? fmt(sqm) : "—"}</div></div>
+                  <div><div className="text-muted-foreground">Weight (kg)</div><div className="font-mono">{kg > 0 ? fmt(kg) : "—"}</div></div>
+                  <div><div className="text-muted-foreground">GSM</div><div className="font-mono">{gsm > 0 ? gsm : "—"}</div></div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {/* Pagination */}
       {filtered.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
