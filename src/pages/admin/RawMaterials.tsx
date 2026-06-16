@@ -50,6 +50,7 @@ export default function RawMaterials() {
   const [stockOpen, setStockOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
 
   const [newName, setNewName] = useState("");
   const [newUnit, setNewUnit] = useState("kg");
