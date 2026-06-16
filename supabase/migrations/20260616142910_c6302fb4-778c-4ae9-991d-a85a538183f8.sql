@@ -1,0 +1,1 @@
+CREATE POLICY "Slitting managers can delete own head36 entries" ON public.head36_entries FOR DELETE USING ((auth.uid() = operator_id) AND has_role(auth.uid(), 'slitting_manager'));
