@@ -413,7 +413,7 @@ export default function RawMaterials() {
                   });
                 };
                 return (
-                  <>
+                  <Fragment key={m.id}>
                     <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={toggle}>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(ev) => { ev.stopPropagation(); toggle(); }}>
@@ -463,7 +463,7 @@ export default function RawMaterials() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
@@ -517,10 +517,10 @@ export default function RawMaterials() {
                     {isOut ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <>
+                      <Fragment key={m.id}>
                         <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </>
+                      </Fragment>
                     )}
                   </TableCell>
                 </TableRow>
