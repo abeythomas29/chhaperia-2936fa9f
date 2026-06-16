@@ -28,6 +28,18 @@ interface Head36Row {
   } | null;
 }
 
+interface SlittingLookupRow {
+  id: string;
+  cut_width_mm: number | null;
+  slitting_manager_id: string | null;
+  product_code_id: string | null;
+}
+
+interface ProductLookupRow {
+  id: string;
+  code: string;
+}
+
 export default function Head36History() {
   const { user } = useAuth();
   const [rows, setRows] = useState<Head36Row[]>([]);
@@ -38,12 +50,12 @@ export default function Head36History() {
     (async () => {
       setLoading(true);
       const { data, error } = await supabase
-        .from("head36_entries" as any)
+        .from("head36_entries")
         .select(
           "id, date, product_code_id, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, thickness_mm, gsm, total_quantity, unit, notes, slitting_entry_id, operator_id"
         )
         .order("date", { ascending: false });
-      let list = ((data as unknown) as (Head36Row & { operator_id?: string | null; slitting_entries?: any })[]) ?? [];
+      let list = (data as Head36Row[] | null) ?? [];
       const slittingIds = Array.from(new Set(list.map((r) => r.slitting_entry_id).filter(Boolean))) as string[];
       const directProductIds = Array.from(new Set(list.map((r) => r.product_code_id).filter(Boolean))) as string[];
       let slittingById: Record<string, { cut_width_mm: number | null; slitting_manager_id: string | null; product_code_id: string | null }> = {};
@@ -53,7 +65,7 @@ export default function Head36History() {
           .select("id, cut_width_mm, slitting_manager_id, product_code_id")
           .in("id", slittingIds);
         slittingById = Object.fromEntries(
-          (((slittingRows as any[]) ?? []).map((s) => [s.id, s]))
+          (((slittingRows as SlittingLookupRow[] | null) ?? []).map((s) => [s.id, s]))
         );
       }
       const productIds = Array.from(new Set([
@@ -66,7 +78,7 @@ export default function Head36History() {
           .from("product_codes")
           .select("id, code")
           .in("id", productIds);
-        productById = Object.fromEntries((((products as any[]) ?? []).map((p) => [p.id, { code: p.code }])));
+        productById = Object.fromEntries((((products as ProductLookupRow[] | null) ?? []).map((p) => [p.id, { code: p.code }])));
       }
       list = list.map((r) => {
         const linkedSlitting = r.slitting_entry_id ? slittingById[r.slitting_entry_id] : null;
