@@ -74,6 +74,7 @@ const App = () => (
             <Route path="/slitting" element={<SlittingManagerLayout />}>
               <Route index element={<SlittingEntry />} />
               <Route path="history" element={<SlittingHistory />} />
+              <Route path="head36-history" element={<Head36History />} />
             </Route>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
