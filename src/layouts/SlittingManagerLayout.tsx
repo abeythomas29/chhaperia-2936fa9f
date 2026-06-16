@@ -1,6 +1,6 @@
 import { Outlet, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { Scissors, History, LogOut, Loader2, ClipboardList, ShoppingCart, ListOrdered, Package } from "lucide-react";
+import { Scissors, History, LogOut, Loader2, ClipboardList, ShoppingCart, ListOrdered, Package, Layers } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
