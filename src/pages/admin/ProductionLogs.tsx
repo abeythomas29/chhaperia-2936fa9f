@@ -146,18 +146,6 @@ export default function ProductionLogs() {
     setCategories(cats ?? []);
   };
 
-  const fetchHead36 = async () => {
-    const { data } = await supabase
-      .from("head36_entries" as any)
-      .select("id, date, slitting_entry_id, rolls_taken, rolls_produced, roll_width_mm, length_per_tape_mtr, thickness_mm, gsm, unit, notes, slitting_entries:slitting_entry_id(product_code_id)");
-    const grouped: Record<string, any[]> = {};
-    ((data as any[]) ?? []).forEach((h) => {
-      const pid = h.slitting_entries?.product_code_id;
-      if (!pid) return;
-      (grouped[pid] ||= []).push(h);
-    });
-    setHead36ByProduct(grouped);
-  };
 
   useEffect(() => {
     fetchEntries();
