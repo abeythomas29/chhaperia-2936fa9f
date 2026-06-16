@@ -469,48 +469,28 @@ export default function ProductionLogs() {
                   <TableCell className="text-right">{e.thickness_mm ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-1">
-                      {(() => {
-                        const hasRm = materialLines.length > 0;
-                        const h36s = head36ByProduct[e.product_code_id] ?? [];
-                        const has36 = h36s.length > 0;
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRmEntry(e)}
-                              title={hasRm ? "Raw material recorded — click to view" : "No raw material recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                hasRm ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              RM
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setReportEntry(e)}
-                              title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                hasReport ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              LR
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setH36Entry(e)}
-                              title={has36 ? `${h36s.length} 36-head production entry(ies) for this product code — click to view` : "No 36-head production recorded for this product code"}
-                              className={cn(
-                                "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
-                                has36 ? "bg-emerald-500" : "bg-red-500"
-                              )}
-                            >
-                              36P
-                            </button>
-                          </>
-                        );
-                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setRmEntry(e)}
+                        title={materialLines.length > 0 ? "Raw material recorded — click to view" : "No raw material recorded"}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                          materialLines.length > 0 ? "bg-emerald-500" : "bg-red-500"
+                        )}
+                      >
+                        RM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportEntry(e)}
+                        title={hasReport ? "Lab report recorded — click to view" : "No lab report recorded"}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-opacity hover:opacity-80",
+                          hasReport ? "bg-emerald-500" : "bg-red-500"
+                        )}
+                      >
+                        LR
+                      </button>
 
                       <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Edit">
                         <Pencil className="h-4 w-4" />
