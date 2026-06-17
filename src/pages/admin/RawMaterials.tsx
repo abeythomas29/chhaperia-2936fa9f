@@ -31,6 +31,7 @@ interface StockEntry {
   supplier: string | null;
   pallets: number | null;
   thickness_mm: number | null;
+  gsm: number | null;
   notes: string | null;
   added_by: string;
   created_at: string;
@@ -69,6 +70,7 @@ export default function RawMaterials() {
   const [eSupplier, setESupplier] = useState("");
   const [ePallets, setEPallets] = useState("");
   const [eThickness, setEThickness] = useState("");
+  const [eGsm, setEGsm] = useState("");
   const [eNotes, setENotes] = useState("");
   const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
 
@@ -79,6 +81,7 @@ export default function RawMaterials() {
   const [stockSupplier, setStockSupplier] = useState("");
   const [stockPallets, setStockPallets] = useState("");
   const [stockThickness, setStockThickness] = useState("");
+  const [stockGsm, setStockGsm] = useState("");
   const [stockNotes, setStockNotes] = useState("");
 
   const fetchData = async () => {
@@ -116,6 +119,7 @@ export default function RawMaterials() {
         supplier: clientMap.get(s.client_id) ?? s.client_name ?? null,
         pallets: null,
         thickness_mm: s.thickness_mm,
+        gsm: null,
         notes: s.notes ? `Sale: ${s.notes}` : "Sale",
         added_by: s.sold_by,
         created_at: s.created_at,
@@ -207,6 +211,7 @@ export default function RawMaterials() {
       supplier: stockSupplier.trim() || null,
       pallets: stockPallets ? Number(stockPallets) : null,
       thickness_mm: stockThickness ? Number(stockThickness) : null,
+      gsm: stockGsm ? Number(stockGsm) : null,
       notes: stockNotes || null,
       added_by: user.id,
     } as any);
@@ -219,6 +224,7 @@ export default function RawMaterials() {
     setStockSupplier("");
     setStockPallets("");
     setStockThickness("");
+    setStockGsm("");
     setStockNotes("");
     fetchData();
   };
@@ -239,6 +245,7 @@ export default function RawMaterials() {
     setESupplier(e.supplier ?? "");
     setEPallets(e.pallets != null ? String(e.pallets) : "");
     setEThickness(e.thickness_mm != null ? String(e.thickness_mm) : "");
+    setEGsm(e.gsm != null ? String(e.gsm) : "");
     setENotes(e.notes ?? "");
     setEditEntryOpen(true);
   };
@@ -253,6 +260,7 @@ export default function RawMaterials() {
       supplier: eSupplier.trim() || null,
       pallets: ePallets ? Number(ePallets) : null,
       thickness_mm: eThickness ? Number(eThickness) : null,
+      gsm: eGsm ? Number(eGsm) : null,
       notes: eNotes || null,
     } as any).eq("id", editEntry.id);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
@@ -310,9 +318,15 @@ export default function RawMaterials() {
                   <Label>Pallets / Pieces</Label>
                   <Input type="number" min="0" step="1" value={stockPallets} onChange={(e) => setStockPallets(e.target.value)} placeholder="e.g. 29" />
                 </div>
-                <div>
-                  <Label>Thickness (mm, optional)</Label>
-                  <Input type="number" min="0" step="0.001" value={stockThickness} onChange={(e) => setStockThickness(e.target.value)} placeholder="e.g. 0.13" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Thickness (mm)</Label>
+                    <Input type="number" min="0" step="0.001" value={stockThickness} onChange={(e) => setStockThickness(e.target.value)} placeholder="e.g. 0.13" />
+                  </div>
+                  <div>
+                    <Label>GSM</Label>
+                    <Input type="number" min="0" step="0.01" value={stockGsm} onChange={(e) => setStockGsm(e.target.value)} placeholder="e.g. 80" />
+                  </div>
                 </div>
                 <div>
                   <Label>Notes (optional)</Label>
@@ -390,7 +404,9 @@ export default function RawMaterials() {
                 const matEntries = stockEntries.filter((e) => e.raw_material_id === m.id);
                 const variantMap = new Map<string, { in: number; out: number }>();
                 matEntries.forEach((e) => {
-                  const key = e.thickness_mm != null ? `${e.thickness_mm} mm` : "No thickness";
+                  const tLabel = e.thickness_mm != null ? `${e.thickness_mm} mm` : "—";
+                  const gLabel = e.gsm != null ? `${e.gsm} gsm` : "—";
+                  const key = (tLabel === "—" && gLabel === "—") ? "No spec" : `${tLabel} · ${gLabel}`;
                   const v = variantMap.get(key) ?? { in: 0, out: 0 };
                   if (e.kind === "out") v.out += Number(e.quantity) || 0;
                   else v.in += Number(e.quantity) || 0;
@@ -437,11 +453,11 @@ export default function RawMaterials() {
                             <div className="text-sm text-muted-foreground py-2">No variant data yet — add stock entries with thickness to see breakdown.</div>
                           ) : (
                             <div className="py-2">
-                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness</div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness / GSM</div>
                               <Table>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead>Thickness</TableHead>
+                                    <TableHead>Specification</TableHead>
                                     <TableHead className="text-right">In</TableHead>
                                     <TableHead className="text-right">Out</TableHead>
                                     <TableHead className="text-right">Balance</TableHead>
@@ -485,6 +501,7 @@ export default function RawMaterials() {
                 <TableHead>Unit</TableHead>
                 <TableHead className="text-right">Pallets</TableHead>
                 <TableHead className="text-right">Thickness</TableHead>
+                <TableHead className="text-right">GSM</TableHead>
                 <TableHead>Lot No.</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead>By</TableHead>
@@ -493,7 +510,7 @@ export default function RawMaterials() {
             </TableHeader>
             <TableBody>
               {filteredEntries.length === 0 ? (
-                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
               ) : filteredEntries.map((e) => {
                 const isOut = e.kind === "out";
                 return (
@@ -510,6 +527,7 @@ export default function RawMaterials() {
                   <TableCell className="text-muted-foreground">{e.material_unit}</TableCell>
                   <TableCell className="text-right font-mono">{e.pallets ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono">{e.thickness_mm != null ? `${e.thickness_mm} mm` : "—"}</TableCell>
+                  <TableCell className="text-right font-mono">{e.gsm != null ? `${e.gsm}` : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{e.lot_number ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.notes ?? "—"}</TableCell>
                   <TableCell>{e.person_name}</TableCell>
@@ -587,7 +605,10 @@ export default function RawMaterials() {
             <div><Label>Lot Number</Label><Input value={eLot} onChange={(e) => setELot(e.target.value)} /></div>
             <div><Label>Supplier / From</Label><Input value={eSupplier} onChange={(e) => setESupplier(e.target.value)} /></div>
             <div><Label>Pallets / Pieces</Label><Input type="number" min="0" step="1" value={ePallets} onChange={(e) => setEPallets(e.target.value)} /></div>
-            <div><Label>Thickness (mm)</Label><Input type="number" min="0" step="0.001" value={eThickness} onChange={(e) => setEThickness(e.target.value)} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Thickness (mm)</Label><Input type="number" min="0" step="0.001" value={eThickness} onChange={(e) => setEThickness(e.target.value)} /></div>
+              <div><Label>GSM</Label><Input type="number" min="0" step="0.01" value={eGsm} onChange={(e) => setEGsm(e.target.value)} /></div>
+            </div>
             <div><Label>Notes</Label><Input value={eNotes} onChange={(e) => setENotes(e.target.value)} /></div>
             <Button onClick={saveEntryEdit} className="w-full bg-secondary hover:bg-secondary/90">Save Changes</Button>
           </div>
