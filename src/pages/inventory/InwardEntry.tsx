@@ -29,6 +29,7 @@ export default function InwardEntry() {
   const [supplier, setSupplier] = useState("");
   const [pallets, setPallets] = useState("");
   const [thickness, setThickness] = useState("");
+  const [gsm, setGsm] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +61,7 @@ export default function InwardEntry() {
       supplier: supplier.trim() || null,
       pallets: pallets ? Number(pallets) : null,
       thickness_mm: thickness ? Number(thickness) : null,
+      gsm: gsm ? Number(gsm) : null,
       notes: notes || null,
       added_by: user.id,
     } as any);
@@ -79,6 +81,7 @@ export default function InwardEntry() {
       setSupplier("");
       setPallets("");
       setThickness("");
+      setGsm("");
       setNotes("");
       setSubmitted(false);
       fetchMaterials();
@@ -191,9 +194,15 @@ export default function InwardEntry() {
             <Input value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} placeholder="e.g. LOT-2025-001" />
           </div>
 
-          <div>
-            <Label>Thickness (mm, optional)</Label>
-            <Input type="number" min="0" step="0.001" value={thickness} onChange={(e) => setThickness(e.target.value)} placeholder="e.g. 0.13" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Thickness (mm, optional)</Label>
+              <Input type="number" min="0" step="0.001" value={thickness} onChange={(e) => setThickness(e.target.value)} placeholder="e.g. 0.13" />
+            </div>
+            <div>
+              <Label>GSM (optional)</Label>
+              <Input type="number" min="0" step="0.01" value={gsm} onChange={(e) => setGsm(e.target.value)} placeholder="e.g. 80" />
+            </div>
           </div>
 
           <div>

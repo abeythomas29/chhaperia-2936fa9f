@@ -342,6 +342,7 @@ export type Database = {
           added_by: string
           created_at: string
           date: string
+          gsm: number | null
           id: string
           lot_number: string | null
           notes: string | null
@@ -355,6 +356,7 @@ export type Database = {
           added_by: string
           created_at?: string
           date?: string
+          gsm?: number | null
           id?: string
           lot_number?: string | null
           notes?: string | null
@@ -368,6 +370,7 @@ export type Database = {
           added_by?: string
           created_at?: string
           date?: string
+          gsm?: number | null
           id?: string
           lot_number?: string | null
           notes?: string | null
