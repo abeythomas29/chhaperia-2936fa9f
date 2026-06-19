@@ -20,6 +20,8 @@ interface ThicknessRow { thickness_mm: string; rolls_count: string; length_per_r
 interface MaterialUsageRow {
   raw_material_id: string;
   quantity_used: string;
+  thickness_mm: string;
+  gsm: string;
 }
 
 interface RawMaterial {
@@ -27,6 +29,13 @@ interface RawMaterial {
   name: string;
   unit: string;
   current_stock: number;
+}
+
+interface StockVariant {
+  raw_material_id: string;
+  thickness_mm: number | null;
+  gsm: number | null;
+  total: number;
 }
 
 export default function ProductionEntry() {
