@@ -149,29 +149,22 @@ export default function StockManagement() {
       profiles: s.sold_by ? { name: sellerMap.get(s.sold_by) } : null,
     }));
 
-    // Fetch dropdowns
-    const [{ data: cl }, { data: pc }, { data: pmRoles }] = await Promise.all([
+    // Fetch dropdowns — production managers = all active non-admin users
+    const [{ data: cl }, { data: pc }, { data: allProfiles }, { data: adminRoles }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
-      supabase.from("user_roles").select("user_id").eq("role", "worker"),
+      supabase.from("profiles").select("user_id, name, employee_id, status"),
+      supabase.from("user_roles").select("user_id").in("role", ["admin", "super_admin"]),
     ]);
     setClients(cl ?? []);
     setProductCodes(pc ?? []);
 
-    const pmUserIds = Array.from(new Set(((pmRoles ?? []) as any[]).map((r) => r.user_id)));
-    if (pmUserIds.length) {
-      const { data: pmProfiles } = await supabase
-        .from("profiles")
-        .select("user_id, name, employee_id, status")
-        .in("user_id", pmUserIds);
-      const list = ((pmProfiles ?? []) as any[])
-        .filter((p) => (p.status ?? "active") === "active")
-        .map((p) => ({ user_id: p.user_id, name: p.name, employee_id: p.employee_id }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      setProductionManagers(list);
-    } else {
-      setProductionManagers([]);
-    }
+    const adminUserIds = new Set(((adminRoles ?? []) as any[]).map((r) => r.user_id));
+    const list = ((allProfiles ?? []) as any[])
+      .filter((p) => (p.status ?? "active") === "active" && !adminUserIds.has(p.user_id))
+      .map((p) => ({ user_id: p.user_id, name: p.name, employee_id: p.employee_id }))
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    setProductionManagers(list);
 
 
     // Build per-product-code totals and thickness breakdowns
