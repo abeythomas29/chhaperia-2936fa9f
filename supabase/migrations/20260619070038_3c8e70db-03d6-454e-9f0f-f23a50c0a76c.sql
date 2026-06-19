@@ -1,0 +1,3 @@
+CREATE POLICY "Inventory managers can update own stock entries" ON public.raw_material_stock_entries FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'inventory_manager') AND added_by = auth.uid()) WITH CHECK (has_role(auth.uid(), 'inventory_manager') AND added_by = auth.uid());
+
+CREATE POLICY "Inventory managers can delete own stock entries" ON public.raw_material_stock_entries FOR DELETE TO authenticated USING (has_role(auth.uid(), 'inventory_manager') AND added_by = auth.uid());
