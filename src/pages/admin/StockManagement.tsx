@@ -140,11 +140,11 @@ export default function StockManagement() {
       profiles: s.sold_by ? { name: sellerMap.get(s.sold_by) } : null,
     }));
 
-    // Fetch dropdowns — production managers = all active users (matches Admin → Users)
-    const [{ data: cl }, { data: pc }, { data: allProfiles }] = await Promise.all([
+    // Fetch dropdowns — production managers via RPC (bypasses profile RLS)
+    const [{ data: cl }, { data: pc }, { data: pmData }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
-      supabase.from("profiles").select("user_id, name, employee_id, status"),
+      supabase.rpc("list_production_manager_recipients"),
     ]);
     setClients(cl ?? []);
     setProductCodes(pc ?? []);
