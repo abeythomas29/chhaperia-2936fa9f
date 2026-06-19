@@ -54,6 +54,13 @@ interface ProductCode {
   code: string;
 }
 
+interface ProductionManager {
+  user_id: string;
+  name: string;
+  employee_id: string | null;
+}
+
+
 export default function StockManagement() {
   const { user } = useAuth();
   const [summaries, setSummaries] = useState<StockSummary[]>([]);
