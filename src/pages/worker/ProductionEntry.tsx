@@ -149,7 +149,7 @@ export default function ProductionEntry() {
 
   // Material usage helpers
   const addMaterialRow = () => {
-    setMaterialUsage((prev) => [...prev, { raw_material_id: "", quantity_used: "" }]);
+    setMaterialUsage((prev) => [...prev, { raw_material_id: "", quantity_used: "", thickness_mm: "", gsm: "" }]);
   };
 
   const updateMaterialRow = (index: number, field: keyof MaterialUsageRow, value: string) => {
