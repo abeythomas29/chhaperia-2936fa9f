@@ -124,13 +124,16 @@ export default function InwardHistory() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", deleteId);
+    const idToDelete = deleteId;
+    setDeleteId(null);
+    const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", idToDelete);
     if (error) {
       toast.error(error.message);
       return;
     }
+    // Optimistically remove from UI so it disappears immediately
+    setEntries((prev) => prev.filter((e) => e.id !== idToDelete));
     toast.success("Entry deleted");
-    setDeleteId(null);
     await load();
   };
 
