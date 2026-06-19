@@ -772,6 +772,13 @@ export type Database = {
         Args: { _email: string }
         Returns: boolean
       }
+      list_production_manager_recipients: {
+        Args: never
+        Returns: {
+          name: string
+          user_id: string
+        }[]
+      }
       repair_admin_lockout: { Args: never; Returns: undefined }
     }
     Enums: {
