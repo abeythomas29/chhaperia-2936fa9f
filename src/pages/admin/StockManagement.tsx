@@ -57,7 +57,6 @@ interface ProductCode {
 interface ProductionManager {
   user_id: string;
   name: string;
-  employee_id: string | null;
 }
 
 
