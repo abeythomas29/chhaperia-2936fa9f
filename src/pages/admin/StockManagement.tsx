@@ -302,7 +302,15 @@ export default function StockManagement() {
   });
 
   const handleIssue = async () => {
-    if (!user || !issueProductCodeId || !issueClientId || !issueQuantity) return;
+    if (!user || !issueProductCodeId || !issueQuantity) return;
+    if (issueRecipientType === "client" && !issueClientId) {
+      toast({ title: "Select a client", variant: "destructive" });
+      return;
+    }
+    if (issueRecipientType === "production_manager" && !issueRecipientUserId) {
+      toast({ title: "Select a production manager", variant: "destructive" });
+      return;
+    }
 
     // Block over-issue: validate against computed available stock
     const stock = summaries.find((s) => s.product_code_id === issueProductCodeId);
@@ -320,7 +328,9 @@ export default function StockManagement() {
 
     const { error } = await supabase.from("stock_issues").insert({
       product_code_id: issueProductCodeId,
-      client_id: issueClientId,
+      recipient_type: issueRecipientType,
+      client_id: issueRecipientType === "client" ? issueClientId : null,
+      recipient_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
       quantity: Number(issueQuantity),
       unit: issueUnit,
       thickness_mm: issueThickness ? Number(issueThickness) : null,
@@ -342,13 +352,16 @@ export default function StockManagement() {
 
   const resetIssueForm = () => {
     setIssueProductCodeId("");
+    setIssueRecipientType("client");
     setIssueClientId("");
+    setIssueRecipientUserId("");
     setIssueQuantity("");
     setIssueUnit("meters");
     setIssueThickness("");
     setIssueNotes("");
     setIssueDate(format(new Date(), "yyyy-MM-dd"));
   };
+
 
   const openIssueForProduct = (pcId: string, unit: string) => {
     setIssueProductCodeId(pcId);
