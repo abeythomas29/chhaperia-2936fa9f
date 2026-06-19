@@ -153,7 +153,7 @@ export default function StockManagement() {
     const [{ data: cl }, { data: pc }, { data: pmRoles }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
-      supabase.from("user_roles").select("user_id").eq("role", "production_manager"),
+      supabase.from("user_roles").select("user_id").eq("role", "worker"),
     ]);
     setClients(cl ?? []);
     setProductCodes(pc ?? []);
