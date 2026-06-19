@@ -57,7 +57,6 @@ interface ProductCode {
 interface ProductionManager {
   user_id: string;
   name: string;
-  employee_id: string | null;
 }
 
 
@@ -104,21 +103,13 @@ export default function StockManagement() {
       .order("date", { ascending: false })
       .limit(1000);
 
-    // Fetch stock issues (OUT)
+    // Fetch stock issues (OUT) — embed recipient profile via FK
     const { data: issueData } = await supabase
       .from("stock_issues")
-      .select("id, date, product_code_id, quantity, unit, notes, thickness_mm, client_id, recipient_type, recipient_user_id, product_codes(code), company_clients(name), profiles:issued_by(name)")
+      .select("id, date, product_code_id, quantity, unit, notes, thickness_mm, client_id, recipient_type, recipient_user_id, product_codes(code), company_clients(name), profiles:issued_by(name), recipient:profiles!stock_issues_recipient_user_id_fkey(name)")
       .order("date", { ascending: false })
       .limit(1000);
 
-    // Resolve production manager recipient names for OUT issues
-    const recipientUserIds = Array.from(
-      new Set(((issueData ?? []) as any[]).map((i) => i.recipient_user_id).filter(Boolean))
-    );
-    const { data: recipientProfiles } = recipientUserIds.length
-      ? await supabase.from("profiles").select("user_id, name").in("user_id", recipientUserIds)
-      : { data: [] as any[] };
-    const recipientMap = new Map(((recipientProfiles ?? []) as any[]).map((p) => [p.user_id, p.name]));
 
 
     // Fetch sales (OUT) – finished product sales also reduce stock and should appear in the ledger
@@ -149,18 +140,17 @@ export default function StockManagement() {
       profiles: s.sold_by ? { name: sellerMap.get(s.sold_by) } : null,
     }));
 
-    // Fetch dropdowns — production managers = all active users (matches Admin → Users)
-    const [{ data: cl }, { data: pc }, { data: allProfiles }] = await Promise.all([
+    // Fetch dropdowns — production managers via RPC (bypasses profile RLS)
+    const [{ data: cl }, { data: pc }, { data: pmData }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
-      supabase.from("profiles").select("user_id, name, employee_id, status"),
+      supabase.rpc("list_production_manager_recipients"),
     ]);
     setClients(cl ?? []);
     setProductCodes(pc ?? []);
 
-    const list = ((allProfiles ?? []) as any[])
-      .filter((p) => (p.status ?? "active") === "active")
-      .map((p) => ({ user_id: p.user_id, name: p.name, employee_id: p.employee_id }))
+    const list: ProductionManager[] = ((pmData ?? []) as any[])
+      .map((p) => ({ user_id: p.user_id, name: p.name }))
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     setProductionManagers(list);
 
@@ -250,7 +240,7 @@ export default function StockManagement() {
         product_code: i.product_codes?.code ?? "—",
         thickness_mm: i.thickness_mm != null ? Number(i.thickness_mm) : null,
         client_name: i.recipient_type === "production_manager"
-          ? `Production Mgr: ${recipientMap.get(i.recipient_user_id) ?? "Unknown"}`
+          ? `Production Mgr: ${i.recipient?.name ?? "Unknown"}`
           : (i.company_clients?.name ?? "—"),
 
         quantity: Number(i.quantity),
@@ -677,7 +667,7 @@ export default function StockManagement() {
                   placeholder={productionManagers.length ? "Select production manager" : "No production managers available"}
                   options={productionManagers.map((m) => ({
                     value: m.user_id,
-                    label: `${m.name}${m.employee_id ? ` · ${m.employee_id}` : ""}`,
+                    label: m.name,
                   }))}
                 />
               </div>
