@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Package, Search, Plus, Boxes, Pencil, Trash2 } from "lucide-react";
+import { Package, Search, Plus, Boxes, Pencil, Trash2, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -37,9 +37,25 @@ interface FinishedProduct {
   available: number;
 }
 
+interface StockEntry {
+  id: string;
+  raw_material_id: string;
+  quantity: number;
+  date: string;
+  lot_number: string | null;
+  supplier: string | null;
+  pallets: number | null;
+  thickness_mm: number | null;
+  gsm: number | null;
+  notes: string | null;
+  added_by: string;
+  created_at: string;
+}
+
 export default function InventoryView() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [products, setProducts] = useState<FinishedProduct[]>([]);
+  const [stockEntries, setStockEntries] = useState<StockEntry[]>([]);
   const [search, setSearch] = useState("");
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
@@ -56,10 +72,16 @@ export default function InventoryView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
 
   const fetchMaterials = async () => {
     const { data } = await supabase.from("raw_materials").select("*").order("name");
     setMaterials(data ?? []);
+  };
+
+  const fetchStockEntries = async () => {
+    const { data } = await supabase.from("raw_material_stock_entries").select("*").order("created_at", { ascending: false }).limit(2000);
+    setStockEntries((data ?? []) as StockEntry[]);
   };
 
   const fetchProducts = async () => {
@@ -98,7 +120,7 @@ export default function InventoryView() {
     setProducts(list);
   };
 
-  useEffect(() => { fetchMaterials(); fetchProducts(); }, []);
+  useEffect(() => { fetchMaterials(); fetchProducts(); fetchStockEntries(); }, []);
 
   const addMaterial = async () => {
     if (!newName.trim()) return;
@@ -328,6 +350,7 @@ export default function InventoryView() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10"></TableHead>
                 <TableHead className="w-10">
                   <Checkbox
                     checked={allFilteredSelected ? true : (someFilteredSelected ? "indeterminate" : false)}
@@ -344,37 +367,101 @@ export default function InventoryView() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No materials found</TableCell></TableRow>
-              ) : filtered.map((m) => (
-                <TableRow key={m.id} data-state={selectedIds.has(m.id) ? "selected" : undefined}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(m.id)}
-                      onCheckedChange={() => toggleSelect(m.id)}
-                      aria-label={`Select ${m.name}`}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{m.name}</TableCell>
-                  <TableCell>{m.unit}</TableCell>
-                  <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
-                  <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(m)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget(m)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No materials found</TableCell></TableRow>
+              ) : filtered.map((m) => {
+                const isExpanded = expandedMaterials.has(m.id);
+                const matEntries = stockEntries.filter((e) => e.raw_material_id === m.id);
+                const variantMap = new Map<string, number>();
+                matEntries.forEach((e) => {
+                  const tLabel = e.thickness_mm != null ? `${e.thickness_mm} mm` : "—";
+                  const gLabel = e.gsm != null ? `${e.gsm} gsm` : "—";
+                  const key = (tLabel === "—" && gLabel === "—") ? "No spec" : `${tLabel} · ${gLabel}`;
+                  variantMap.set(key, (variantMap.get(key) ?? 0) + Number(e.quantity) || 0);
+                });
+                const variants = Array.from(variantMap.entries())
+                  .map(([label, qty]) => ({ label, qty }))
+                  .sort((a, b) => {
+                    const an = parseFloat(a.label); const bn = parseFloat(b.label);
+                    if (isNaN(an) && isNaN(bn)) return a.label.localeCompare(b.label);
+                    if (isNaN(an)) return 1;
+                    if (isNaN(bn)) return -1;
+                    return an - bn;
+                  });
+                const toggle = () => {
+                  setExpandedMaterials((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                    return next;
+                  });
+                };
+                return (
+                  <Fragment key={m.id}>
+                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={toggle} data-state={selectedIds.has(m.id) ? "selected" : undefined}>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(ev) => { ev.stopPropagation(); toggle(); }}>
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                      </TableCell>
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(m.id)}
+                          onCheckedChange={() => toggleSelect(m.id)}
+                          aria-label={`Select ${m.name}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{m.name}</TableCell>
+                      <TableCell>{m.unit}</TableCell>
+                      <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
+                      <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
+                      <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(m)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteTarget(m)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow key={`${m.id}-variants`} className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell></TableCell>
+                        <TableCell colSpan={6}>
+                          {variants.length === 0 ? (
+                            <div className="text-sm text-muted-foreground py-2">No variant data yet — add stock entries with thickness to see breakdown.</div>
+                          ) : (
+                            <div className="py-2">
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness / GSM</div>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Specification</TableHead>
+                                    <TableHead className="text-right">Total Inward</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {variants.map((v) => (
+                                    <TableRow key={v.label}>
+                                      <TableCell className="font-medium">{v.label}</TableCell>
+                                      <TableCell className="text-right font-mono text-secondary">+{v.qty.toLocaleString()} {m.unit}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
