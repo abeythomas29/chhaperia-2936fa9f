@@ -612,15 +612,34 @@ export default function StockManagement() {
 
       {/* Issue Stock Dialog */}
       <Dialog open={issueOpen} onOpenChange={(open) => { if (!open) { setIssueOpen(false); resetIssueForm(); } }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Issue Stock to Client</DialogTitle>
-            <DialogDescription>Select a product, client, and quantity to issue.</DialogDescription>
+            <DialogTitle>Issue Stock</DialogTitle>
+            <DialogDescription>Issue stock to a client or to a production manager.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Issue To</Label>
+                <Select
+                  value={issueRecipientType}
+                  onValueChange={(v) => {
+                    setIssueRecipientType(v as "client" | "production_manager");
+                    setIssueClientId("");
+                    setIssueRecipientUserId("");
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="production_manager">Production Manager</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Product Code</Label>
@@ -648,16 +667,31 @@ export default function StockManagement() {
                 );
               })()}
             </div>
-            <div className="space-y-2">
-              <Label>Client</Label>
-              <SearchableSelect
-                value={issueClientId}
-                onValueChange={setIssueClientId}
-                placeholder="Select client"
-                options={clients.map((c) => ({ value: c.id, label: c.name }))}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
+            {issueRecipientType === "client" ? (
+              <div className="space-y-2">
+                <Label>Client</Label>
+                <SearchableSelect
+                  value={issueClientId}
+                  onValueChange={setIssueClientId}
+                  placeholder="Select client"
+                  options={clients.map((c) => ({ value: c.id, label: c.name }))}
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Production Manager</Label>
+                <SearchableSelect
+                  value={issueRecipientUserId}
+                  onValueChange={setIssueRecipientUserId}
+                  placeholder={productionManagers.length ? "Select production manager" : "No production managers available"}
+                  options={productionManagers.map((m) => ({
+                    value: m.user_id,
+                    label: `${m.name}${m.employee_id ? ` · ${m.employee_id}` : ""}`,
+                  }))}
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Quantity ({issueUnit})</Label>
                 <Input type="number" min="0" step="0.01" value={issueQuantity} onChange={(e) => setIssueQuantity(e.target.value)} placeholder="0" />
@@ -679,9 +713,10 @@ export default function StockManagement() {
             </div>
             <div className="space-y-2">
               <Label>Notes (optional)</Label>
-              <Textarea value={issueNotes} onChange={(e) => setIssueNotes(e.target.value)} placeholder="e.g. Delivery challan #123" />
+              <Textarea rows={2} value={issueNotes} onChange={(e) => setIssueNotes(e.target.value)} placeholder="e.g. Delivery challan #123" />
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => { setIssueOpen(false); resetIssueForm(); }}>Cancel</Button>
             <Button onClick={handleIssue} disabled={issuing} className="bg-secondary hover:bg-secondary/90">
