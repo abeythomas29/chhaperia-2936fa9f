@@ -676,7 +676,7 @@ export default function StockManagement() {
                   placeholder={productionManagers.length ? "Select production manager" : "No production managers available"}
                   options={productionManagers.map((m) => ({
                     value: m.user_id,
-                    label: `${m.name}${m.employee_id ? ` · ${m.employee_id}` : ""}`,
+                    label: m.name,
                   }))}
                 />
               </div>
