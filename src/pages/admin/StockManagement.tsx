@@ -660,11 +660,11 @@ export default function StockManagement() {
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>Production Manager</Label>
+                <Label>Production / Slitting Manager</Label>
                 <SearchableSelect
                   value={issueRecipientUserId}
                   onValueChange={setIssueRecipientUserId}
-                  placeholder={productionManagers.length ? "Select production manager" : "No production managers available"}
+                  placeholder={productionManagers.length ? "Select manager" : "No managers available"}
                   options={productionManagers.map((m) => ({
                     value: m.user_id,
                     label: m.name,
