@@ -617,7 +617,7 @@ export default function StockManagement() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="client">Client</SelectItem>
-                    <SelectItem value="production_manager">Production Manager</SelectItem>
+                    <SelectItem value="production_manager">Internal Manager</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
