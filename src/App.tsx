@@ -18,6 +18,7 @@ import Clients from "./pages/admin/Clients";
 import UserManagement from "./pages/admin/UserManagement";
 import RawMaterials from "./pages/admin/RawMaterials";
 import SlittingLogs from "./pages/admin/SlittingLogs";
+import InventoryManagement from "./pages/inventory/InventoryManagement";
 import ProductionEntry from "./pages/worker/ProductionEntry";
 import ProductionHistory from "./pages/worker/ProductionHistory";
 import MyIssues from "./pages/worker/MyIssues";
@@ -47,10 +48,10 @@ const App = () => (
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="logs" element={<ProductionLogs />} />
-              <Route path="stock" element={<StockManagement />} />
+              <Route path="stock" element={<Navigate to="/admin/inventory" replace />} />
               <Route path="products" element={<Products />} />
               <Route path="clients" element={<Clients />} />
-              <Route path="inventory" element={<RawMaterials />} />
+              <Route path="inventory" element={<InventoryManagement />} />
               <Route path="users" element={<UserManagement />} />
               <Route path="sales" element={<SalesHistory />} />
               <Route path="slitting" element={<SlittingLogs />} />
@@ -58,14 +59,15 @@ const App = () => (
             <Route path="/worker" element={<WorkerLayout />}>
               <Route index element={<ProductionEntry />} />
               <Route path="history" element={<ProductionHistory />} />
-              <Route path="stock" element={<StockManagement />} />
-              <Route path="inventory" element={<RawMaterials />} />
+              <Route path="stock" element={<Navigate to="/worker/inventory" replace />} />
+              <Route path="inventory" element={<InventoryManagement />} />
               <Route path="issues" element={<MyIssues />} />
             </Route>
             <Route path="/inventory" element={<InventoryManagerLayout />}>
               <Route index element={<InwardEntry />} />
               <Route path="view" element={<InventoryView />} />
               <Route path="history" element={<InwardHistory />} />
+              <Route path="manage" element={<InventoryManagement />} />
             </Route>
             <Route path="/sales" element={<SalesManagerLayout />}>
               <Route index element={<SalesEntry />} />
@@ -75,6 +77,7 @@ const App = () => (
               <Route index element={<SlittingEntry />} />
               <Route path="history" element={<SlittingHistory />} />
               <Route path="head36-history" element={<Head36History />} />
+              <Route path="inventory" element={<InventoryManagement />} />
             </Route>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />

@@ -16,6 +16,18 @@ interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
+interface IssuedMaterial {
+  issue_id: string;
+  issue_date: string;
+  product_code_id: string;
+  product_code: string | null;
+  thickness_mm: number | null;
+  unit: string | null;
+  notes: string | null;
+  issued_quantity: number;
+  consumed_quantity: number;
+  remaining_quantity: number;
+}
 
 export default function SlittingEntryForm() {
   const { user } = useAuth();
@@ -30,7 +42,10 @@ export default function SlittingEntryForm() {
   const [rollRows, setRollRows] = useState<RollRow[]>([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
   const [sourceRows, setSourceRows] = useState<SourceRow[]>([{ width_mm: "", length_mtr: "", rolls: "" }]);
 
+  const [issuedMaterials, setIssuedMaterials] = useState<IssuedMaterial[]>([]);
+
   const [form, setForm] = useState({
+    issue_id: "",
     product_code_id: "",
     client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
@@ -45,6 +60,11 @@ export default function SlittingEntryForm() {
     notes: "",
   });
 
+  const reloadIssued = async () => {
+    const { data } = await supabase.rpc("list_slitting_issued_materials");
+    setIssuedMaterials((data as IssuedMaterial[]) ?? []);
+  };
+
   useEffect(() => {
     (async () => {
       const [pc, cl] = await Promise.all([
@@ -53,9 +73,12 @@ export default function SlittingEntryForm() {
       ]);
       setProductCodes(pc.data ?? []);
       setClients((cl.data as Client[]) ?? []);
+      await reloadIssued();
       setLoading(false);
     })();
   }, []);
+
+  const selectedIssue = issuedMaterials.find((i) => i.issue_id === form.issue_id) ?? null;
 
 
   // Source calculations (summed across all source rows)
@@ -100,6 +123,10 @@ export default function SlittingEntryForm() {
   // because narrower cuts produce multiple parallel tapes. So validate by area.
   const exceedsSource = sourceSqm > 0 && totalSqm > sourceSqm + 1e-6;
 
+  // Pending validation when a stock issue is selected
+  const exceedsPending =
+    selectedIssue != null && sourceQty > selectedIssue.remaining_quantity + 1e-6;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -119,6 +146,14 @@ export default function SlittingEntryForm() {
       });
       return;
     }
+    if (exceedsPending && selectedIssue) {
+      toast({
+        title: "Exceeds pending issued quantity",
+        description: `Only ${selectedIssue.remaining_quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedIssue.unit ?? ""} remaining on this issue.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSubmitting(true);
 
@@ -132,6 +167,7 @@ export default function SlittingEntryForm() {
       return {
         product_code_id: form.product_code_id,
         client_id: form.client_id || null,
+        stock_issue_id: form.issue_id || null,
         date: isoDate,
         source_quantity: idx === 0 ? sourceSqm : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
@@ -162,6 +198,10 @@ export default function SlittingEntryForm() {
       const fb = rowsToInsert.map(({ batch_id, ...row }) => row);
       ({ error } = await tryInsert(fb));
     }
+    if (error?.code === "PGRST204" && /'stock_issue_id' column/.test(error.message)) {
+      const fb = rowsToInsert.map(({ stock_issue_id, ...row }) => row);
+      ({ error } = await tryInsert(fb));
+    }
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -169,11 +209,13 @@ export default function SlittingEntryForm() {
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
       setForm({
         ...form,
+        issue_id: "",
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
       setSourceRows([{ width_mm: "", length_mtr: "", rolls: "" }]);
       setRollRows([{ width_mm: "", times_cut: "", rolls_per_cut: "" }]);
+      await reloadIssued();
     }
     setSubmitting(false);
   };
@@ -187,6 +229,35 @@ export default function SlittingEntryForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Issued Material — only materials issued to this slitting manager */}
+          <div className="space-y-2 rounded-lg border-2 border-secondary/30 bg-secondary/5 p-3">
+            <Label className="font-semibold">Issued Material (from Inventory Manager)</Label>
+            <SearchableSelect
+              value={form.issue_id}
+              onValueChange={(v) => {
+                const iss = issuedMaterials.find((i) => i.issue_id === v);
+                setForm({
+                  ...form,
+                  issue_id: v,
+                  product_code_id: iss?.product_code_id ?? form.product_code_id,
+                  source_thickness_mm: iss?.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
+                });
+              }}
+              placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
+              options={issuedMaterials.map((i) => ({
+                value: i.issue_id,
+                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+              }))}
+            />
+            {selectedIssue && (
+              <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+                <div>Issued: <b>{Number(selectedIssue.issued_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
+                <div>Consumed: <b>{Number(selectedIssue.consumed_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
+                <div>Pending: <b className={exceedsPending ? "text-destructive" : "text-secondary"}>{Number(selectedIssue.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
             <div className="space-y-2">
               <Label>Product Code *</Label>
@@ -385,7 +456,7 @@ export default function SlittingEntryForm() {
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
 
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource}>
+          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource || exceedsPending}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Slitting Entry
           </Button>

@@ -1,6 +1,6 @@
 import { Outlet, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { ClipboardList, History, LogOut, Loader2, Warehouse, Send, Boxes, Scissors } from "lucide-react";
+import { ClipboardList, History, LogOut, Loader2, Send, Boxes, Scissors } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,6 @@ export default function WorkerLayout() {
   const navItems = [
     { to: "/worker", label: "New Entry", icon: ClipboardList, end: true },
     { to: "/worker/history", label: "My History", icon: History, end: false },
-    { to: "/worker/stock", label: "Stock", icon: Warehouse, end: false },
     { to: "/worker/inventory", label: "Inventory", icon: Boxes, end: false },
     { to: "/worker/issues", label: "My Issues", icon: Send, end: false },
   ];

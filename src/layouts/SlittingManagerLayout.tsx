@@ -31,6 +31,7 @@ export default function SlittingManagerLayout() {
     { to: "/slitting", label: "New Slitting", icon: Scissors, end: true },
     { to: "/slitting/history", label: "My History", icon: History, end: true },
     { to: "/slitting/head36-history", label: "36 Head History", icon: Layers, end: false },
+    { to: "/slitting/inventory", label: "Inventory", icon: Package, end: false },
   ];
 
   if (isWorker) {

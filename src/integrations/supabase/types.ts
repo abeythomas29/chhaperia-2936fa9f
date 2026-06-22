@@ -538,6 +538,7 @@ export type Database = {
           remaining_returned: number
           slitting_manager_id: string
           source_quantity: number
+          stock_issue_id: string | null
           thickness_mm: number | null
           unit: string
           updated_at: string
@@ -556,6 +557,7 @@ export type Database = {
           remaining_returned?: number
           slitting_manager_id: string
           source_quantity: number
+          stock_issue_id?: string | null
           thickness_mm?: number | null
           unit?: string
           updated_at?: string
@@ -574,6 +576,7 @@ export type Database = {
           remaining_returned?: number
           slitting_manager_id?: string
           source_quantity?: number
+          stock_issue_id?: string | null
           thickness_mm?: number | null
           unit?: string
           updated_at?: string
@@ -600,6 +603,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
           },
+          {
+            foreignKeyName: "slitting_entries_stock_issue_id_fkey"
+            columns: ["stock_issue_id"]
+            isOneToOne: false
+            referencedRelation: "stock_issues"
+            referencedColumns: ["id"]
+          },
         ]
       }
       slitting_returns: {
@@ -608,7 +618,9 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          location: string | null
           notes: string | null
+          return_type: string
           returned_by: string
           returned_quantity: number
           slitting_entry_id: string
@@ -620,7 +632,9 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          location?: string | null
           notes?: string | null
+          return_type?: string
           returned_by: string
           returned_quantity?: number
           slitting_entry_id: string
@@ -632,7 +646,9 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          location?: string | null
           notes?: string | null
+          return_type?: string
           returned_by?: string
           returned_quantity?: number
           slitting_entry_id?: string
@@ -777,6 +793,30 @@ export type Database = {
         Returns: {
           name: string
           user_id: string
+        }[]
+      }
+      list_slitting_issued_materials: {
+        Args: never
+        Returns: {
+          consumed_quantity: number
+          issue_date: string
+          issue_id: string
+          issued_quantity: number
+          notes: string
+          product_code: string
+          product_code_id: string
+          remaining_quantity: number
+          thickness_mm: number
+          unit: string
+        }[]
+      }
+      list_wastage_by_category: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          category_id: string
+          category_name: string
+          total_wastage: number
+          unit: string
         }[]
       }
       repair_admin_lockout: { Args: never; Returns: undefined }

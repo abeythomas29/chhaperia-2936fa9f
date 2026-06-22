@@ -98,6 +98,8 @@ export default function MaterialReturn() {
     returned_quantity: "",
     unit: "sqmtr",
     notes: "",
+    return_type: "reusable" as "reusable" | "wastage",
+    location: "",
   });
 
   useEffect(() => { clearLegacyCache(); }, []);
@@ -307,12 +309,24 @@ export default function MaterialReturn() {
       notes: form.notes || null,
       returned_by: user.id,
       created_at: new Date(isoDate + "T12:00:00").toISOString(),
-    };
+      // New fields — fall back if columns missing
+      return_type: form.return_type,
+      location: form.return_type === "reusable" ? (form.location || null) : null,
+    } as SlittingReturnInsert;
 
-    let { error } = await supabase.from("slitting_returns").insert(payload);
+    const tryInsert = async (p: any) => supabase.from("slitting_returns").insert(p);
+    let { error } = await tryInsert(payload);
+    if (error?.code === "PGRST204" && /'location' column/.test(error.message)) {
+      const { location, ...rest } = payload as any;
+      ({ error } = await tryInsert(rest));
+    }
+    if (error?.code === "PGRST204" && /'return_type' column/.test(error.message)) {
+      const { return_type, location, ...rest } = payload as any;
+      ({ error } = await tryInsert(rest));
+    }
     if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
-      const { client_id, ...fallbackPayload } = payload;
-      ({ error } = await supabase.from("slitting_returns").insert(fallbackPayload));
+      const { client_id, ...rest } = payload as any;
+      ({ error } = await tryInsert(rest));
     }
 
     if (error) {
@@ -326,6 +340,8 @@ export default function MaterialReturn() {
         returned_quantity: "",
         unit: "sqmtr",
         notes: "",
+        return_type: "reusable",
+        location: "",
       });
       await load();
     }
@@ -406,6 +422,34 @@ export default function MaterialReturn() {
             </div>
           )}
 
+          {/* Reusable vs Wastage */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, return_type: "reusable" })}
+              className={`rounded-lg border-2 p-3 text-left transition ${
+                form.return_type === "reusable"
+                  ? "border-secondary bg-secondary/10"
+                  : "border-muted hover:border-muted-foreground/30"
+              }`}
+            >
+              <div className="font-semibold">♻ Reusable</div>
+              <div className="text-xs text-muted-foreground">Returns to stock at a storage location</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, return_type: "wastage", location: "" })}
+              className={`rounded-lg border-2 p-3 text-left transition ${
+                form.return_type === "wastage"
+                  ? "border-destructive bg-destructive/10"
+                  : "border-muted hover:border-muted-foreground/30"
+              }`}
+            >
+              <div className="font-semibold">🗑 Wastage</div>
+              <div className="text-xs text-muted-foreground">Counts towards total wastage by category</div>
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Returned Quantity (sqm) *</Label>
@@ -423,6 +467,18 @@ export default function MaterialReturn() {
               <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match grouped source totals.</p>
             </div>
           </div>
+
+          {form.return_type === "reusable" && (
+            <div className="space-y-2">
+              <Label>Return Location *</Label>
+              {/* TODO: switch to dropdown once storage_locations table is defined */}
+              <Input
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="e.g. Rack A-3 / Bay 2"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Notes</Label>

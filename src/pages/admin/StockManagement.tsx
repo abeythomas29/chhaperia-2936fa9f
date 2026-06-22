@@ -60,7 +60,12 @@ interface ProductionManager {
 }
 
 
-export default function StockManagement() {
+interface StockManagementProps {
+  embedded?: boolean;
+  readOnly?: boolean;
+}
+
+export default function StockManagement({ embedded = false, readOnly = false }: StockManagementProps = {}) {
   const { user } = useAuth();
   const [summaries, setSummaries] = useState<StockSummary[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -352,12 +357,16 @@ export default function StockManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Stock Management</h1>
-        <Button onClick={() => setIssueOpen(true)} className="bg-secondary hover:bg-secondary/90">
-          <PackagePlus className="h-4 w-4 mr-2" /> Issue Stock
-        </Button>
-      </div>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Stock Management</h1>
+          {!readOnly && (
+            <Button onClick={() => setIssueOpen(true)} className="bg-secondary hover:bg-secondary/90">
+              <PackagePlus className="h-4 w-4 mr-2" /> Issue Stock
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -422,14 +431,16 @@ export default function StockManagement() {
                   </div>
                 )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-3"
-                  onClick={() => openIssueForProduct(s.product_code_id, s.unit)}
-                >
-                  Issue
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-3"
+                    onClick={() => openIssueForProduct(s.product_code_id, s.unit)}
+                  >
+                    Issue
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))
@@ -484,7 +495,7 @@ export default function StockManagement() {
                           <TableCell>{e.unit}</TableCell>
                           <TableCell>{e.person ?? "—"}</TableCell>
                           <TableCell>
-                            {e.thickness_mm == null && (
+                            {e.thickness_mm == null && !readOnly && (
                               <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setEditEntryId(e.id); setEditThicknessValue(""); setEditThicknessOpen(true); }}>
                                 <Pencil className="h-3 w-3 mr-1" /> Add
                               </Button>
