@@ -647,6 +647,7 @@ export type Database = {
           slitting_entry_id: string
           unit: string
           updated_at: string
+          wastage_quantity: number | null
         }
         Insert: {
           client_id?: string | null
@@ -661,6 +662,7 @@ export type Database = {
           slitting_entry_id: string
           unit?: string
           updated_at?: string
+          wastage_quantity?: number | null
         }
         Update: {
           client_id?: string | null
@@ -675,6 +677,7 @@ export type Database = {
           slitting_entry_id?: string
           unit?: string
           updated_at?: string
+          wastage_quantity?: number | null
         }
         Relationships: [
           {

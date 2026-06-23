@@ -327,13 +327,14 @@ export default function MaterialReturn() {
       slitting_entry_id: selected.anchorId,
       client_id: form.client_id || null,
       date: isoDate,
-      returned_quantity: qtyToSave,
+      returned_quantity: isWastage ? 0 : qtyToSave,
       unit: isWastage ? "sqmtr" : form.unit,
       notes: form.notes || null,
       returned_by: user.id,
       created_at: new Date(isoDate + "T12:00:00").toISOString(),
       return_type: form.return_type,
       location: form.return_type === "reusable" ? (form.location || null) : null,
+      wastage_quantity: isWastage ? qtyToSave : null,
     } as SlittingReturnInsert;
 
 
@@ -343,8 +344,12 @@ export default function MaterialReturn() {
       const { location, ...rest } = payload as any;
       ({ error } = await tryInsert(rest));
     }
+    if (error?.code === "PGRST204" && /'wastage_quantity' column/.test(error.message)) {
+      const { wastage_quantity, ...rest } = payload as any;
+      ({ error } = await tryInsert(rest));
+    }
     if (error?.code === "PGRST204" && /'return_type' column/.test(error.message)) {
-      const { return_type, location, ...rest } = payload as any;
+      const { return_type, location, wastage_quantity, ...rest } = payload as any;
       ({ error } = await tryInsert(rest));
     }
     if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
@@ -473,33 +478,40 @@ export default function MaterialReturn() {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Returned Quantity (sqm) *</Label>
-              <Input
-                type="number"
-                step="any"
-                value={form.returned_quantity}
-                onChange={(e) => setForm({ ...form, returned_quantity: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Unit</Label>
-              <Input value="Square Meters (sqmtr)" disabled />
-              <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match grouped source totals.</p>
-            </div>
-          </div>
-
           {form.return_type === "reusable" && (
-            <div className="space-y-2">
-              <Label>Return Location *</Label>
-              {/* TODO: switch to dropdown once storage_locations table is defined */}
-              <Input
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="e.g. Rack A-3 / Bay 2"
-              />
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Returned Quantity (sqm) *</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.returned_quantity}
+                    onChange={(e) => setForm({ ...form, returned_quantity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <Input value="Square Meters (sqmtr)" disabled />
+                  <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match grouped source totals.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Return Location *</Label>
+                <Input
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  placeholder="e.g. Rack A-3 / Bay 2"
+                />
+              </div>
+            </>
+          )}
+
+          {form.return_type === "wastage" && selected && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <div className="text-muted-foreground">Calculated wastage (auto-saved)</div>
+              <div className="text-lg font-bold text-destructive">{formatNumber(autoWastage)} sqmtr</div>
+              <div className="text-xs text-muted-foreground">Source − Produced − Already Returned</div>
             </div>
           )}
 
@@ -512,8 +524,135 @@ export default function MaterialReturn() {
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Return
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setWastageDialogOpen(true)}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" /> Wastage Count
+          </Button>
         </form>
+
+        <WastageCountDialog open={wastageDialogOpen} onOpenChange={setWastageDialogOpen} />
       </CardContent>
     </Card>
+  );
+}
+
+function WastageCountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("slitting_returns")
+        .select("id, date, returned_quantity, wastage_quantity, unit, notes, return_type, client_id, slitting_entry_id")
+        .eq("return_type", "wastage")
+        .order("date", { ascending: false })
+        .limit(1000);
+      if (error) {
+        console.error("[Wastage] fetch error:", error);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const wastageRows = ((data as any[]) ?? []);
+      const entryIds = Array.from(new Set(wastageRows.map((r) => r.slitting_entry_id).filter(Boolean)));
+      const clientIds = Array.from(new Set(wastageRows.map((r) => r.client_id).filter(Boolean)));
+
+      const [entriesRes, clientsRes] = await Promise.all([
+        entryIds.length
+          ? supabase
+              .from("slitting_entries")
+              .select("id, thickness_mm, product_codes(code)")
+              .in("id", entryIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clientIds.length
+          ? supabase.from("company_clients").select("id, name").in("id", clientIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const entryMap = new Map<string, any>();
+      ((entriesRes.data as any[]) ?? []).forEach((e: any) => entryMap.set(e.id, e));
+      const clientMap = new Map<string, string>();
+      ((clientsRes.data as any[]) ?? []).forEach((c: any) => clientMap.set(c.id, c.name));
+
+      const enriched = wastageRows.map((r) => {
+        const ent = entryMap.get(r.slitting_entry_id);
+        return {
+          ...r,
+          product: ent?.product_codes?.code ?? "—",
+          thickness_mm: ent?.thickness_mm ?? null,
+          gsm: null,
+          client_name: r.client_id ? (clientMap.get(r.client_id) ?? "—") : "—",
+          qty: Number(r.wastage_quantity ?? r.returned_quantity ?? 0),
+        };
+      });
+      setRows(enriched);
+      setLoading(false);
+    })();
+  }, [open]);
+
+  const total = rows.reduce((s, r) => s + Number(r.qty || 0), 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" /> Wastage Count
+          </DialogTitle>
+        </DialogHeader>
+        <div className="mb-2 rounded-md bg-destructive/10 p-2 text-center text-sm font-semibold text-destructive">
+          Total Wastage: {total.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqmtr
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        ) : rows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No wastage entries found.</div>
+        ) : (
+          <div className="max-h-[60vh] overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Thickness</TableHead>
+                  <TableHead>GSM</TableHead>
+                  <TableHead className="text-right">Wastage Qty</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.date ? format(new Date(r.date), "dd/MM/yy") : "—"}</TableCell>
+                    <TableCell className="font-mono">{r.product}</TableCell>
+                    <TableCell>{r.client_name}</TableCell>
+                    <TableCell>{r.thickness_mm ?? "—"} mm</TableCell>
+                    <TableCell>{r.gsm ?? "—"}</TableCell>
+                    <TableCell className="text-right font-semibold text-destructive">
+                      {Number(r.qty).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>{r.unit ?? "sqmtr"}</TableCell>
+                    <TableCell className="max-w-[200px] truncate" title={r.notes ?? ""}>{r.notes ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        <div className="mt-2 text-right text-sm font-semibold">
+          Total: {total.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqmtr
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
