@@ -445,9 +445,21 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
               <Label>Supplier / From</Label>
               <Input value={stockSupplier} onChange={(e) => setStockSupplier(e.target.value)} placeholder="e.g. Combined Origins Ltd" />
             </div>
-            <div>
-              <Label>Pallets / Pieces</Label>
-              <Input type="number" min="0" step="1" value={stockPallets} onChange={(e) => setStockPallets(e.target.value)} placeholder="e.g. 29" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Pack Type</Label>
+                <Select value={stockPackType} onValueChange={(v) => setStockPackType(v as "pallet" | "roll")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pallet">Pallet</SelectItem>
+                    <SelectItem value="roll">Roll</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Total {stockPackType === "pallet" ? "Pallets" : "Rolls"}</Label>
+                <Input type="number" min="0" step="1" value={stockPackCount} onChange={(e) => setStockPackCount(e.target.value)} placeholder="e.g. 12" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
