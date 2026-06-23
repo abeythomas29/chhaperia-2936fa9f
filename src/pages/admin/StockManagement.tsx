@@ -460,16 +460,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   </div>
                 )}
 
-                {!readOnly && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-3"
-                    onClick={() => openIssueForProduct(s.product_code_id, s.unit)}
-                  >
-                    Issue
-                  </Button>
-                )}
+                {/* Per-card Issue button removed — use top-level Issue Stock button */}
               </CardContent>
             </Card>
           ))
