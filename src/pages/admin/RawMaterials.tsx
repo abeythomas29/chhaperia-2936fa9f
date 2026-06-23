@@ -396,94 +396,164 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     fetchData();
   };
 
+  const actionButtons = !readOnly ? (
+    <div className="flex flex-wrap gap-2">
+      <Dialog open={stockOpen} onOpenChange={setStockOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline"><ArrowDownToLine className="h-4 w-4 mr-2" />Add Stock</Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Stock (Purchase)</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Raw Material</Label>
+              <Select value={stockMaterialId} onValueChange={setStockMaterialId}>
+                <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
+                <SelectContent>{materials.filter(m => m.status === "active").map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Quantity ({materials.find(m => m.id === stockMaterialId)?.unit ?? 'kg'})</Label>
+              <Input type="number" min="0" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="0" />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input type="date" value={stockDate} onChange={(e) => setStockDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Lot Number</Label>
+              <Input value={stockLot} onChange={(e) => setStockLot(e.target.value)} placeholder="e.g. LOT-2025-001" />
+            </div>
+            <div>
+              <Label>Supplier / From</Label>
+              <Input value={stockSupplier} onChange={(e) => setStockSupplier(e.target.value)} placeholder="e.g. Combined Origins Ltd" />
+            </div>
+            <div>
+              <Label>Pallets / Pieces</Label>
+              <Input type="number" min="0" step="1" value={stockPallets} onChange={(e) => setStockPallets(e.target.value)} placeholder="e.g. 29" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Thickness (mm)</Label>
+                <Input type="number" min="0" step="0.001" value={stockThickness} onChange={(e) => setStockThickness(e.target.value)} placeholder="e.g. 0.13" />
+              </div>
+              <div>
+                <Label>GSM</Label>
+                <Input type="number" min="0" step="0.01" value={stockGsm} onChange={(e) => setStockGsm(e.target.value)} placeholder="e.g. 80" />
+              </div>
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input value={stockNotes} onChange={(e) => setStockNotes(e.target.value)} placeholder="e.g. invoice #" />
+            </div>
+            <Button onClick={addStockEntry} className="w-full bg-secondary hover:bg-secondary/90">Add Stock</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={issueOpen} onOpenChange={(o) => { setIssueOpen(o); if (!o) resetIssueForm(); }}>
+        <DialogTrigger asChild>
+          <Button variant="outline"><ArrowUpFromLine className="h-4 w-4 mr-2" />Issue Material</Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Issue Raw Material</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Raw Material</Label>
+              <Select value={issueMaterialId} onValueChange={setIssueMaterialId}>
+                <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
+                <SelectContent>{materials.filter(m => m.status === "active").map((m) => <SelectItem key={m.id} value={m.id}>{m.name} — {Number(m.current_stock).toLocaleString()} {m.unit} in stock</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Issue Unit</Label>
+                <Select value={issueUnit} onValueChange={(v) => setIssueUnit(v as "kg" | "sqm")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                    <SelectItem value="sqm">Square Meters (sqm)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Quantity ({issueUnit})</Label>
+                <Input type="number" min="0" step="0.01" value={issueQty} onChange={(e) => setIssueQty(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>GSM {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
+                <Input type="number" min="0" step="0.01" value={issueGsm} onChange={(e) => setIssueGsm(e.target.value)} placeholder="e.g. 110" />
+              </div>
+              <div>
+                <Label>Thickness (mm)</Label>
+                <Input type="number" min="0" step="0.001" value={issueThickness} onChange={(e) => setIssueThickness(e.target.value)} placeholder="optional" />
+              </div>
+            </div>
+            {issueUnit === "sqm" && issueQty && issueGsm && Number(issueGsm) > 0 && (
+              <div className="text-xs rounded bg-muted px-3 py-2">
+                Will deduct <span className="font-semibold">{((Number(issueQty) * Number(issueGsm)) / 1000).toFixed(2)} kg</span>
+                {" "}from inventory ({issueQty} sqm × {issueGsm} gsm ÷ 1000)
+              </div>
+            )}
+            <div>
+              <Label>Date</Label>
+              <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Issued To (Production / Slitting Manager)</Label>
+              <Select value={issueRecipientId} onValueChange={setIssueRecipientId}>
+                <SelectTrigger><SelectValue placeholder="Select recipient (optional)" /></SelectTrigger>
+                <SelectContent>{recipients.map((r) => <SelectItem key={r.user_id} value={r.user_id}>{r.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input value={issueNotes} onChange={(e) => setIssueNotes(e.target.value)} placeholder="e.g. PO# or job ref" />
+            </div>
+            <Button onClick={issueMaterial} className="w-full bg-secondary hover:bg-secondary/90">Issue Material</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogTrigger asChild>
+          <Button className="bg-secondary hover:bg-secondary/90"><Plus className="h-4 w-4 mr-2" />Add Material</Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Raw Material</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. ALUMINIUM FOIL 009MIC" /></div>
+            <div>
+              <Label>Unit</Label>
+              <Select value={newUnit} onValueChange={setNewUnit}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                  <SelectItem value="meters">Meters</SelectItem>
+                  <SelectItem value="rolls">Rolls</SelectItem>
+                  <SelectItem value="pieces">Pieces</SelectItem>
+                  <SelectItem value="liters">Liters</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={addMaterial} className="w-full bg-secondary hover:bg-secondary/90">Add</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-6">
-      {!embedded && (
+      {!embedded ? (
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Raw Materials</h1>
-          {!readOnly && (
-            <div className="flex gap-2">
-              <Dialog open={stockOpen} onOpenChange={setStockOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline"><ArrowDownToLine className="h-4 w-4 mr-2" />Add Stock</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Stock (Purchase)</DialogTitle></DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Raw Material</Label>
-                      <Select value={stockMaterialId} onValueChange={setStockMaterialId}>
-                        <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
-                        <SelectContent>{materials.filter(m => m.status === "active").map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Quantity ({materials.find(m => m.id === stockMaterialId)?.unit ?? 'kg'})</Label>
-                      <Input type="number" min="0" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="0" />
-                    </div>
-                    <div>
-                      <Label>Date</Label>
-                      <Input type="date" value={stockDate} onChange={(e) => setStockDate(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Lot Number</Label>
-                      <Input value={stockLot} onChange={(e) => setStockLot(e.target.value)} placeholder="e.g. LOT-2025-001" />
-                    </div>
-                    <div>
-                      <Label>Supplier / From</Label>
-                      <Input value={stockSupplier} onChange={(e) => setStockSupplier(e.target.value)} placeholder="e.g. Combined Origins Ltd" />
-                    </div>
-                    <div>
-                      <Label>Pallets / Pieces</Label>
-                      <Input type="number" min="0" step="1" value={stockPallets} onChange={(e) => setStockPallets(e.target.value)} placeholder="e.g. 29" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Thickness (mm)</Label>
-                        <Input type="number" min="0" step="0.001" value={stockThickness} onChange={(e) => setStockThickness(e.target.value)} placeholder="e.g. 0.13" />
-                      </div>
-                      <div>
-                        <Label>GSM</Label>
-                        <Input type="number" min="0" step="0.01" value={stockGsm} onChange={(e) => setStockGsm(e.target.value)} placeholder="e.g. 80" />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Notes (optional)</Label>
-                      <Input value={stockNotes} onChange={(e) => setStockNotes(e.target.value)} placeholder="e.g. invoice #" />
-                    </div>
-                    <Button onClick={addStockEntry} className="w-full bg-secondary hover:bg-secondary/90">Add Stock</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-secondary hover:bg-secondary/90"><Plus className="h-4 w-4 mr-2" />Add Material</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Raw Material</DialogTitle></DialogHeader>
-                  <div className="space-y-4">
-                    <div><Label>Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. ALUMINIUM FOIL 009MIC" /></div>
-                    <div>
-                      <Label>Unit</Label>
-                      <Select value={newUnit} onValueChange={setNewUnit}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="kg">Kilograms (kg)</SelectItem>
-                          <SelectItem value="meters">Meters</SelectItem>
-                          <SelectItem value="rolls">Rolls</SelectItem>
-                          <SelectItem value="pieces">Pieces</SelectItem>
-                          <SelectItem value="liters">Liters</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button onClick={addMaterial} className="w-full bg-secondary hover:bg-secondary/90">Add</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
+          {actionButtons}
         </div>
+      ) : (
+        !readOnly && <div className="flex justify-end">{actionButtons}</div>
       )}
 
       <div className="flex flex-wrap gap-2 items-center">
