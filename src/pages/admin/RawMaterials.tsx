@@ -96,7 +96,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [stockDate, setStockDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [stockLot, setStockLot] = useState("");
   const [stockSupplier, setStockSupplier] = useState("");
-  const [stockPallets, setStockPallets] = useState("");
+  const [stockPackType, setStockPackType] = useState<"pallet" | "roll">("pallet");
+  const [stockPackCount, setStockPackCount] = useState("");
   const [stockThickness, setStockThickness] = useState("");
   const [stockGsm, setStockGsm] = useState("");
   const [stockNotes, setStockNotes] = useState("");
