@@ -774,6 +774,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
 
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
