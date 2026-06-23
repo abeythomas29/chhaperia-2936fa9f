@@ -710,27 +710,37 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                             <div className="text-sm text-muted-foreground py-2">No variant data yet — add stock entries with thickness to see breakdown.</div>
                           ) : (
                             <div className="py-2">
-                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness / GSM</div>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Specification</TableHead>
-                                    <TableHead className="text-right">In</TableHead>
-                                    <TableHead className="text-right">Out</TableHead>
-                                    <TableHead className="text-right">Balance</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {variants.map((v) => (
-                                    <TableRow key={v.label}>
-                                      <TableCell className="font-medium">{v.label}</TableCell>
-                                      <TableCell className="text-right font-mono text-secondary">+{v.in.toLocaleString()} {m.unit}</TableCell>
-                                      <TableCell className="text-right font-mono text-destructive">−{v.out.toLocaleString()} {m.unit}</TableCell>
-                                      <TableCell className="text-right font-mono font-semibold">{v.net.toLocaleString()} {m.unit}</TableCell>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Variants by Thickness / GSM / Lot</div>
+                              <div className="overflow-x-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="whitespace-nowrap">Lot No</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">Thickness</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">GSM</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">Pallet / Roll</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">In</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">Out</TableHead>
+                                      <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {variants.map((v, idx) => (
+                                      <TableRow key={`${v.thickness ?? "-"}|${v.gsm ?? "-"}|${v.lot ?? "-"}|${idx}`}>
+                                        <TableCell className="font-mono text-xs break-all">{v.lot ?? "—"}</TableCell>
+                                        <TableCell className="text-right font-mono whitespace-nowrap">{v.thickness != null ? `${v.thickness} mm` : "—"}</TableCell>
+                                        <TableCell className="text-right font-mono whitespace-nowrap">{v.gsm != null ? `${v.gsm} gsm` : "—"}</TableCell>
+                                        <TableCell className="text-right font-mono whitespace-nowrap">
+                                          {v.packCount > 0 ? `${v.packCount.toLocaleString()} ${v.packType === "roll" ? "rolls" : "pallets"}` : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-secondary whitespace-nowrap">+{v.in.toLocaleString()} {m.unit}</TableCell>
+                                        <TableCell className="text-right font-mono text-destructive whitespace-nowrap">−{v.out.toLocaleString()} {m.unit}</TableCell>
+                                        <TableCell className="text-right font-mono font-semibold whitespace-nowrap">{v.net.toLocaleString()} {m.unit}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
                             </div>
                           )}
                         </TableCell>
