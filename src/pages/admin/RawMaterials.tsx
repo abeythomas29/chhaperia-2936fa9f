@@ -632,26 +632,47 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                 <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No raw materials found</TableCell></TableRow>
               ) : filtered.map((m) => {
                 const isExpanded = expandedMaterials.has(m.id);
-                // Build variants by thickness from stockEntries (all, not filtered by search/date)
+                // Build lot-aware variants: group by thickness · gsm · lot_no
                 const matEntries = stockEntries.filter((e) => e.raw_material_id === m.id);
-                const variantMap = new Map<string, { in: number; out: number }>();
+                type Group = {
+                  thickness: number | null;
+                  gsm: number | null;
+                  lot: string | null;
+                  packType: "pallet" | "roll" | null;
+                  packCount: number;
+                  in: number;
+                  out: number;
+                };
+                const groupMap = new Map<string, Group>();
                 matEntries.forEach((e) => {
-                  const tLabel = e.thickness_mm != null ? `${e.thickness_mm} mm` : "—";
-                  const gLabel = e.gsm != null ? `${e.gsm} gsm` : "—";
-                  const key = (tLabel === "—" && gLabel === "—") ? "No spec" : `${tLabel} · ${gLabel}`;
-                  const v = variantMap.get(key) ?? { in: 0, out: 0 };
-                  if (e.kind === "out" || e.kind === "issue") v.out += Number(e.quantity) || 0;
-                  else v.in += Number(e.quantity) || 0;
-                  variantMap.set(key, v);
+                  const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+                  const g = e.gsm != null ? Number(e.gsm) : null;
+                  const lot = e.lot_number?.trim() || null;
+                  const key = `${t ?? "-"}|${g ?? "-"}|${lot ?? "-"}`;
+                  const grp = groupMap.get(key) ?? {
+                    thickness: t, gsm: g, lot, packType: null, packCount: 0, in: 0, out: 0,
+                  };
+                  const isOut = e.kind === "out" || e.kind === "issue";
+                  if (isOut) grp.out += Number(e.quantity) || 0;
+                  else {
+                    grp.in += Number(e.quantity) || 0;
+                    // Aggregate pack counts only from "in" entries
+                    const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
+                    const rc = e.roll_count != null ? Number(e.roll_count) : null;
+                    if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
+                    else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
+                    else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  }
+                  groupMap.set(key, grp);
                 });
-                const variants = Array.from(variantMap.entries())
-                  .map(([label, v]) => ({ label, in: v.in, out: v.out, net: v.in - v.out }))
+                const variants = Array.from(groupMap.values())
+                  .map((v) => ({ ...v, net: v.in - v.out }))
                   .sort((a, b) => {
-                    const an = parseFloat(a.label); const bn = parseFloat(b.label);
-                    if (isNaN(an) && isNaN(bn)) return a.label.localeCompare(b.label);
-                    if (isNaN(an)) return 1;
-                    if (isNaN(bn)) return -1;
-                    return an - bn;
+                    const at = a.thickness ?? Infinity, bt = b.thickness ?? Infinity;
+                    if (at !== bt) return at - bt;
+                    const ag = a.gsm ?? Infinity, bg = b.gsm ?? Infinity;
+                    if (ag !== bg) return ag - bg;
+                    return (a.lot ?? "").localeCompare(b.lot ?? "");
                   });
                 const toggle = () => {
                   setExpandedMaterials((prev) => {
