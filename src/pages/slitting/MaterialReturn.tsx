@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PackageOpen } from "lucide-react";
+import { Loader2, PackageOpen, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const MATERIAL_RETURN_ROWS_CACHE_KEY = "material-return-source-rows-v3";
 const LEGACY_CACHE_KEYS = [
@@ -288,13 +290,34 @@ export default function MaterialReturn() {
   const selected = batches.find((batch) => batch.key === form.batch_key);
   const alreadyReturned = selected ? selected.rowIds.reduce((sum, id) => sum + (returnsByRow[id] ?? 0), 0) : 0;
   const newReturn = parseFloat(form.returned_quantity) || 0;
-  const wastage = selected ? selected.sourceQuantity - selected.producedSqm - alreadyReturned - newReturn : 0;
+  const autoWastage = selected ? Math.max(0, selected.sourceQuantity - selected.producedSqm - alreadyReturned) : 0;
+  const wastage = selected
+    ? (form.return_type === "wastage"
+        ? selected.sourceQuantity - selected.producedSqm - alreadyReturned
+        : selected.sourceQuantity - selected.producedSqm - alreadyReturned - newReturn)
+    : 0;
   const matched = selected && Math.abs(wastage) < 0.01;
+
+  const [wastageDialogOpen, setWastageDialogOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selected || !newReturn) {
-      toast({ title: "Missing fields", description: "Select an entry and enter returned quantity.", variant: "destructive" });
+    if (!user || !selected) {
+      toast({ title: "Missing fields", description: "Select a slitting entry.", variant: "destructive" });
+      return;
+    }
+    const isWastage = form.return_type === "wastage";
+    const qtyToSave = isWastage ? autoWastage : newReturn;
+    if (!qtyToSave || qtyToSave <= 0) {
+      toast({
+        title: isWastage ? "No wastage to save" : "Missing quantity",
+        description: isWastage ? "Calculated wastage is zero." : "Enter returned quantity.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isWastage && form.return_type === "reusable" && !form.location.trim()) {
+      toast({ title: "Location required", description: "Enter return location for reusable.", variant: "destructive" });
       return;
     }
 
@@ -304,15 +327,15 @@ export default function MaterialReturn() {
       slitting_entry_id: selected.anchorId,
       client_id: form.client_id || null,
       date: isoDate,
-      returned_quantity: newReturn,
-      unit: form.unit,
+      returned_quantity: qtyToSave,
+      unit: isWastage ? "sqmtr" : form.unit,
       notes: form.notes || null,
       returned_by: user.id,
       created_at: new Date(isoDate + "T12:00:00").toISOString(),
-      // New fields — fall back if columns missing
       return_type: form.return_type,
       location: form.return_type === "reusable" ? (form.location || null) : null,
     } as SlittingReturnInsert;
+
 
     const tryInsert = async (p: any) => supabase.from("slitting_returns").insert(p);
     let { error } = await tryInsert(payload);
