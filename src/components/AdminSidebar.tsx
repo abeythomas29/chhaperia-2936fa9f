@@ -34,6 +34,7 @@ const mainItems = [
   { title: "Production Logs", url: "/admin/logs", icon: ClipboardList },
   { title: "Slitting Logs", url: "/admin/slitting", icon: Scissors },
   { title: "Inventory Management", url: "/admin/inventory", icon: Warehouse },
+  { title: "Issued", url: "/admin/issued", icon: PackageOpen },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Sales", url: "/admin/sales", icon: ShoppingCart },
   { title: "Clients", url: "/admin/clients", icon: Building2 },

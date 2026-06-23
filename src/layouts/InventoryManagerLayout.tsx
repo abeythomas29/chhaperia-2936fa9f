@@ -1,6 +1,6 @@
 import { Outlet, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { Package, ArrowDownToLine, History, LogOut, Loader2, ShoppingCart, ListOrdered, Scissors, ClipboardList, Warehouse } from "lucide-react";
+import { Package, ArrowDownToLine, History, LogOut, Loader2, ShoppingCart, ListOrdered, Scissors, ClipboardList, Warehouse, PackageOpen } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,7 @@ export default function InventoryManagerLayout() {
   const navItems = [
     { to: "/inventory", label: "Add Stock", icon: ArrowDownToLine, end: true },
     { to: "/inventory/manage", label: "Inventory Management", icon: Warehouse, end: false },
+    { to: "/inventory/issued", label: "Issued", icon: PackageOpen, end: false },
     { to: "/inventory/history", label: "My History", icon: History, end: false },
   ];
   if (isSalesManager) {
