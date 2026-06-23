@@ -379,7 +379,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
         {loading ? (
           <p className="text-muted-foreground col-span-full text-center py-8">Loading...</p>
         ) : filteredSummaries.length === 0 ? (
