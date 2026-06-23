@@ -537,7 +537,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 Outward Supply (Issues & Sales)
                 <span className="text-sm font-normal text-muted-foreground">({outData.length} entries)</span>
               </h2>
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
