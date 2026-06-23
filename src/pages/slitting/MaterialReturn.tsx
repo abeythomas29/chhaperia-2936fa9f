@@ -540,3 +540,119 @@ export default function MaterialReturn() {
     </Card>
   );
 }
+
+function WastageCountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("slitting_returns")
+        .select("id, date, returned_quantity, wastage_quantity, unit, notes, return_type, client_id, slitting_entry_id")
+        .eq("return_type", "wastage")
+        .order("date", { ascending: false })
+        .limit(1000);
+      if (error) {
+        console.error("[Wastage] fetch error:", error);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const wastageRows = ((data as any[]) ?? []);
+      const entryIds = Array.from(new Set(wastageRows.map((r) => r.slitting_entry_id).filter(Boolean)));
+      const clientIds = Array.from(new Set(wastageRows.map((r) => r.client_id).filter(Boolean)));
+
+      const [entriesRes, clientsRes] = await Promise.all([
+        entryIds.length
+          ? supabase
+              .from("slitting_entries")
+              .select("id, thickness_mm, product_codes(code)")
+              .in("id", entryIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clientIds.length
+          ? supabase.from("company_clients").select("id, name").in("id", clientIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const entryMap = new Map<string, any>();
+      ((entriesRes.data as any[]) ?? []).forEach((e: any) => entryMap.set(e.id, e));
+      const clientMap = new Map<string, string>();
+      ((clientsRes.data as any[]) ?? []).forEach((c: any) => clientMap.set(c.id, c.name));
+
+      const enriched = wastageRows.map((r) => {
+        const ent = entryMap.get(r.slitting_entry_id);
+        return {
+          ...r,
+          product: ent?.product_codes?.code ?? "—",
+          thickness_mm: ent?.thickness_mm ?? null,
+          gsm: null,
+          client_name: r.client_id ? (clientMap.get(r.client_id) ?? "—") : "—",
+          qty: Number(r.wastage_quantity ?? r.returned_quantity ?? 0),
+        };
+      });
+      setRows(enriched);
+      setLoading(false);
+    })();
+  }, [open]);
+
+  const total = rows.reduce((s, r) => s + Number(r.qty || 0), 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" /> Wastage Count
+          </DialogTitle>
+        </DialogHeader>
+        <div className="mb-2 rounded-md bg-destructive/10 p-2 text-center text-sm font-semibold text-destructive">
+          Total Wastage: {total.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqmtr
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        ) : rows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No wastage entries found.</div>
+        ) : (
+          <div className="max-h-[60vh] overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Thickness</TableHead>
+                  <TableHead>GSM</TableHead>
+                  <TableHead className="text-right">Wastage Qty</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.date ? format(new Date(r.date), "dd/MM/yy") : "—"}</TableCell>
+                    <TableCell className="font-mono">{r.product}</TableCell>
+                    <TableCell>{r.client_name}</TableCell>
+                    <TableCell>{r.thickness_mm ?? "—"} mm</TableCell>
+                    <TableCell>{r.gsm ?? "—"}</TableCell>
+                    <TableCell className="text-right font-semibold text-destructive">
+                      {Number(r.qty).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>{r.unit ?? "sqmtr"}</TableCell>
+                    <TableCell className="max-w-[200px] truncate" title={r.notes ?? ""}>{r.notes ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        <div className="mt-2 text-right text-sm font-semibold">
+          Total: {total.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqmtr
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
