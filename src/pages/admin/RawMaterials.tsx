@@ -707,6 +707,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       <Card>
         <CardHeader><CardTitle>Recent Stock Entries ({filteredEntries.length})</CardTitle></CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
