@@ -478,33 +478,40 @@ export default function MaterialReturn() {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Returned Quantity (sqm) *</Label>
-              <Input
-                type="number"
-                step="any"
-                value={form.returned_quantity}
-                onChange={(e) => setForm({ ...form, returned_quantity: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Unit</Label>
-              <Input value="Square Meters (sqmtr)" disabled />
-              <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match grouped source totals.</p>
-            </div>
-          </div>
-
           {form.return_type === "reusable" && (
-            <div className="space-y-2">
-              <Label>Return Location *</Label>
-              {/* TODO: switch to dropdown once storage_locations table is defined */}
-              <Input
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="e.g. Rack A-3 / Bay 2"
-              />
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Returned Quantity (sqm) *</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.returned_quantity}
+                    onChange={(e) => setForm({ ...form, returned_quantity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <Input value="Square Meters (sqmtr)" disabled />
+                  <p className="text-xs text-muted-foreground">Returns are tracked in sqm to match grouped source totals.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Return Location *</Label>
+                <Input
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  placeholder="e.g. Rack A-3 / Bay 2"
+                />
+              </div>
+            </>
+          )}
+
+          {form.return_type === "wastage" && selected && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <div className="text-muted-foreground">Calculated wastage (auto-saved)</div>
+              <div className="text-lg font-bold text-destructive">{formatNumber(autoWastage)} sqmtr</div>
+              <div className="text-xs text-muted-foreground">Source − Produced − Already Returned</div>
             </div>
           )}
 
@@ -517,7 +524,18 @@ export default function MaterialReturn() {
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Return
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setWastageDialogOpen(true)}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" /> Wastage Count
+          </Button>
         </form>
+
+        <WastageCountDialog open={wastageDialogOpen} onOpenChange={setWastageDialogOpen} />
       </CardContent>
     </Card>
   );
