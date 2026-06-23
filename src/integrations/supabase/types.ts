@@ -342,8 +342,13 @@ export type Database = {
           added_by: string
           created_at: string
           date: string
+          entry_type: string
           gsm: number | null
           id: string
+          issue_quantity: number | null
+          issue_quantity_kg: number | null
+          issue_unit: string | null
+          issued_to_user_id: string | null
           lot_number: string | null
           notes: string | null
           pallets: number | null
@@ -356,8 +361,13 @@ export type Database = {
           added_by: string
           created_at?: string
           date?: string
+          entry_type?: string
           gsm?: number | null
           id?: string
+          issue_quantity?: number | null
+          issue_quantity_kg?: number | null
+          issue_unit?: string | null
+          issued_to_user_id?: string | null
           lot_number?: string | null
           notes?: string | null
           pallets?: number | null
@@ -370,8 +380,13 @@ export type Database = {
           added_by?: string
           created_at?: string
           date?: string
+          entry_type?: string
           gsm?: number | null
           id?: string
+          issue_quantity?: number | null
+          issue_quantity_kg?: number | null
+          issue_unit?: string | null
+          issued_to_user_id?: string | null
           lot_number?: string | null
           notes?: string | null
           pallets?: number | null
