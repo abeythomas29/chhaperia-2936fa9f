@@ -99,6 +99,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [stockGsm, setStockGsm] = useState("");
   const [stockNotes, setStockNotes] = useState("");
 
+  // Issue Material state
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueMaterialId, setIssueMaterialId] = useState("");
+  const [issueUnit, setIssueUnit] = useState<"kg" | "sqm">("kg");
+  const [issueQty, setIssueQty] = useState("");
+  const [issueGsm, setIssueGsm] = useState("");
+  const [issueThickness, setIssueThickness] = useState("");
+  const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [issueRecipientId, setIssueRecipientId] = useState("");
+  const [issueNotes, setIssueNotes] = useState("");
+  const [recipients, setRecipients] = useState<RecipientOption[]>([]);
+
   const fetchData = async () => {
     const [matRes, entryRes, saleRes] = await Promise.all([
       supabase.from("raw_materials").select("*").order("name"),
