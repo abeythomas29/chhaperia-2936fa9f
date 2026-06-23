@@ -313,22 +313,42 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     setIssuing(true);
 
+    // Compute sqm/kg conversions for record-keeping (stored in notes since DB has no dedicated columns).
+    const qty = Number(issueQuantity);
+    const gsmNum = issueGsm ? Number(issueGsm) : null;
+    let sqm: number | null = null;
+    let kg: number | null = null;
+    if (issueUnit === "sqm") {
+      sqm = qty;
+      if (gsmNum && gsmNum > 0) kg = (qty * gsmNum) / 1000;
+    } else {
+      kg = qty;
+      if (gsmNum && gsmNum > 0) sqm = (qty * 1000) / gsmNum;
+    }
+
+    const metaParts: string[] = [];
+    if (sqm != null) metaParts.push(`sqm=${sqm.toFixed(2)}`);
+    if (kg != null) metaParts.push(`kg=${kg.toFixed(2)}`);
+    if (gsmNum != null) metaParts.push(`gsm=${gsmNum}`);
+    const metaStr = metaParts.length ? `[${metaParts.join(" ")}]` : "";
+    const finalNotes = [issueNotes?.trim(), metaStr].filter(Boolean).join(" ").trim() || null;
+
     const { error } = await supabase.from("stock_issues").insert({
       product_code_id: issueProductCodeId,
       recipient_type: issueRecipientType,
       client_id: issueRecipientType === "client" ? issueClientId : null,
       recipient_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
-      quantity: Number(issueQuantity),
+      quantity: qty,
       unit: issueUnit,
       thickness_mm: issueThickness ? Number(issueThickness) : null,
-      notes: issueNotes || null,
+      notes: finalNotes,
       issued_by: user.id,
       date: issueDate,
     } as any);
 
     setIssuing(false);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Issue failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Stock issued successfully" });
       setIssueOpen(false);
