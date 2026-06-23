@@ -452,7 +452,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   const gLabel = e.gsm != null ? `${e.gsm} gsm` : "—";
                   const key = (tLabel === "—" && gLabel === "—") ? "No spec" : `${tLabel} · ${gLabel}`;
                   const v = variantMap.get(key) ?? { in: 0, out: 0 };
-                  if (e.kind === "out") v.out += Number(e.quantity) || 0;
+                  if (e.kind === "out" || e.kind === "issue") v.out += Number(e.quantity) || 0;
                   else v.in += Number(e.quantity) || 0;
                   variantMap.set(key, v);
                 });
