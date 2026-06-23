@@ -658,7 +658,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <Label>Product Code</Label>
               <SearchableSelect
                 value={issueProductCodeId}
-                onValueChange={(v) => { setIssueProductCodeId(v); const s = summaries.find(s => s.product_code_id === v); if (s) setIssueUnit(s.unit); }}
+                onValueChange={(v) => { setIssueProductCodeId(v); }}
                 placeholder="Select product"
                 options={productCodes.map((p) => {
                   const stock = summaries.find(s => s.product_code_id === p.id);
