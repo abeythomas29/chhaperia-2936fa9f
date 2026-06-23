@@ -32,33 +32,33 @@ export default function InventoryManagement() {
   }, [canEdit]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 w-full max-w-none">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Inventory Management</h1>
         {readOnly && (
           <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">View only</span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <Card>
+      <div className="space-y-6">
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Warehouse className="h-5 w-5 text-secondary" /> Finished Stock
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <StockManagement embedded readOnly={readOnly} />
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Boxes className="h-5 w-5 text-secondary" /> Raw Materials Inventory
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <RawMaterials embedded readOnly={readOnly} />
           </CardContent>
         </Card>

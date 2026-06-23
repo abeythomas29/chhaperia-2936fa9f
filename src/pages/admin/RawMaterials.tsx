@@ -269,18 +269,28 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     fetchData();
   };
 
-  // Auto-fill GSM/thickness from latest stock entry for selected material
+  // Auto-fill GSM from latest stock entry for selected material (GSM is fixed by raw material entry).
+  // Reset thickness when material changes (it's a dropdown of available variants).
   useEffect(() => {
-    if (!issueMaterialId) return;
+    if (!issueMaterialId) { setIssueGsm(""); setIssueThickness(""); return; }
     const latest = stockEntries
       .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in")
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-    if (latest) {
-      if (!issueGsm && latest.gsm != null) setIssueGsm(String(latest.gsm));
-      if (!issueThickness && latest.thickness_mm != null) setIssueThickness(String(latest.thickness_mm));
-    }
+    setIssueGsm(latest?.gsm != null ? String(latest.gsm) : "");
+    setIssueThickness("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issueMaterialId]);
+
+  // Available thickness variants for the selected material (from inward entries).
+  const availableThicknesses = (() => {
+    if (!issueMaterialId) return [] as string[];
+    const set = new Set<string>();
+    stockEntries
+      .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in" && e.thickness_mm != null)
+      .forEach((e) => set.add(String(e.thickness_mm)));
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  })();
+
 
   const resetIssueForm = () => {
     setIssueMaterialId("");
@@ -483,12 +493,24 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>GSM {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
-                <Input type="number" min="0" step="0.01" value={issueGsm} onChange={(e) => setIssueGsm(e.target.value)} placeholder="e.g. 110" />
+                <Label>GSM (from raw material) {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
+                <Input value={issueGsm || "—"} readOnly disabled className="bg-muted" />
+                {issueUnit === "sqm" && !issueGsm && (
+                  <p className="text-xs text-destructive mt-1">No GSM on file for this material. Cannot issue in sqm.</p>
+                )}
               </div>
               <div>
                 <Label>Thickness (mm)</Label>
-                <Input type="number" min="0" step="0.001" value={issueThickness} onChange={(e) => setIssueThickness(e.target.value)} placeholder="optional" />
+                <Select value={issueThickness} onValueChange={setIssueThickness}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={availableThicknesses.length ? "Select thickness" : "No variants available"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableThicknesses.map((t) => (
+                      <SelectItem key={t} value={t}>{t} mm</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {issueUnit === "sqm" && issueQty && issueGsm && Number(issueGsm) > 0 && (
@@ -685,6 +707,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       <Card>
         <CardHeader><CardTitle>Recent Stock Entries ({filteredEntries.length})</CardTitle></CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -751,6 +774,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
 
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

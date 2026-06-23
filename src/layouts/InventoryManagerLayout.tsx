@@ -29,7 +29,6 @@ export default function InventoryManagerLayout() {
 
   const navItems = [
     { to: "/inventory", label: "Add Stock", icon: ArrowDownToLine, end: true },
-    { to: "/inventory/view", label: "Inventory", icon: Package, end: false },
     { to: "/inventory/manage", label: "Inventory Management", icon: Warehouse, end: false },
     { to: "/inventory/history", label: "My History", icon: History, end: false },
   ];
@@ -85,7 +84,7 @@ export default function InventoryManagerLayout() {
           );
         })}
       </nav>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <div className={cn("p-4 md:p-6 mx-auto", location.pathname.startsWith("/inventory/manage") ? "max-w-none" : "max-w-4xl")}>
         <Outlet />
       </div>
     </div>

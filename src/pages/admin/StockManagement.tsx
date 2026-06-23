@@ -379,7 +379,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
         {loading ? (
           <p className="text-muted-foreground col-span-full text-center py-8">Loading...</p>
         ) : filteredSummaries.length === 0 ? (
@@ -388,24 +388,24 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
           filteredSummaries.map((s) => (
             <Card key={s.product_code_id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Package className="h-4 w-4 text-muted-foreground" />
-                  {s.code}
+                <CardTitle className="text-base flex items-center gap-2 break-words">
+                  <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="break-words">{s.code}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Produced</p>
-                    <p className="text-lg font-semibold text-green-600">{s.produced.toLocaleString()} {s.unit}</p>
+                    <p className="text-base md:text-lg font-semibold text-green-600 break-words">{s.produced.toLocaleString()} {s.unit}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Issued</p>
-                    <p className="text-lg font-semibold text-red-500">{s.issued.toLocaleString()} {s.unit}</p>
+                    <p className="text-base md:text-lg font-semibold text-red-500 break-words">{s.issued.toLocaleString()} {s.unit}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Available</p>
-                    <p className={`text-lg font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
+                    <p className={`text-base md:text-lg font-bold break-words ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
                       {s.available.toLocaleString()} {s.unit}
                     </p>
                   </div>
@@ -461,7 +461,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 Inward Supply (Production)
                 <span className="text-sm font-normal text-muted-foreground">({inData.length} entries)</span>
               </h2>
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-x-auto">
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -536,7 +537,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 Outward Supply (Issues & Sales)
                 <span className="text-sm font-normal text-muted-foreground">({outData.length} entries)</span>
               </h2>
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -604,7 +605,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
       {/* Issue Stock Dialog */}
       <Dialog open={issueOpen} onOpenChange={(open) => { if (!open) { setIssueOpen(false); resetIssueForm(); } }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Issue Stock</DialogTitle>
             <DialogDescription>Issue stock to a client or to a production manager.</DialogDescription>
@@ -698,6 +699,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="meters">Meters</SelectItem>
+                    <SelectItem value="sqm">Square Meters (sqm)</SelectItem>
                     <SelectItem value="kg">Kg</SelectItem>
                   </SelectContent>
                 </Select>
