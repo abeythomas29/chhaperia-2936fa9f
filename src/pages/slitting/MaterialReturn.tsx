@@ -344,8 +344,12 @@ export default function MaterialReturn() {
       const { location, ...rest } = payload as any;
       ({ error } = await tryInsert(rest));
     }
+    if (error?.code === "PGRST204" && /'wastage_quantity' column/.test(error.message)) {
+      const { wastage_quantity, ...rest } = payload as any;
+      ({ error } = await tryInsert(rest));
+    }
     if (error?.code === "PGRST204" && /'return_type' column/.test(error.message)) {
-      const { return_type, location, ...rest } = payload as any;
+      const { return_type, location, wastage_quantity, ...rest } = payload as any;
       ({ error } = await tryInsert(rest));
     }
     if (error?.code === "PGRST204" && /'client_id' column/.test(error.message)) {
