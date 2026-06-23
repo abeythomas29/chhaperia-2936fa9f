@@ -19,6 +19,7 @@ import UserManagement from "./pages/admin/UserManagement";
 import RawMaterials from "./pages/admin/RawMaterials";
 import SlittingLogs from "./pages/admin/SlittingLogs";
 import InventoryManagement from "./pages/inventory/InventoryManagement";
+import IssuedHistory from "./pages/inventory/IssuedHistory";
 import ProductionEntry from "./pages/worker/ProductionEntry";
 import ProductionHistory from "./pages/worker/ProductionHistory";
 import MyIssues from "./pages/worker/MyIssues";
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="products" element={<Products />} />
               <Route path="clients" element={<Clients />} />
               <Route path="inventory" element={<InventoryManagement />} />
+              <Route path="issued" element={<IssuedHistory />} />
               <Route path="users" element={<UserManagement />} />
               <Route path="sales" element={<SalesHistory />} />
               <Route path="slitting" element={<SlittingLogs />} />
@@ -68,6 +70,7 @@ const App = () => (
               <Route path="view" element={<InventoryView />} />
               <Route path="history" element={<InwardHistory />} />
               <Route path="manage" element={<InventoryManagement />} />
+              <Route path="issued" element={<IssuedHistory />} />
             </Route>
             <Route path="/sales" element={<SalesManagerLayout />}>
               <Route index element={<SalesEntry />} />
