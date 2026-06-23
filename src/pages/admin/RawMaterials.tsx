@@ -493,12 +493,24 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>GSM {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
-                <Input type="number" min="0" step="0.01" value={issueGsm} onChange={(e) => setIssueGsm(e.target.value)} placeholder="e.g. 110" />
+                <Label>GSM (from raw material) {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
+                <Input value={issueGsm || "—"} readOnly disabled className="bg-muted" />
+                {issueUnit === "sqm" && !issueGsm && (
+                  <p className="text-xs text-destructive mt-1">No GSM on file for this material. Cannot issue in sqm.</p>
+                )}
               </div>
               <div>
                 <Label>Thickness (mm)</Label>
-                <Input type="number" min="0" step="0.001" value={issueThickness} onChange={(e) => setIssueThickness(e.target.value)} placeholder="optional" />
+                <Select value={issueThickness} onValueChange={setIssueThickness}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={availableThicknesses.length ? "Select thickness" : "No variants available"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableThicknesses.map((t) => (
+                      <SelectItem key={t} value={t}>{t} mm</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {issueUnit === "sqm" && issueQty && issueGsm && Number(issueGsm) > 0 && (
