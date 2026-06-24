@@ -211,6 +211,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       if (!q) return;
       b[u] = (b[u] ?? 0) + q;
     };
+    const parseNotesMeta = (notes: string | null | undefined) => {
+      const value = (key: string) => {
+        const match = String(notes ?? "").match(new RegExp(`${key}=([\\d.]+)`, "i"));
+        return match ? Number(match[1]) : null;
+      };
+      return { sqm: value("sqm"), kg: value("kg"), gsm: value("gsm") };
+    };
     const isFinishedStockIssue = (i: any) => {
       const issueType = i.issue_type ?? null;
       return Boolean(i.product_code_id) && (issueType === null || issueType === "" || issueType === "finished_stock");
@@ -219,12 +226,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const buckets: Buckets = {};
       const rawQty = Number(i.issue_quantity ?? i.quantity ?? 0);
       const issueUnit = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
-      const gsm = i.gsm != null ? Number(i.gsm) : null;
+      const meta = parseNotesMeta(i.notes);
+      const gsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
       const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm;
       const widthMm = widthMmRaw != null ? Number(widthMmRaw) : null;
 
       const sqm = i.issue_quantity_sqm != null
         ? Number(i.issue_quantity_sqm)
+        : meta.sqm != null
+          ? meta.sqm
         : issueUnit === "sqm"
           ? rawQty
           : issueUnit === "meters" && widthMm && widthMm > 0
@@ -234,6 +244,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               : null;
       const kg = i.issue_quantity_kg != null
         ? Number(i.issue_quantity_kg)
+        : meta.kg != null
+          ? meta.kg
         : issueUnit === "kg"
           ? rawQty
           : sqm != null && gsm && gsm > 0
