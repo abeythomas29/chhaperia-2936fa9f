@@ -288,7 +288,7 @@ export default function SlittingEntryForm() {
                 setForm({
                   ...form,
                   issue_id: v,
-                  product_code_id: iss?.product_code_id ?? form.product_code_id,
+                  product_code_id: (iss?.product_code_id && iss.product_code_id.length > 0) ? iss.product_code_id : form.product_code_id,
                   source_thickness_mm: iss?.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
                 });
               }}
