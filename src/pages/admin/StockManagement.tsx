@@ -335,7 +335,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   useEffect(() => { fetchData(); }, []);
 
   const filteredSummaries = summaries
-    .filter((s) => s.available > 0 && s.code !== "—")
+    .filter((s) => {
+      if (s.code === "—") return false;
+      const units: UnitKey[] = ["meters", "sqm", "kg"];
+      const anyPositive = units.some((u) => (Number(s.producedBuckets[u] ?? 0) - Number(s.issuedBuckets[u] ?? 0)) > 0);
+      return anyPositive || s.available > 0;
+    })
     .filter((s) => !search || s.code.toLowerCase().includes(search.toLowerCase()));
 
   const filteredLedger = ledger.filter((e) => {
