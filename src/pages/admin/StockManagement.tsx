@@ -277,6 +277,11 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
         thicknessBreakdown: breakdown,
       });
+      // eslint-disable-next-line no-console
+      console.log("Issued for product", pcId, prod?.code, {
+        producedBuckets: prod?.buckets ?? {},
+        issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
+      });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
     setSummaries(summaryList);
