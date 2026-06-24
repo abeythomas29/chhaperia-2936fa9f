@@ -33,6 +33,7 @@ interface StockSummary {
   producedBuckets: Buckets;
   issuedBuckets: Buckets;
   thicknessBreakdown: ThicknessBreakdown[];
+  debugMatchedStockIssues: any[];
 }
 
 interface LedgerEntry {
@@ -348,6 +349,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
         thicknessBreakdown: breakdown,
+        debugMatchedStockIssues: matchedStockIssues,
       });
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
       const computedIssuedTotals = issuedBuckets;
@@ -427,8 +429,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     .filter((s) => {
       if (s.code === "—") return false;
       const units: UnitKey[] = ["meters", "sqm", "kg"];
+      const anyProduced = units.some((u) => Number(s.producedBuckets[u] ?? 0) > 0);
+      const anyIssued = units.some((u) => Number(s.issuedBuckets[u] ?? 0) > 0);
       const anyPositive = units.some((u) => (Number(s.producedBuckets[u] ?? 0) - Number(s.issuedBuckets[u] ?? 0)) > 0);
-      return anyPositive || s.available > 0;
+      return anyProduced || anyIssued || anyPositive || s.available > 0;
     })
     .filter((s) => !search || s.code.toLowerCase().includes(search.toLowerCase()));
 
@@ -594,9 +598,18 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       const prod = Number(s.producedBuckets[u] ?? 0);
                       const iss = Number(s.issuedBuckets[u] ?? 0);
                       if (prod === 0 && iss === 0) return null;
-                      return { unit: u, prod, iss, avail: prod - iss };
+                      return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
                     })
-                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number }>;
+                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
+                  // eslint-disable-next-line no-console
+                  console.log("Rendered stock card", {
+                    product_id: s.product_code_id,
+                    product_code: s.code,
+                    produced_quantity: s.produced,
+                    matched_stock_issues_rows: s.debugMatchedStockIssues,
+                    computed_issued_totals: s.issuedBuckets,
+                    rendered_issued_value: rows.map((r) => ({ unit: r.unit, issued: r.iss, available: r.avail })),
+                  });
                   if (rows.length === 0) {
                     return (
                       <div className="grid grid-cols-3 gap-2 text-center mb-3">
@@ -619,7 +632,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                           <span className="font-medium uppercase text-xs">{r.unit}</span>
                           <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
                           <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
-                          <span className={`text-right font-bold ${r.avail > 0 ? "text-primary" : "text-destructive"}`}>{fmt(r.avail)}</span>
+                          <span className={`text-right font-bold ${r.avail == null || r.avail > 0 ? "text-primary" : "text-destructive"}`}>{r.avail == null ? "—" : fmt(r.avail)}</span>
                         </div>
                       ))}
                     </div>
