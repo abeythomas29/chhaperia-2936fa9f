@@ -166,21 +166,46 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     setProductionManagers(list);
 
 
+    const normUnit = (u: any): UnitKey | null => {
+      const s = String(u ?? "").toLowerCase();
+      if (s === "sqm" || s === "sqmtr" || s === "sq m" || s === "m2") return "sqm";
+      if (s === "kg" || s === "kgs" || s === "kilogram") return "kg";
+      if (s === "meters" || s === "meter" || s === "m" || s === "mtr") return "meters";
+      return null;
+    };
+    const addBucket = (b: Buckets, u: UnitKey, q: number) => {
+      if (!q) return;
+      b[u] = (b[u] ?? 0) + q;
+    };
+
     // Build per-product-code totals and thickness breakdowns
-    const pcTotals = new Map<string, { code: string; unit: string; produced: number }>();
+    const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
     const thicknessMap = new Map<string, Map<number | null, number>>();
     const issueMap = new Map<string, number>();
+    const issuedBucketsMap = new Map<string, Buckets>();
+    const ensureIssued = (pcId: string) => {
+      let b = issuedBucketsMap.get(pcId);
+      if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
+      return b;
+    };
 
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
+      const gsm = p.gsm != null ? Number(p.gsm) : null;
+      const u = normUnit(p.unit) ?? "meters";
 
-      const existing = pcTotals.get(pcId);
-      if (existing) {
-        existing.produced += qty;
-      } else {
-        pcTotals.set(pcId, { code: p.product_codes?.code ?? "—", unit: p.unit, produced: qty });
+      let entry = pcTotals.get(pcId);
+      if (!entry) {
+        entry = { code: p.product_codes?.code ?? "—", unit: p.unit, produced: 0, buckets: {} };
+        pcTotals.set(pcId, entry);
+      }
+      entry.produced += qty;
+      addBucket(entry.buckets, u, qty);
+      if (gsm && gsm > 0) {
+        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
+        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
       }
 
       if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
@@ -195,12 +220,30 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       if (!pcId) continue;
       const q = Number(i.issue_quantity ?? i.quantity ?? 0);
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
+
+      const b = ensureIssued(pcId);
+      const u = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const gsm = i.gsm != null ? Number(i.gsm) : null;
+      const sqm = i.issue_quantity_sqm != null ? Number(i.issue_quantity_sqm)
+        : u === "sqm" ? q
+        : (gsm && gsm > 0 ? (q * 1000) / gsm : null);
+      const kg = i.issue_quantity_kg != null ? Number(i.issue_quantity_kg)
+        : u === "kg" ? q
+        : (gsm && gsm > 0 ? (q * gsm) / 1000 : null);
+      if (sqm != null) addBucket(b, "sqm", sqm);
+      if (kg != null) addBucket(b, "kg", kg);
+      if (u === "meters") addBucket(b, "meters", q);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
     for (const s of (salesData ?? []) as any[]) {
       if (s.item_type === "finished_product" && s.product_code_id) {
-        issueMap.set(s.product_code_id, (issueMap.get(s.product_code_id) ?? 0) + Number(s.quantity));
+        const pcId = s.product_code_id;
+        const q = Number(s.quantity);
+        issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
+        const b = ensureIssued(pcId);
+        const u = normUnit(s.unit) ?? "meters";
+        addBucket(b, u, q);
       }
     }
 
@@ -224,6 +267,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         produced,
         issued,
         available: produced - issued,
+        producedBuckets: prod?.buckets ?? {},
+        issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
         thicknessBreakdown: breakdown,
       });
     }
