@@ -61,11 +61,59 @@ export default function SlittingEntryForm() {
   });
 
   const reloadIssued = async () => {
-    const { data } = await supabase.rpc("list_slitting_issued_materials");
-    setIssuedMaterials((data as IssuedMaterial[]) ?? []);
+    if (!user) return;
+    const [rpcRes, rawRes] = await Promise.all([
+      supabase.rpc("list_slitting_issued_materials"),
+      supabase
+        .from("raw_material_stock_entries")
+        .select("id, date, raw_material_id, thickness_mm, gsm, issue_unit, issue_quantity, issue_quantity_kg, quantity, notes, raw_materials(name)")
+        .eq("entry_type", "out")
+        .eq("issued_to_user_id", user.id)
+        .order("date", { ascending: false }),
+    ]);
+    if (rpcRes.error) {
+      toast({ title: "Could not load issued materials", description: rpcRes.error.message, variant: "destructive" });
+      console.error("list_slitting_issued_materials error", rpcRes.error);
+    }
+    if (rawRes.error) {
+      toast({ title: "Could not load raw material issues", description: rawRes.error.message, variant: "destructive" });
+      console.error("raw_material_stock_entries error", rawRes.error);
+    }
+    const rawRows = (rawRes.data ?? []) as any[];
+    const rawIds = rawRows.map((r) => r.id as string);
+    const consumedMap = new Map<string, number>();
+    if (rawIds.length) {
+      const { data: consumedRows } = await supabase
+        .from("slitting_entries")
+        .select("stock_issue_id, source_quantity")
+        .in("stock_issue_id", rawIds);
+      for (const c of (consumedRows ?? []) as any[]) {
+        const k = c.stock_issue_id as string;
+        consumedMap.set(k, (consumedMap.get(k) ?? 0) + Number(c.source_quantity ?? 0));
+      }
+    }
+    const fromRpc = ((rpcRes.data as IssuedMaterial[]) ?? []);
+    const fromRaw: IssuedMaterial[] = rawRows.map((r) => {
+      const issued = Number(r.issue_quantity ?? r.quantity ?? 0);
+      const consumed = consumedMap.get(r.id) ?? 0;
+      return {
+        issue_id: r.id,
+        issue_date: r.date,
+        product_code_id: "",
+        product_code: r.raw_materials?.name ?? "Raw Material",
+        thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
+        unit: r.issue_unit ?? "kg",
+        notes: r.notes,
+        issued_quantity: issued,
+        consumed_quantity: consumed,
+        remaining_quantity: issued - consumed,
+      };
+    }).filter((x) => x.remaining_quantity > 0);
+    setIssuedMaterials([...fromRpc, ...fromRaw]);
   };
 
   useEffect(() => {
+    if (!user) return;
     (async () => {
       const [pc, cl] = await Promise.all([
         supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
@@ -76,7 +124,8 @@ export default function SlittingEntryForm() {
       await reloadIssued();
       setLoading(false);
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const selectedIssue = issuedMaterials.find((i) => i.issue_id === form.issue_id) ?? null;
 
