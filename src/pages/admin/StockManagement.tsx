@@ -492,23 +492,45 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Produced</p>
-                    <p className="text-base md:text-lg font-semibold text-green-600 break-words">{s.produced.toLocaleString()} {s.unit}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Issued</p>
-                    <p className="text-base md:text-lg font-semibold text-red-500 break-words">{s.issued.toLocaleString()} {s.unit}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Available</p>
-                    <p className={`text-base md:text-lg font-bold break-words ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
-                      {s.available.toLocaleString()} {s.unit}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground text-center mb-2">Unit: {s.unit}</p>
+                {(() => {
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  const rows = units
+                    .map((u) => {
+                      const prod = Number(s.producedBuckets[u] ?? 0);
+                      const iss = Number(s.issuedBuckets[u] ?? 0);
+                      if (prod === 0 && iss === 0) return null;
+                      return { unit: u, prod, iss, avail: prod - iss };
+                    })
+                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number }>;
+                  if (rows.length === 0) {
+                    return (
+                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                        <div><p className="text-xs text-muted-foreground">Produced</p><p className="text-base font-semibold text-green-600">{fmt(s.produced)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Issued</p><p className="text-base font-semibold text-red-500">{fmt(s.issued)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Available</p><p className={`text-base font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>{fmt(s.available)} {s.unit}</p></div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2 mb-3">
+                      <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
+                        <span>Unit</span>
+                        <span className="text-right">Produced</span>
+                        <span className="text-right">Issued</span>
+                        <span className="text-right">Available</span>
+                      </div>
+                      {rows.map((r) => (
+                        <div key={r.unit} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
+                          <span className="font-medium uppercase text-xs">{r.unit}</span>
+                          <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
+                          <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
+                          <span className={`text-right font-bold ${r.avail > 0 ? "text-primary" : "text-destructive"}`}>{fmt(r.avail)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Thickness Breakdown */}
                 {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (
