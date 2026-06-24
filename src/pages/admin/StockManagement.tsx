@@ -243,18 +243,19 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       });
     }
     for (const i of (issueData ?? []) as any[]) {
+      const itype = i.issue_type ?? "finished_stock";
+      if (itype !== "finished_stock") continue;
       ledgerEntries.push({
         id: i.id,
-        date: i.date,
+        date: i.date ?? i.created_at,
         type: "OUT",
         product_code: i.product_codes?.code ?? "—",
         thickness_mm: i.thickness_mm != null ? Number(i.thickness_mm) : null,
         client_name: i.recipient_type === "production_manager"
           ? `Production Mgr: ${i.recipient?.name ?? "Unknown"}`
           : (i.company_clients?.name ?? "—"),
-
-        quantity: Number(i.quantity),
-        unit: i.unit,
+        quantity: Number(i.issue_quantity ?? i.quantity ?? 0),
+        unit: i.issue_unit ?? i.unit,
         notes: i.notes,
         person: i.profiles?.name ?? null,
         source: "Stock Issue",
