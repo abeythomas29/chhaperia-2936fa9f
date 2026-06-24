@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Search, PackageOpen } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface Row {
   id: string;
@@ -51,80 +52,122 @@ export default function IssuedHistory() {
     }
     (async () => {
       setLoading(true);
-      const [stockRes, rmRes] = await Promise.all([
-        supabase
-          .from("stock_issues")
-          .select(
-            "id, date, quantity, unit, notes, thickness_mm, recipient_type, product_codes(code), company_clients(name), recipient:profiles!stock_issues_recipient_user_id_fkey(name)",
-          )
-          .order("date", { ascending: false })
-          .limit(1000),
-        supabase
-          .from("raw_material_stock_entries")
-          .select(
-            "id, date, quantity, notes, thickness_mm, gsm, entry_type, issue_unit, issue_quantity, issue_quantity_kg, issued_to_user_id, raw_materials(name)",
-          )
-          .eq("entry_type", "out")
-          .order("date", { ascending: false })
-          .limit(1000),
-      ]);
 
+      // Read stock_issues directly. Do NOT filter by issue_type; support old + new rows.
+      const { data, error } = await supabase
+        .from("stock_issues")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(2000);
+
+      // eslint-disable-next-line no-console
+      console.log("stock_issues fetched", data?.length, error, data);
+
+      if (error) {
+        toast({
+          title: "Failed to load issued records",
+          description: error.message,
+          variant: "destructive",
+        });
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      const issues = (data ?? []) as any[];
+
+      // Collect ids to resolve labels
+      const productCodeIds = Array.from(new Set(issues.map((r) => r.product_code_id).filter(Boolean)));
+      const rawMaterialIds = Array.from(new Set(issues.map((r) => r.raw_material_id).filter(Boolean)));
+      const clientIds = Array.from(new Set(issues.map((r) => r.client_id).filter(Boolean)));
       const userIds = Array.from(
         new Set(
-          ((rmRes.data ?? []) as any[])
-            .map((r) => r.issued_to_user_id)
+          issues
+            .flatMap((r) => [r.issued_to_user_id, r.recipient_user_id])
             .filter(Boolean),
         ),
       );
-      const profMap = new Map<string, string>();
-      if (userIds.length) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("user_id, name")
-          .in("user_id", userIds);
-        for (const p of profs ?? []) profMap.set((p as any).user_id, (p as any).name);
-      }
 
-      const list: Row[] = [];
-      for (const i of (stockRes.data ?? []) as any[]) {
-        const meta = parseNotesMeta(i.notes);
-        const recipient =
-          i.recipient_type === "production_manager"
-            ? i.recipient?.name ?? "Manager"
-            : i.company_clients?.name ?? "—";
-        list.push({
-          id: `s-${i.id}`,
-          date: i.date,
-          kind: "Finished",
-          item: i.product_codes?.code ?? "—",
-          recipient,
-          recipientType: i.recipient_type ?? "—",
-          quantity: Number(i.quantity ?? 0),
-          unit: i.unit ?? "",
-          qtySqm: meta.sqm,
-          qtyKg: meta.kg,
-          thickness: i.thickness_mm != null ? Number(i.thickness_mm) : null,
-          gsm: meta.gsm,
-          notes: i.notes,
-        });
-      }
-      for (const r of (rmRes.data ?? []) as any[]) {
-        list.push({
-          id: `r-${r.id}`,
-          date: r.date,
-          kind: "Raw Material",
-          item: r.raw_materials?.name ?? "—",
-          recipient: profMap.get(r.issued_to_user_id) ?? "—",
-          recipientType: r.issued_to_user_id ? "production_manager" : "—",
-          quantity: Number(r.issue_quantity ?? r.quantity ?? 0),
-          unit: r.issue_unit ?? "kg",
-          qtySqm: r.issue_unit === "sqm" ? Number(r.issue_quantity ?? 0) : null,
-          qtyKg: r.issue_quantity_kg != null ? Number(r.issue_quantity_kg) : (r.issue_unit === "kg" ? Number(r.issue_quantity ?? 0) : null),
+      const [pcRes, rmRes, clRes, profRes] = await Promise.all([
+        productCodeIds.length
+          ? supabase.from("product_codes").select("id, code").in("id", productCodeIds)
+          : Promise.resolve({ data: [] as any[] }),
+        rawMaterialIds.length
+          ? supabase.from("raw_materials").select("id, name").in("id", rawMaterialIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clientIds.length
+          ? supabase.from("company_clients").select("id, name").in("id", clientIds)
+          : Promise.resolve({ data: [] as any[] }),
+        userIds.length
+          ? supabase.from("profiles").select("user_id, name").in("user_id", userIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const pcMap = new Map<string, string>((pcRes.data ?? []).map((p: any) => [p.id, p.code]));
+      const rmMap = new Map<string, string>((rmRes.data ?? []).map((p: any) => [p.id, p.name]));
+      const clMap = new Map<string, string>((clRes.data ?? []).map((p: any) => [p.id, p.name]));
+      const profMap = new Map<string, string>((profRes.data ?? []).map((p: any) => [p.user_id, p.name]));
+
+      const list: Row[] = issues.map((r) => {
+        const meta = parseNotesMeta(r.notes);
+        const inferredType: "raw_material" | "finished_stock" =
+          (r.issue_type as any) ??
+          (r.raw_material_id ? "raw_material" : "finished_stock");
+        const quantity = Number(r.issue_quantity ?? r.quantity ?? 0);
+        const unit = r.issue_unit ?? r.unit ?? "";
+        const issuedToId = r.issued_to_user_id ?? r.recipient_user_id ?? null;
+        const date = r.date ?? r.created_at ?? null;
+        const qtySqm =
+          r.issue_quantity_sqm != null
+            ? Number(r.issue_quantity_sqm)
+            : unit === "sqm"
+              ? quantity
+              : meta.sqm;
+        const qtyKg =
+          r.issue_quantity_kg != null
+            ? Number(r.issue_quantity_kg)
+            : unit === "kg"
+              ? quantity
+              : meta.kg;
+
+        let recipientName = "—";
+        let recipientType = r.recipient_type ?? "—";
+        if (inferredType === "raw_material") {
+          recipientName = issuedToId ? profMap.get(issuedToId) ?? "Manager" : "—";
+          if (recipientType === "—") recipientType = "production_manager";
+        } else if (r.recipient_type === "production_manager" || issuedToId) {
+          recipientName = issuedToId ? profMap.get(issuedToId) ?? "Manager" : "—";
+          if (recipientType === "—") recipientType = "production_manager";
+        } else {
+          recipientName = r.client_id ? clMap.get(r.client_id) ?? "—" : "—";
+          if (recipientType === "—") recipientType = "client";
+        }
+
+        const item =
+          inferredType === "raw_material"
+            ? r.raw_material_id
+              ? rmMap.get(r.raw_material_id) ?? "Raw Material"
+              : "Raw Material"
+            : r.product_code_id
+              ? pcMap.get(r.product_code_id) ?? "—"
+              : "—";
+
+        return {
+          id: r.id,
+          date: date ?? new Date().toISOString(),
+          kind: inferredType === "raw_material" ? "Raw Material" : "Finished",
+          item,
+          recipient: recipientName,
+          recipientType,
+          quantity,
+          unit,
+          qtySqm,
+          qtyKg,
           thickness: r.thickness_mm != null ? Number(r.thickness_mm) : null,
-          gsm: r.gsm != null ? Number(r.gsm) : null,
+          gsm: r.gsm != null ? Number(r.gsm) : meta.gsm,
           notes: r.notes,
-        });
-      }
+        };
+      });
+
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setRows(list);
       setLoading(false);

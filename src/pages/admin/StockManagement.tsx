@@ -184,8 +184,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     }
 
     for (const i of (issueData ?? []) as any[]) {
+      const itype = i.issue_type ?? "finished_stock";
+      if (itype !== "finished_stock") continue;
       const pcId = i.product_code_id;
-      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + Number(i.quantity));
+      if (!pcId) continue;
+      const q = Number(i.issue_quantity ?? i.quantity ?? 0);
+      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
@@ -239,18 +243,19 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       });
     }
     for (const i of (issueData ?? []) as any[]) {
+      const itype = i.issue_type ?? "finished_stock";
+      if (itype !== "finished_stock") continue;
       ledgerEntries.push({
         id: i.id,
-        date: i.date,
+        date: i.date ?? i.created_at,
         type: "OUT",
         product_code: i.product_codes?.code ?? "—",
         thickness_mm: i.thickness_mm != null ? Number(i.thickness_mm) : null,
         client_name: i.recipient_type === "production_manager"
           ? `Production Mgr: ${i.recipient?.name ?? "Unknown"}`
           : (i.company_clients?.name ?? "—"),
-
-        quantity: Number(i.quantity),
-        unit: i.unit,
+        quantity: Number(i.issue_quantity ?? i.quantity ?? 0),
+        unit: i.issue_unit ?? i.unit,
         notes: i.notes,
         person: i.profiles?.name ?? null,
         source: "Stock Issue",
@@ -338,8 +343,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       recipient_type: issueRecipientType,
       client_id: issueRecipientType === "client" ? issueClientId : null,
       recipient_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
+      issued_to_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
       quantity: qty,
       unit: issueUnit,
+      issue_type: "finished_stock",
+      issue_quantity: qty,
+      issue_unit: issueUnit,
+      issue_quantity_kg: kg,
+      issue_quantity_sqm: sqm,
+      gsm: gsmNum,
       thickness_mm: issueThickness ? Number(issueThickness) : null,
       notes: finalNotes,
       issued_by: user.id,
@@ -350,6 +362,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     if (error) {
       toast({ title: "Issue failed", description: error.message, variant: "destructive" });
     } else {
+      try {
+        Object.keys(localStorage)
+          .filter((k) => /inventory|stock|issued/i.test(k))
+          .forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // ignore
+      }
       toast({ title: "Stock issued successfully" });
       setIssueOpen(false);
       resetIssueForm();
