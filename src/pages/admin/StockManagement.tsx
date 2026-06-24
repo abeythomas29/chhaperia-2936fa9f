@@ -362,6 +362,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     if (error) {
       toast({ title: "Issue failed", description: error.message, variant: "destructive" });
     } else {
+      try {
+        Object.keys(localStorage)
+          .filter((k) => /inventory|stock|issued/i.test(k))
+          .forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // ignore
+      }
       toast({ title: "Stock issued successfully" });
       setIssueOpen(false);
       resetIssueForm();
