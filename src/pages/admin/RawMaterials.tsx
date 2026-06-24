@@ -339,6 +339,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       });
       return;
     }
+    const sqmValue = issueUnit === "sqm" ? qty : (gsmNum && gsmNum > 0 ? (qtyKg * 1000) / gsmNum : null);
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
@@ -356,6 +357,43 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
+    }
+    // Also record in stock_issues so the Issued panel and reports can read it.
+    if (issueRecipientId) {
+      const { error: siErr } = await supabase.from("stock_issues").insert({
+        raw_material_id: issueMaterialId,
+        issue_type: "raw_material",
+        recipient_type: "production_manager",
+        recipient_user_id: issueRecipientId,
+        issued_to_user_id: issueRecipientId,
+        quantity: qtyKg,
+        unit: "kg",
+        issue_quantity: qty,
+        issue_unit: issueUnit,
+        issue_quantity_kg: qtyKg,
+        issue_quantity_sqm: sqmValue,
+        gsm: gsmNum,
+        thickness_mm: issueThickness ? Number(issueThickness) : null,
+        notes: issueNotes || null,
+        issued_by: user.id,
+        date: issueDate,
+      } as any);
+      if (siErr) {
+        // eslint-disable-next-line no-console
+        console.error("stock_issues mirror insert failed", siErr);
+        toast({
+          title: "Issued but not mirrored",
+          description: `Stock decremented, but Issued panel mirror failed: ${siErr.message}`,
+          variant: "destructive",
+        });
+      }
+    }
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
     }
     toast({ title: "Material issued", description: `Deducted ${qtyKg.toFixed(2)} kg from inventory.` });
     setIssueOpen(false);
