@@ -792,7 +792,15 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                       </TableCell>
                       <TableCell className="font-medium">{m.name}</TableCell>
                       <TableCell>{m.unit}</TableCell>
-                      <TableCell className="text-right font-mono">{m.current_stock.toLocaleString()} {m.unit}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {(() => {
+                          const matEntriesAll = stockEntries.filter((e) => e.raw_material_id === m.id);
+                          const inSum = matEntriesAll.filter((e) => e.kind === "in").reduce((s, e) => s + Number(e.quantity || 0), 0);
+                          const outSum = matEntriesAll.filter((e) => e.kind === "out" || e.kind === "issue").reduce((s, e) => s + Number(e.quantity || 0), 0);
+                          const balance = inSum - outSum;
+                          return `${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${m.unit}`;
+                        })()}
+                      </TableCell>
                       <TableCell><Badge variant={m.status === "active" ? "default" : "secondary"}>{m.status}</Badge></TableCell>
                       <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
                         {!readOnly && (
