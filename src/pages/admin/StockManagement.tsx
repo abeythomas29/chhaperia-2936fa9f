@@ -107,19 +107,25 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   const fetchData = async () => {
     setLoading(true);
 
-    // Fetch production entries (IN)
-    const { data: prodData } = await supabase
+    // Fetch production entries (IN) — include gsm for unit conversion
+    const { data: prodData, error: prodErr } = await supabase
       .from("production_entries")
-      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, product_codes(code), profiles:worker_id(name)")
+      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, gsm, product_codes(code), profiles:worker_id(name)")
       .order("date", { ascending: false })
-      .limit(1000);
+      .limit(2000);
+    if (prodErr) console.error("production_entries fetch error", prodErr);
 
-    // Fetch stock issues (OUT) — embed recipient profile via FK
-    const { data: issueData } = await supabase
+    // Fetch stock issues (OUT) — pull ALL columns so new fields
+    // (issue_type, issue_quantity, issue_unit, issue_quantity_kg/sqm, gsm,
+    // raw_material_id, issued_to_user_id) are available for calculation.
+    const { data: issueData, error: issueErr } = await supabase
       .from("stock_issues")
-      .select("id, date, product_code_id, quantity, unit, notes, thickness_mm, client_id, recipient_type, recipient_user_id, product_codes(code), company_clients(name), profiles:issued_by(name), recipient:profiles!stock_issues_recipient_user_id_fkey(name)")
+      .select("*, product_codes(code), company_clients(name), profiles:issued_by(name), recipient:profiles!stock_issues_recipient_user_id_fkey(name)")
       .order("date", { ascending: false })
-      .limit(1000);
+      .limit(2000);
+    if (issueErr) console.error("stock_issues fetch error", issueErr);
+    // eslint-disable-next-line no-console
+    console.log("Inventory stock_issues rows", (issueData ?? []).length, issueData);
 
 
 
