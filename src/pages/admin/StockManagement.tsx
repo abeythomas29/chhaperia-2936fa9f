@@ -184,8 +184,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     }
 
     for (const i of (issueData ?? []) as any[]) {
+      const itype = i.issue_type ?? "finished_stock";
+      if (itype !== "finished_stock") continue;
       const pcId = i.product_code_id;
-      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + Number(i.quantity));
+      if (!pcId) continue;
+      const q = Number(i.issue_quantity ?? i.quantity ?? 0);
+      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
