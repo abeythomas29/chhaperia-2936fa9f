@@ -115,17 +115,35 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       .limit(2000);
     if (prodErr) console.error("production_entries fetch error", prodErr);
 
-    // Fetch stock issues (OUT) — pull ALL columns so new fields
-    // (issue_type, issue_quantity, issue_unit, issue_quantity_kg/sqm, gsm,
-    // raw_material_id, issued_to_user_id) are available for calculation.
+    // Fetch stock issues (OUT) from the same source used by Issued History.
+    // Keep this flat: embedded relationship joins can fail independently and make
+    // the card totals look like zero even when stock_issues rows exist.
     const { data: issueData, error: issueErr } = await supabase
       .from("stock_issues")
-      .select("*, product_codes(code), company_clients(name), profiles:issued_by(name), recipient:profiles!stock_issues_recipient_user_id_fkey(name)")
+      .select("*")
       .order("date", { ascending: false })
       .limit(2000);
-    if (issueErr) console.error("stock_issues fetch error", issueErr);
+    if (issueErr) {
+      console.error("stock_issues fetch error", issueErr);
+      toast({ title: "Could not load stock issues", description: issueErr.message, variant: "destructive" });
+    }
+    const stockIssueRows = (issueData ?? []) as any[];
     // eslint-disable-next-line no-console
-    console.log("Inventory stock_issues rows", (issueData ?? []).length, issueData);
+    console.log("Inventory stock_issues rows", stockIssueRows.length, stockIssueRows);
+    stockIssueRows.forEach((row) => {
+      // eslint-disable-next-line no-console
+      console.log("Inventory stock_issues row", {
+        id: row.id,
+        product_code_id: row.product_code_id,
+        issue_type: row.issue_type,
+        issue_quantity: row.issue_quantity,
+        issue_unit: row.issue_unit,
+        issue_quantity_sqm: row.issue_quantity_sqm,
+        issue_quantity_kg: row.issue_quantity_kg,
+        quantity: row.quantity,
+        unit: row.unit,
+      });
+    });
 
 
 
@@ -157,14 +175,24 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       profiles: s.sold_by ? { name: sellerMap.get(s.sold_by) } : null,
     }));
 
-    // Fetch dropdowns — production managers via RPC (bypasses profile RLS)
-    const [{ data: cl }, { data: pc }, { data: pmData }] = await Promise.all([
+    const issueProductCodeIds = Array.from(new Set(stockIssueRows.map((i) => i.product_code_id).filter(Boolean)));
+    const issueClientIds = Array.from(new Set(stockIssueRows.map((i) => i.client_id).filter(Boolean)));
+    const issueUserIds = Array.from(new Set(stockIssueRows.flatMap((i) => [i.issued_by, i.issued_to_user_id, i.recipient_user_id]).filter(Boolean)));
+
+    // Fetch dropdowns and labels — production managers via RPC (bypasses profile RLS)
+    const [{ data: cl }, { data: pc }, { data: pmData }, { data: issuePcs }, { data: issueClients }, { data: issueProfiles }] = await Promise.all([
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
       supabase.from("product_codes").select("id, code").eq("status", "active").order("code"),
       supabase.rpc("list_production_manager_recipients"),
+      issueProductCodeIds.length ? supabase.from("product_codes").select("id, code").in("id", issueProductCodeIds) : Promise.resolve({ data: [] as any[] }),
+      issueClientIds.length ? supabase.from("company_clients").select("id, name").in("id", issueClientIds) : Promise.resolve({ data: [] as any[] }),
+      issueUserIds.length ? supabase.from("profiles").select("user_id, name").in("user_id", issueUserIds) : Promise.resolve({ data: [] as any[] }),
     ]);
     setClients(cl ?? []);
     setProductCodes(pc ?? []);
+    const issueProductCodeMap = new Map<string, string>((issuePcs ?? []).map((p: any) => [p.id, p.code]));
+    const issueClientMap = new Map<string, string>((issueClients ?? []).map((c: any) => [c.id, c.name]));
+    const issueProfileMap = new Map<string, string>((issueProfiles ?? []).map((p: any) => [p.user_id, p.name]));
 
     const list: ProductionManager[] = ((pmData ?? []) as any[])
       .map((p) => ({ user_id: p.user_id, name: p.name }))
@@ -182,6 +210,45 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const addBucket = (b: Buckets, u: UnitKey, q: number) => {
       if (!q) return;
       b[u] = (b[u] ?? 0) + q;
+    };
+    const isFinishedStockIssue = (i: any) => {
+      const issueType = i.issue_type ?? null;
+      return Boolean(i.product_code_id) && (issueType === null || issueType === "" || issueType === "finished_stock");
+    };
+    const getIssueBuckets = (i: any): Buckets => {
+      const buckets: Buckets = {};
+      const rawQty = Number(i.issue_quantity ?? i.quantity ?? 0);
+      const issueUnit = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const gsm = i.gsm != null ? Number(i.gsm) : null;
+      const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm;
+      const widthMm = widthMmRaw != null ? Number(widthMmRaw) : null;
+
+      const sqm = i.issue_quantity_sqm != null
+        ? Number(i.issue_quantity_sqm)
+        : issueUnit === "sqm"
+          ? rawQty
+          : issueUnit === "meters" && widthMm && widthMm > 0
+            ? rawQty * (widthMm / 1000)
+            : issueUnit === "kg" && gsm && gsm > 0
+              ? (rawQty * 1000) / gsm
+              : null;
+      const kg = i.issue_quantity_kg != null
+        ? Number(i.issue_quantity_kg)
+        : issueUnit === "kg"
+          ? rawQty
+          : sqm != null && gsm && gsm > 0
+            ? (sqm * gsm) / 1000
+            : null;
+      const meters = issueUnit === "meters"
+        ? rawQty
+        : sqm != null && widthMm && widthMm > 0
+          ? sqm / (widthMm / 1000)
+          : null;
+
+      if (sqm != null) addBucket(buckets, "sqm", sqm);
+      if (kg != null) addBucket(buckets, "kg", kg);
+      if (meters != null) addBucket(buckets, "meters", meters);
+      return buckets;
     };
 
     // Build per-product-code totals and thickness breakdowns
@@ -219,26 +286,17 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
     }
 
-    for (const i of (issueData ?? []) as any[]) {
-      const itype = i.issue_type ?? "finished_stock";
-      if (itype !== "finished_stock") continue;
+    const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
+    for (const i of finishedStockIssues) {
       const pcId = i.product_code_id;
-      if (!pcId) continue;
-      const q = Number(i.issue_quantity ?? i.quantity ?? 0);
-      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
-
       const b = ensureIssued(pcId);
-      const u = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
-      const gsm = i.gsm != null ? Number(i.gsm) : null;
-      const sqm = i.issue_quantity_sqm != null ? Number(i.issue_quantity_sqm)
-        : u === "sqm" ? q
-        : (gsm && gsm > 0 ? (q * 1000) / gsm : null);
-      const kg = i.issue_quantity_kg != null ? Number(i.issue_quantity_kg)
-        : u === "kg" ? q
-        : (gsm && gsm > 0 ? (q * gsm) / 1000 : null);
-      if (sqm != null) addBucket(b, "sqm", sqm);
-      if (kg != null) addBucket(b, "kg", kg);
-      if (u === "meters") addBucket(b, "meters", q);
+      const rowBuckets = getIssueBuckets(i);
+      for (const [unit, qty] of Object.entries(rowBuckets) as Array<[UnitKey, number]>) {
+        addBucket(b, unit, qty);
+      }
+      const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
+      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
@@ -253,12 +311,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
     }
 
-    const allPcIds = new Set([...pcTotals.keys(), ...issueMap.keys()]);
+    const allPcIds = new Set([...pcTotals.keys(), ...issuedBucketsMap.keys(), ...issueMap.keys()]);
     const summaryList: StockSummary[] = [];
     for (const pcId of allPcIds) {
       const prod = pcTotals.get(pcId);
       const produced = prod?.produced ?? 0;
-      const issued = issueMap.get(pcId) ?? 0;
+      const productUnit = normUnit(prod?.unit) ?? "meters";
+      const issuedBuckets = issuedBucketsMap.get(pcId) ?? {};
+      const issued = Number(issuedBuckets[productUnit] ?? 0);
       const tMap = thicknessMap.get(pcId);
       const breakdown: ThicknessBreakdown[] = [];
       if (tMap) {
@@ -268,19 +328,27 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
       summaryList.push({
         product_code_id: pcId,
-        code: prod?.code ?? "—",
+        code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
         unit: prod?.unit ?? "meters",
         produced,
         issued,
         available: produced - issued,
         producedBuckets: prod?.buckets ?? {},
-        issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
+        issuedBuckets,
         thicknessBreakdown: breakdown,
       });
+      const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
+      const computedIssuedTotals = issuedBuckets;
       // eslint-disable-next-line no-console
-      console.log("Issued for product", pcId, prod?.code, {
+      console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
+        product_id: pcId,
+        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
+        produced_quantity: produced,
+        matched_stock_issues_rows: matchedStockIssues,
+        computed_issued_totals: computedIssuedTotals,
+        rendered_issued_value: computedIssuedTotals,
         producedBuckets: prod?.buckets ?? {},
-        issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
+        issuedBuckets,
       });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
@@ -303,22 +371,20 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         source: "Production",
       });
     }
-    for (const i of (issueData ?? []) as any[]) {
-      const itype = i.issue_type ?? "finished_stock";
-      if (itype !== "finished_stock") continue;
+    for (const i of finishedStockIssues) {
       ledgerEntries.push({
         id: i.id,
         date: i.date ?? i.created_at,
         type: "OUT",
-        product_code: i.product_codes?.code ?? "—",
+        product_code: issueProductCodeMap.get(i.product_code_id) ?? "—",
         thickness_mm: i.thickness_mm != null ? Number(i.thickness_mm) : null,
         client_name: i.recipient_type === "production_manager"
-          ? `Production Mgr: ${i.recipient?.name ?? "Unknown"}`
-          : (i.company_clients?.name ?? "—"),
+          ? `Production Mgr: ${issueProfileMap.get(i.issued_to_user_id ?? i.recipient_user_id) ?? "Unknown"}`
+          : (issueClientMap.get(i.client_id) ?? "—"),
         quantity: Number(i.issue_quantity ?? i.quantity ?? 0),
         unit: i.issue_unit ?? i.unit,
         notes: i.notes,
-        person: i.profiles?.name ?? null,
+        person: issueProfileMap.get(i.issued_by) ?? null,
         source: "Stock Issue",
       });
     }
