@@ -62,15 +62,10 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-    // 1) RPC for finished-stock issues to this slitting manager (existing flow)
-    const rpcRes = await supabase.rpc("list_slitting_issued_materials");
-    if (rpcRes.error) {
-      toast({ title: "Could not load issued materials", description: rpcRes.error.message, variant: "destructive" });
-      console.error("list_slitting_issued_materials error", rpcRes.error);
-    }
-    const fromRpc = ((rpcRes.data as IssuedMaterial[]) ?? []);
 
-    // 2) Raw-material issues — read from public.stock_issues ONLY (no raw_material_stock_entries)
+    // Read ALL issues to this user (finished + raw) directly from stock_issues.
+    // Avoid the RPC because backend versions can throw
+    // "column reference stock_issue_id is ambiguous".
     const { data: siRows, error: siErr } = await supabase
       .from("stock_issues")
       .select("*")
@@ -78,33 +73,40 @@ export default function SlittingEntryForm() {
       .order("date", { ascending: false });
 
     if (siErr) {
-      toast({ title: "Could not load issued raw materials", description: siErr.message, variant: "destructive" });
+      toast({ title: "Could not load issued materials", description: siErr.message, variant: "destructive" });
       console.error("stock_issues fetch error", siErr);
-      setIssuedMaterials(fromRpc);
+      setIssuedMaterials([]);
       return;
     }
 
-    const rawIssues = ((siRows ?? []) as any[]).filter((r) => {
-      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
-      return t === "raw_material" && r.raw_material_id;
-    });
+    const issues = ((siRows ?? []) as any[]).map((r) => ({
+      ...r,
+      _type: (r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock")) as
+        | "raw_material"
+        | "finished_stock",
+    }));
 
-    // Look up raw material names
-    const rmIds = Array.from(new Set(rawIssues.map((r) => r.raw_material_id).filter(Boolean)));
-    const rmMap = new Map<string, string>();
-    if (rmIds.length) {
-      const { data: rms } = await supabase.from("raw_materials").select("id, name").in("id", rmIds);
-      for (const r of (rms ?? []) as any[]) rmMap.set(r.id, r.name);
-    }
+    // Lookups
+    const rmIds = Array.from(new Set(issues.filter((r) => r._type === "raw_material").map((r) => r.raw_material_id).filter(Boolean)));
+    const pcIds = Array.from(new Set(issues.filter((r) => r._type === "finished_stock").map((r) => r.product_code_id).filter(Boolean)));
+    const [rmRes, pcRes] = await Promise.all([
+      rmIds.length ? supabase.from("raw_materials").select("id, name").in("id", rmIds) : Promise.resolve({ data: [] as any[] }),
+      pcIds.length ? supabase.from("product_codes").select("id, code").in("id", pcIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const rmMap = new Map<string, string>((rmRes.data ?? []).map((r: any) => [r.id, r.name]));
+    const pcMap = new Map<string, string>((pcRes.data ?? []).map((r: any) => [r.id, r.code]));
 
-    // Consumed quantity per stock_issue from slitting_entries
-    const issueIds = rawIssues.map((r) => r.id as string);
+    // Consumed quantity per stock_issue_id from slitting_entries (single-table query — no ambiguity).
+    const issueIds = issues.map((r) => r.id as string);
     const consumedMap = new Map<string, number>();
     if (issueIds.length) {
-      const { data: consumedRows } = await supabase
+      const { data: consumedRows, error: cErr } = await supabase
         .from("slitting_entries")
         .select("stock_issue_id, source_quantity")
         .in("stock_issue_id", issueIds);
+      if (cErr) {
+        console.error("slitting_entries consumed lookup error", cErr);
+      }
       for (const c of (consumedRows ?? []) as any[]) {
         const k = c.stock_issue_id as string;
         if (!k) continue;
@@ -112,8 +114,8 @@ export default function SlittingEntryForm() {
       }
     }
 
-    const fromRaw: IssuedMaterial[] = rawIssues.map((r) => {
-      const unit = r.issue_unit ?? r.unit ?? "kg";
+    const list: IssuedMaterial[] = issues.map((r) => {
+      const unit = r.issue_unit ?? r.unit ?? (r._type === "raw_material" ? "kg" : "sqm");
       const issuedKg = r.issue_quantity_kg != null ? Number(r.issue_quantity_kg) : null;
       const issuedSqm = r.issue_quantity_sqm != null ? Number(r.issue_quantity_sqm) : null;
       const issuedRaw = Number(r.issue_quantity ?? r.quantity ?? 0);
@@ -123,11 +125,14 @@ export default function SlittingEntryForm() {
           ? (issuedSqm ?? issuedRaw)
           : issuedRaw;
       const consumed = consumedMap.get(r.id) ?? 0;
+      const label = r._type === "raw_material"
+        ? (rmMap.get(r.raw_material_id) ?? "Raw Material")
+        : (pcMap.get(r.product_code_id) ?? "—");
       return {
         issue_id: r.id,
         issue_date: r.date ?? r.created_at,
-        product_code_id: "",
-        product_code: rmMap.get(r.raw_material_id) ?? "Raw Material",
+        product_code_id: r._type === "finished_stock" ? (r.product_code_id ?? "") : "",
+        product_code: label,
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
         unit,
         notes: r.notes,
@@ -137,7 +142,7 @@ export default function SlittingEntryForm() {
       };
     }).filter((x) => x.remaining_quantity > 0);
 
-    setIssuedMaterials([...fromRpc, ...fromRaw]);
+    setIssuedMaterials(list);
   };
 
   useEffect(() => {
