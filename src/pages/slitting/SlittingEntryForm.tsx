@@ -62,53 +62,81 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-    const [rpcRes, rawRes] = await Promise.all([
-      supabase.rpc("list_slitting_issued_materials"),
-      supabase
-        .from("raw_material_stock_entries")
-        .select("id, date, raw_material_id, thickness_mm, gsm, issue_unit, issue_quantity, issue_quantity_kg, quantity, notes, raw_materials(name)")
-        .eq("entry_type", "out")
-        .eq("issued_to_user_id", user.id)
-        .order("date", { ascending: false }),
-    ]);
+    // 1) RPC for finished-stock issues to this slitting manager (existing flow)
+    const rpcRes = await supabase.rpc("list_slitting_issued_materials");
     if (rpcRes.error) {
       toast({ title: "Could not load issued materials", description: rpcRes.error.message, variant: "destructive" });
       console.error("list_slitting_issued_materials error", rpcRes.error);
     }
-    if (rawRes.error) {
-      toast({ title: "Could not load raw material issues", description: rawRes.error.message, variant: "destructive" });
-      console.error("raw_material_stock_entries error", rawRes.error);
+    const fromRpc = ((rpcRes.data as IssuedMaterial[]) ?? []);
+
+    // 2) Raw-material issues — read from public.stock_issues ONLY (no raw_material_stock_entries)
+    const { data: siRows, error: siErr } = await supabase
+      .from("stock_issues")
+      .select("*")
+      .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
+      .order("date", { ascending: false });
+
+    if (siErr) {
+      toast({ title: "Could not load issued raw materials", description: siErr.message, variant: "destructive" });
+      console.error("stock_issues fetch error", siErr);
+      setIssuedMaterials(fromRpc);
+      return;
     }
-    const rawRows = (rawRes.data ?? []) as any[];
-    const rawIds = rawRows.map((r) => r.id as string);
+
+    const rawIssues = ((siRows ?? []) as any[]).filter((r) => {
+      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
+      return t === "raw_material" && r.raw_material_id;
+    });
+
+    // Look up raw material names
+    const rmIds = Array.from(new Set(rawIssues.map((r) => r.raw_material_id).filter(Boolean)));
+    const rmMap = new Map<string, string>();
+    if (rmIds.length) {
+      const { data: rms } = await supabase.from("raw_materials").select("id, name").in("id", rmIds);
+      for (const r of (rms ?? []) as any[]) rmMap.set(r.id, r.name);
+    }
+
+    // Consumed quantity per stock_issue from slitting_entries
+    const issueIds = rawIssues.map((r) => r.id as string);
     const consumedMap = new Map<string, number>();
-    if (rawIds.length) {
+    if (issueIds.length) {
       const { data: consumedRows } = await supabase
         .from("slitting_entries")
         .select("stock_issue_id, source_quantity")
-        .in("stock_issue_id", rawIds);
+        .in("stock_issue_id", issueIds);
       for (const c of (consumedRows ?? []) as any[]) {
         const k = c.stock_issue_id as string;
+        if (!k) continue;
         consumedMap.set(k, (consumedMap.get(k) ?? 0) + Number(c.source_quantity ?? 0));
       }
     }
-    const fromRpc = ((rpcRes.data as IssuedMaterial[]) ?? []);
-    const fromRaw: IssuedMaterial[] = rawRows.map((r) => {
-      const issued = Number(r.issue_quantity ?? r.quantity ?? 0);
+
+    const fromRaw: IssuedMaterial[] = rawIssues.map((r) => {
+      const unit = r.issue_unit ?? r.unit ?? "kg";
+      const issuedKg = r.issue_quantity_kg != null ? Number(r.issue_quantity_kg) : null;
+      const issuedSqm = r.issue_quantity_sqm != null ? Number(r.issue_quantity_sqm) : null;
+      const issuedRaw = Number(r.issue_quantity ?? r.quantity ?? 0);
+      const issued = unit === "kg"
+        ? (issuedKg ?? issuedRaw)
+        : unit === "sqm"
+          ? (issuedSqm ?? issuedRaw)
+          : issuedRaw;
       const consumed = consumedMap.get(r.id) ?? 0;
       return {
         issue_id: r.id,
-        issue_date: r.date,
+        issue_date: r.date ?? r.created_at,
         product_code_id: "",
-        product_code: r.raw_materials?.name ?? "Raw Material",
+        product_code: rmMap.get(r.raw_material_id) ?? "Raw Material",
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
-        unit: r.issue_unit ?? "kg",
+        unit,
         notes: r.notes,
         issued_quantity: issued,
         consumed_quantity: consumed,
         remaining_quantity: issued - consumed,
       };
     }).filter((x) => x.remaining_quantity > 0);
+
     setIssuedMaterials([...fromRpc, ...fromRaw]);
   };
 

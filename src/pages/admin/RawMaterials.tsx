@@ -349,9 +349,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       notes: issueNotes || null,
       added_by: user.id,
       entry_type: "out",
-      issue_unit: issueUnit,
-      issue_quantity: qty,
-      issue_quantity_kg: qtyKg,
       issued_to_user_id: issueRecipientId || null,
     } as any);
     if (error) {

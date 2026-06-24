@@ -20,6 +20,9 @@ interface ThicknessBreakdown {
   produced: number;
 }
 
+type UnitKey = "meters" | "sqm" | "kg";
+type Buckets = Partial<Record<UnitKey, number>>;
+
 interface StockSummary {
   product_code_id: string;
   code: string;
@@ -27,6 +30,8 @@ interface StockSummary {
   produced: number;
   issued: number;
   available: number;
+  producedBuckets: Buckets;
+  issuedBuckets: Buckets;
   thicknessBreakdown: ThicknessBreakdown[];
 }
 
@@ -161,21 +166,46 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     setProductionManagers(list);
 
 
+    const normUnit = (u: any): UnitKey | null => {
+      const s = String(u ?? "").toLowerCase();
+      if (s === "sqm" || s === "sqmtr" || s === "sq m" || s === "m2") return "sqm";
+      if (s === "kg" || s === "kgs" || s === "kilogram") return "kg";
+      if (s === "meters" || s === "meter" || s === "m" || s === "mtr") return "meters";
+      return null;
+    };
+    const addBucket = (b: Buckets, u: UnitKey, q: number) => {
+      if (!q) return;
+      b[u] = (b[u] ?? 0) + q;
+    };
+
     // Build per-product-code totals and thickness breakdowns
-    const pcTotals = new Map<string, { code: string; unit: string; produced: number }>();
+    const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
     const thicknessMap = new Map<string, Map<number | null, number>>();
     const issueMap = new Map<string, number>();
+    const issuedBucketsMap = new Map<string, Buckets>();
+    const ensureIssued = (pcId: string) => {
+      let b = issuedBucketsMap.get(pcId);
+      if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
+      return b;
+    };
 
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
+      const gsm = p.gsm != null ? Number(p.gsm) : null;
+      const u = normUnit(p.unit) ?? "meters";
 
-      const existing = pcTotals.get(pcId);
-      if (existing) {
-        existing.produced += qty;
-      } else {
-        pcTotals.set(pcId, { code: p.product_codes?.code ?? "—", unit: p.unit, produced: qty });
+      let entry = pcTotals.get(pcId);
+      if (!entry) {
+        entry = { code: p.product_codes?.code ?? "—", unit: p.unit, produced: 0, buckets: {} };
+        pcTotals.set(pcId, entry);
+      }
+      entry.produced += qty;
+      addBucket(entry.buckets, u, qty);
+      if (gsm && gsm > 0) {
+        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
+        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
       }
 
       if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
@@ -190,12 +220,30 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       if (!pcId) continue;
       const q = Number(i.issue_quantity ?? i.quantity ?? 0);
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
+
+      const b = ensureIssued(pcId);
+      const u = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const gsm = i.gsm != null ? Number(i.gsm) : null;
+      const sqm = i.issue_quantity_sqm != null ? Number(i.issue_quantity_sqm)
+        : u === "sqm" ? q
+        : (gsm && gsm > 0 ? (q * 1000) / gsm : null);
+      const kg = i.issue_quantity_kg != null ? Number(i.issue_quantity_kg)
+        : u === "kg" ? q
+        : (gsm && gsm > 0 ? (q * gsm) / 1000 : null);
+      if (sqm != null) addBucket(b, "sqm", sqm);
+      if (kg != null) addBucket(b, "kg", kg);
+      if (u === "meters") addBucket(b, "meters", q);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
     for (const s of (salesData ?? []) as any[]) {
       if (s.item_type === "finished_product" && s.product_code_id) {
-        issueMap.set(s.product_code_id, (issueMap.get(s.product_code_id) ?? 0) + Number(s.quantity));
+        const pcId = s.product_code_id;
+        const q = Number(s.quantity);
+        issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
+        const b = ensureIssued(pcId);
+        const u = normUnit(s.unit) ?? "meters";
+        addBucket(b, u, q);
       }
     }
 
@@ -219,6 +267,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         produced,
         issued,
         available: produced - issued,
+        producedBuckets: prod?.buckets ?? {},
+        issuedBuckets: issuedBucketsMap.get(pcId) ?? {},
         thicknessBreakdown: breakdown,
       });
     }
@@ -285,7 +335,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   useEffect(() => { fetchData(); }, []);
 
   const filteredSummaries = summaries
-    .filter((s) => s.available > 0 && s.code !== "—")
+    .filter((s) => {
+      if (s.code === "—") return false;
+      const units: UnitKey[] = ["meters", "sqm", "kg"];
+      const anyPositive = units.some((u) => (Number(s.producedBuckets[u] ?? 0) - Number(s.issuedBuckets[u] ?? 0)) > 0);
+      return anyPositive || s.available > 0;
+    })
     .filter((s) => !search || s.code.toLowerCase().includes(search.toLowerCase()));
 
   const filteredLedger = ledger.filter((e) => {
@@ -442,23 +497,45 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Produced</p>
-                    <p className="text-base md:text-lg font-semibold text-green-600 break-words">{s.produced.toLocaleString()} {s.unit}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Issued</p>
-                    <p className="text-base md:text-lg font-semibold text-red-500 break-words">{s.issued.toLocaleString()} {s.unit}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Available</p>
-                    <p className={`text-base md:text-lg font-bold break-words ${s.available > 0 ? "text-primary" : "text-destructive"}`}>
-                      {s.available.toLocaleString()} {s.unit}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground text-center mb-2">Unit: {s.unit}</p>
+                {(() => {
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  const rows = units
+                    .map((u) => {
+                      const prod = Number(s.producedBuckets[u] ?? 0);
+                      const iss = Number(s.issuedBuckets[u] ?? 0);
+                      if (prod === 0 && iss === 0) return null;
+                      return { unit: u, prod, iss, avail: prod - iss };
+                    })
+                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number }>;
+                  if (rows.length === 0) {
+                    return (
+                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                        <div><p className="text-xs text-muted-foreground">Produced</p><p className="text-base font-semibold text-green-600">{fmt(s.produced)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Issued</p><p className="text-base font-semibold text-red-500">{fmt(s.issued)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Available</p><p className={`text-base font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>{fmt(s.available)} {s.unit}</p></div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2 mb-3">
+                      <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
+                        <span>Unit</span>
+                        <span className="text-right">Produced</span>
+                        <span className="text-right">Issued</span>
+                        <span className="text-right">Available</span>
+                      </div>
+                      {rows.map((r) => (
+                        <div key={r.unit} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
+                          <span className="font-medium uppercase text-xs">{r.unit}</span>
+                          <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
+                          <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
+                          <span className={`text-right font-bold ${r.avail > 0 ? "text-primary" : "text-destructive"}`}>{fmt(r.avail)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Thickness Breakdown */}
                 {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (
