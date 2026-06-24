@@ -20,6 +20,9 @@ interface ThicknessBreakdown {
   produced: number;
 }
 
+type UnitKey = "meters" | "sqm" | "kg";
+type Buckets = Partial<Record<UnitKey, number>>;
+
 interface StockSummary {
   product_code_id: string;
   code: string;
@@ -27,6 +30,8 @@ interface StockSummary {
   produced: number;
   issued: number;
   available: number;
+  producedBuckets: Buckets;
+  issuedBuckets: Buckets;
   thicknessBreakdown: ThicknessBreakdown[];
 }
 
