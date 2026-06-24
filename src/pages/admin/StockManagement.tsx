@@ -339,6 +339,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
           breakdown.push({ thickness_mm: t, produced: q });
         }
       }
+      const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
       summaryList.push({
         product_code_id: pcId,
         code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
@@ -351,7 +352,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
-      const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
       const computedIssuedTotals = issuedBuckets;
       // eslint-disable-next-line no-console
       console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
