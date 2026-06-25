@@ -278,12 +278,20 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return b;
     };
 
+    const gsmByCode: Record<string, number> = {};
+    const gsmByCodeThickness: Record<string, number> = {};
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
       const gsm = p.gsm != null ? Number(p.gsm) : null;
       const u = normUnit(p.unit) ?? "meters";
+
+      if (gsm && gsm > 0) {
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
+      }
 
       let entry = pcTotals.get(pcId);
       if (!entry) {
@@ -301,6 +309,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const tMap = thicknessMap.get(pcId)!;
       tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
     }
+    setProductGsmByCode(gsmByCode);
+    setProductGsmByCodeThickness(gsmByCodeThickness);
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
