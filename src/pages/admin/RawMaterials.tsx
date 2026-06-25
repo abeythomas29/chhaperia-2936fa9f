@@ -151,6 +151,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       return {
         ...e,
         kind: (isOut ? "issue" : "in") as "in" | "issue",
+        source: "rmse" as const,
+        source_id: e.id,
       };
     });
 
