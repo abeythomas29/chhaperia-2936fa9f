@@ -140,10 +140,14 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setRecipients((recipRes.data as RecipientOption[]) ?? []);
 
     const rawEntries = (entryRes.data ?? []) as any[];
-    const inwardEntries: StockEntry[] = rawEntries.map((e) => ({
-      ...e,
-      kind: (e.entry_type === "out" ? "issue" : "in") as "in" | "issue",
-    }));
+    const inwardEntries: StockEntry[] = rawEntries.map((e) => {
+      const isOut = e.entry_type === "out" || e.entry_type === "issue" || e.entry_kind === "out";
+      return {
+        ...e,
+        kind: (isOut ? "issue" : "in") as "in" | "issue",
+      };
+    });
+
     const salesRows = (saleRes.data ?? []) as any[];
 
     // Convert stock_issues (raw_material) → "out" entries in kg.
