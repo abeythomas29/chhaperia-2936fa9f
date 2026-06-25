@@ -366,7 +366,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const breakdown: ThicknessBreakdown[] = [];
       if (tMap) {
         for (const [t, q] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
-          breakdown.push({ thickness_mm: t, produced: q });
+          breakdown.push({ thickness_mm: t, produced: q.produced, sqm: q.sqm, kg: q.kg });
         }
       }
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
