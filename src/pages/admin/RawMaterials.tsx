@@ -93,7 +93,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [eThickness, setEThickness] = useState("");
   const [eGsm, setEGsm] = useState("");
   const [eNotes, setENotes] = useState("");
-  const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
+  const [deleteEntryRow, setDeleteEntryRow] = useState<StockEntry | null>(null);
 
   const [stockMaterialId, setStockMaterialId] = useState("");
   const [stockQty, setStockQty] = useState("");
