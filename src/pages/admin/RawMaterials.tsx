@@ -861,7 +861,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   out: number;
                 };
                 const groupMap = new Map<string, Group>();
-                matEntries.forEach((e) => {
+                // First pass: build inward groups (keyed by lot+thickness+gsm)
+                matEntries.filter((e) => !(e.kind === "out" || e.kind === "issue")).forEach((e) => {
                   const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
                   const g = e.gsm != null ? Number(e.gsm) : null;
                   const lot = e.lot_number?.trim() || null;
@@ -869,17 +870,39 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   const grp = groupMap.get(key) ?? {
                     thickness: t, gsm: g, lot, packType: null, packCount: 0, in: 0, out: 0,
                   };
-                  const isOut = e.kind === "out" || e.kind === "issue";
-                  if (isOut) grp.out += Number(e.quantity) || 0;
-                  else {
-                    grp.in += Number(e.quantity) || 0;
-                    // Aggregate pack counts only from "in" entries
-                    const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
-                    const rc = e.roll_count != null ? Number(e.roll_count) : null;
-                    if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
-                    else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
-                    else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  grp.in += Number(e.quantity) || 0;
+                  const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
+                  const rc = e.roll_count != null ? Number(e.roll_count) : null;
+                  if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
+                  else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
+                  else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  groupMap.set(key, grp);
+                });
+                // Second pass: attribute outs. Exact lot match preferred; else if exactly one
+                // inward lot matches (thickness, gsm) attach there; else show as "Unassigned issue".
+                matEntries.filter((e) => e.kind === "out" || e.kind === "issue").forEach((e) => {
+                  const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+                  const g = e.gsm != null ? Number(e.gsm) : null;
+                  const lot = e.lot_number?.trim() || null;
+                  const qty = Number(e.quantity) || 0;
+                  if (lot) {
+                    const key = `${t ?? "-"}|${g ?? "-"}|${lot}`;
+                    const grp = groupMap.get(key);
+                    if (grp) { grp.out += qty; return; }
                   }
+                  // Backward-compat fallback by (thickness, gsm)
+                  const candidates = Array.from(groupMap.values()).filter((v) =>
+                    (t == null || v.thickness === t) && (g == null || v.gsm === g) && v.lot != null,
+                  );
+                  if (candidates.length === 1) {
+                    candidates[0].out += qty;
+                    return;
+                  }
+                  const key = `${t ?? "-"}|${g ?? "-"}|unassigned`;
+                  const grp = groupMap.get(key) ?? {
+                    thickness: t, gsm: g, lot: "Unassigned issue", packType: null, packCount: 0, in: 0, out: 0,
+                  };
+                  grp.out += qty;
                   groupMap.set(key, grp);
                 });
                 const variants = Array.from(groupMap.values())
