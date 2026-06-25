@@ -110,6 +110,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [issueQty, setIssueQty] = useState("");
   const [issueGsm, setIssueGsm] = useState("");
   const [issueThickness, setIssueThickness] = useState("");
+  const [issueLot, setIssueLot] = useState("");
+  const [issueVariantKey, setIssueVariantKey] = useState("");
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [issueRecipientId, setIssueRecipientId] = useState("");
   const [issueNotes, setIssueNotes] = useState("");
