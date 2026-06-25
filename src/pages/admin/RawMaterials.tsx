@@ -704,26 +704,49 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                 <Input type="number" min="0" step="0.01" value={issueQty} onChange={(e) => setIssueQty(e.target.value)} placeholder="0" />
               </div>
             </div>
+            <div>
+              <Label>Variant (Lot · Thickness · GSM)</Label>
+              <Select
+                value={issueVariantKey}
+                onValueChange={(v) => {
+                  setIssueVariantKey(v);
+                  const variant = availableVariants.find((x) => x.key === v);
+                  if (variant) {
+                    setIssueThickness(variant.thickness != null ? String(variant.thickness) : "");
+                    setIssueLot(variant.lot ?? "");
+                    if (variant.gsm != null) setIssueGsm(String(variant.gsm));
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={availableVariants.length ? "Select variant" : "No inward stock available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableVariants.map((v) => (
+                    <SelectItem key={v.key} value={v.key}>
+                      {v.thickness != null ? `${v.thickness} mm` : "— mm"} | Lot {v.lot ?? "—"} | {v.balanceKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg available
+                      {v.packCount > 0 ? ` | ${v.packCount} ${v.packType === "roll" ? "rolls" : "pallets"}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedVariant && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Lot {selectedVariant.lot ?? "—"} balance: {selectedVariant.balanceKg.toFixed(2)} kg
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>GSM (from raw material) {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
+                <Label>GSM</Label>
                 <Input value={issueGsm || "—"} readOnly disabled className="bg-muted" />
                 {issueUnit === "sqm" && !issueGsm && (
-                  <p className="text-xs text-destructive mt-1">No GSM on file for this material. Cannot issue in sqm.</p>
+                  <p className="text-xs text-destructive mt-1">No GSM on file. Cannot issue in sqm.</p>
                 )}
               </div>
               <div>
-                <Label>Thickness (mm)</Label>
-                <Select value={issueThickness} onValueChange={setIssueThickness}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={availableThicknesses.length ? "Select thickness" : "No variants available"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableThicknesses.map((t) => (
-                      <SelectItem key={t} value={t}>{t} mm</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Thickness</Label>
+                <Input value={issueThickness ? `${issueThickness} mm` : "—"} readOnly disabled className="bg-muted" />
               </div>
             </div>
             {issueUnit === "sqm" && issueQty && issueGsm && Number(issueGsm) > 0 && (
