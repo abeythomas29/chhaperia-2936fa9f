@@ -632,7 +632,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         quantity: qty,
         issue_quantity: qty,
         date: eDate,
-        lot_number: eLot.trim() || null,
         thickness_mm: eThickness ? Number(eThickness) : null,
         gsm: eGsm ? Number(eGsm) : null,
         notes: eNotes || null,

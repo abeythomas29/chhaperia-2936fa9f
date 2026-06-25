@@ -261,7 +261,7 @@ export default function ProductionEntry() {
         lot_number: lotByIssueKey.get(lotKey) ?? null,
         issued_kg: kg,
         pending_kg: Math.max(0, kg - (usedByIssueId.get(r.id) ?? 0)),
-        created_at: r.created_at,
+        created_at: r.created_at ?? r.date ?? "",
       };
     });
 
