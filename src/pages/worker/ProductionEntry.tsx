@@ -52,11 +52,11 @@ interface StockIssueRow {
   issue_quantity?: number | null;
   issue_unit?: string | null;
   issue_quantity_kg?: number | null;
+  issue_quantity_sqm?: number | null;
   quantity?: number | null;
   unit?: string | null;
   gsm?: number | null;
   thickness_mm?: number | null;
-  lot_number?: string | null;
   date?: string | null;
   created_at?: string | null;
 }
@@ -164,48 +164,41 @@ export default function ProductionEntry() {
   };
 
   const fetchIssuedMaterials = async (userId: string) => {
-    console.log("current user id", userId);
+    console.log("current auth user", user?.id, user?.email);
 
-    const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, date, created_at, notes";
+    const issuedSelect = "id, issue_type, raw_material_id, issue_quantity, issue_unit, issue_quantity_kg, issue_quantity_sqm, recipient_user_id, issued_to_user_id, recipient_type, thickness_mm, gsm, notes, date, created_at";
     const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
       .eq("issue_type", "raw_material")
-      .not("raw_material_id", "is", null)
-      .or(`recipient_user_id.eq.${userId},issued_to_user_id.eq.${userId}`)
-      .order("date", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(20);
 
-    console.log("issued raw material rows fetched", data, error);
+    console.log("all recent raw material stock_issues", data, error);
 
-    const fetchedIssueRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
-      (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
-    );
     if (error) {
       console.error("issued raw material fetch failed", error);
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
+      setIssuedMaterials([]);
+      return;
     }
 
-    let issueRows = fetchedIssueRows;
-    if (!error && issueRows.length === 0) {
-      const { data: recent, error: recentError } = await untypedSupabase
-        .from("stock_issues")
-        .select(issuedSelect)
-        .eq("issue_type", "raw_material")
-        .not("raw_material_id", "is", null)
-        .order("date", { ascending: false })
-        .limit(10);
-      console.log("recent raw material issues without recipient filter", recent, recentError);
-      const recentRows = ((recent ?? []) as unknown as StockIssueRow[]).filter(
-        (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
-      );
-      const fallbackMatches = recentRows.filter(
-        (r) => r.recipient_user_id === userId || r.issued_to_user_id === userId,
-      );
-      if (fallbackMatches.length > 0) {
-        issueRows = fallbackMatches;
-        console.warn("using fallback-matched raw material issues", fallbackMatches);
-      }
+    const recentRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
+      (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
+    );
+    const assigned = recentRows.filter(
+      (row) => row.recipient_user_id === userId || row.issued_to_user_id === userId,
+    );
+    console.log("assigned raw material stock_issues", assigned);
+    if (assigned.length === 0 && recentRows.length > 0) {
+      console.warn("no assigned raw material stock_issues for current user; check recipient_user_id/issued_to_user_id saved on issue insert", {
+        currentUserId: userId,
+        currentUserEmail: user?.email,
+        recentRows,
+      });
     }
+
+    const issueRows = assigned;
 
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
     const matsRes = rmIds.length
@@ -252,7 +245,8 @@ export default function ProductionEntry() {
 
     const items: IssuedMaterial[] = issueRows.map((r) => {
       const gsm = r.gsm != null ? Number(r.gsm) : null;
-      const kg = getIssueQuantityKg(r);
+      const fallbackKg = r.issue_quantity_kg ?? (normalizeIssueUnit(r.issue_unit) === "kg" ? r.issue_quantity : null);
+      const kg = getIssueQuantityKg(r) || Number(fallbackKg ?? 0);
       const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
       const m = rmMap.get(r.raw_material_id);
       const uid = r.issued_to_user_id ?? r.recipient_user_id ?? "";
@@ -288,7 +282,7 @@ export default function ProductionEntry() {
       }
     }
 
-    const pendingRows = items.filter((i) => i.pending_kg > 0.0001);
+    const pendingRows = items.filter((i) => i.pending_kg > 0.0001 || i.issued_kg <= 0);
     console.log("rows after filtering pending", pendingRows);
     setIssuedMaterials(pendingRows);
   };

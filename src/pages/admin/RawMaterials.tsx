@@ -573,7 +573,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         issue_quantity_sqm: sqmValue,
         gsm: gsmToSave,
         thickness_mm: thicknessToSave,
-        lot_number: lotToSave,
         notes: issueNotes || null,
         issued_by: user.id,
         date: issueDate,
