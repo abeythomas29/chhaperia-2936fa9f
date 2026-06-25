@@ -442,14 +442,31 @@ export default function SlittingEntryForm() {
 
               <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
-                  <Label className="text-xs">GSM</Label>
-                  <Input type="number" step="any" value={form.source_gsm}
-                    onChange={(e) => setForm({ ...form, source_gsm: e.target.value })} />
+                  <Label className="text-xs">
+                    {selectedIssue ? "GSM (from issued material)" : "GSM"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.source_gsm}
+                    readOnly={!!selectedIssue}
+                    placeholder={selectedIssue && !form.source_gsm ? "GSM not available" : ""}
+                    className={selectedIssue ? "bg-muted cursor-not-allowed" : ""}
+                    onChange={(e) => setForm({ ...form, source_gsm: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Thickness (mm)</Label>
-                  <Input type="number" step="any" value={form.source_thickness_mm}
-                    onChange={(e) => setForm({ ...form, source_thickness_mm: e.target.value })} />
+                  <Label className="text-xs">
+                    {selectedIssue ? "Thickness (mm) (from issued material)" : "Thickness (mm)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.source_thickness_mm}
+                    readOnly={!!selectedIssue}
+                    className={selectedIssue ? "bg-muted cursor-not-allowed" : ""}
+                    onChange={(e) => setForm({ ...form, source_thickness_mm: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Unit</Label>
