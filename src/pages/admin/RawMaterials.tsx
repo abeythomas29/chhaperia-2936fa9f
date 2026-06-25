@@ -192,8 +192,9 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     // (legacy double-write), avoid double-counting. Match by issued_to_user_id + date + qty.
     const dedupKey = (e: StockEntry) => `${e.raw_material_id}|${e.date}|${e.issued_to_user_id ?? ""}|${Number(e.quantity).toFixed(2)}`;
     const inwardOutKeys = new Set(
-      inwardEntries.filter((e) => e.entry_type === "out").map(dedupKey),
+      inwardEntries.filter((e) => e.kind === "issue").map(dedupKey),
     );
+
     const issueOutDeduped = issueOutEntries.filter((e) => !inwardOutKeys.has(dedupKey(e)));
 
     // Resolve client names for sales (some sales reference company_clients by id)
