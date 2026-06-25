@@ -474,13 +474,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setIssueNotes("");
   };
 
-  const getRawMaterialRecipientType = (recipientId: string): "production_manager" | "worker" => {
-    const selected = recipients.find((r) => r.user_id === recipientId);
-    const selectedRoles = selected?.roles ?? [];
-    if (selectedRoles.includes("production_manager") || selectedRoles.includes("slitting_manager")) {
-      return "production_manager";
-    }
-    if (selectedRoles.includes("worker")) return "worker";
+  const getRawMaterialRecipientType = (_recipientId: string): "production_manager" => {
     return "production_manager";
   };
 
@@ -573,7 +567,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         issue_quantity_sqm: sqmValue,
         gsm: gsmToSave,
         thickness_mm: thicknessToSave,
-        lot_number: lotToSave,
         notes: issueNotes || null,
         issued_by: user.id,
         date: issueDate,
@@ -633,7 +626,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         quantity: qty,
         issue_quantity: qty,
         date: eDate,
-        lot_number: eLot.trim() || null,
         thickness_mm: eThickness ? Number(eThickness) : null,
         gsm: eGsm ? Number(eGsm) : null,
         notes: eNotes || null,

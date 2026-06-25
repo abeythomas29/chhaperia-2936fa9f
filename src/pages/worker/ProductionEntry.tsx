@@ -52,8 +52,24 @@ interface StockIssueRow {
   issue_quantity?: number | null;
   issue_unit?: string | null;
   issue_quantity_kg?: number | null;
+  issue_quantity_sqm?: number | null;
   quantity?: number | null;
   unit?: string | null;
+  gsm?: number | null;
+  thickness_mm?: number | null;
+  source_lot_number?: string | null;
+  date?: string | null;
+  created_at?: string | null;
+}
+
+interface RawMaterialStockIssueRow {
+  id: string;
+  raw_material_id: string | null;
+  issued_to_user_id?: string | null;
+  quantity?: number | null;
+  issue_quantity?: number | null;
+  issue_unit?: string | null;
+  issue_quantity_kg?: number | null;
   gsm?: number | null;
   thickness_mm?: number | null;
   lot_number?: string | null;
@@ -160,50 +176,74 @@ export default function ProductionEntry() {
     if (row.issue_quantity_kg != null) return Number(row.issue_quantity_kg) || 0;
     if (unit === "kg") return qty;
     if (unit === "sqm" && gsm && gsm > 0) return (qty * gsm) / 1000;
-    return qty;
+    return null;
   };
 
   const fetchIssuedMaterials = async (userId: string) => {
-    console.log("current user id", userId);
+    console.log("current auth user", user?.id, user?.email);
 
-    const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, date, created_at, notes";
+    const issuedSelect = "id, issue_type, raw_material_id, issue_quantity, issue_unit, issue_quantity_kg, issue_quantity_sqm, recipient_user_id, issued_to_user_id, recipient_type, thickness_mm, gsm, notes, date, created_at";
     const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
       .eq("issue_type", "raw_material")
-      .not("raw_material_id", "is", null)
-      .or(`recipient_user_id.eq.${userId},issued_to_user_id.eq.${userId}`)
-      .order("date", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(20);
 
-    console.log("issued raw material rows fetched", data, error);
+    console.log("all recent raw material stock_issues", data, error);
 
-    const fetchedIssueRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
-      (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
-    );
     if (error) {
       console.error("issued raw material fetch failed", error);
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
     }
 
-    let issueRows = fetchedIssueRows;
-    if (!error && issueRows.length === 0) {
-      const { data: recent, error: recentError } = await untypedSupabase
-        .from("stock_issues")
-        .select(issuedSelect)
-        .eq("issue_type", "raw_material")
-        .not("raw_material_id", "is", null)
-        .order("date", { ascending: false })
-        .limit(10);
-      console.log("recent raw material issues without recipient filter", recent, recentError);
-      const recentRows = ((recent ?? []) as unknown as StockIssueRow[]).filter(
-        (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
-      );
-      const fallbackMatches = recentRows.filter(
-        (r) => r.recipient_user_id === userId || r.issued_to_user_id === userId,
-      );
-      if (fallbackMatches.length > 0) {
-        issueRows = fallbackMatches;
-        console.warn("using fallback-matched raw material issues", fallbackMatches);
+    const recentRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
+      (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
+    );
+    const assigned = recentRows.filter(
+      (row) => row.recipient_user_id === userId || row.issued_to_user_id === userId,
+    );
+    console.log("assigned raw material stock_issues", assigned);
+    if (assigned.length === 0 && recentRows.length > 0) {
+      console.warn("no assigned raw material stock_issues for current user; check recipient_user_id/issued_to_user_id saved on issue insert", {
+        currentUserId: userId,
+        currentUserEmail: user?.email,
+        recentRows,
+      });
+    }
+
+    let issueRows = assigned;
+    if (issueRows.length === 0) {
+      const { data: rmseAssigned, error: rmseAssignedError } = await untypedSupabase
+        .from("raw_material_stock_entries")
+        .select("id, raw_material_id, issued_to_user_id, quantity, issue_quantity, issue_unit, issue_quantity_kg, thickness_mm, gsm, lot_number, date, created_at, entry_type")
+        .eq("entry_type", "issue")
+        .eq("issued_to_user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      console.log("assigned raw material stock entry issue fallback", rmseAssigned, rmseAssignedError);
+      if (rmseAssignedError) {
+        console.error("raw material stock entry fallback fetch failed", rmseAssignedError);
+        toast({ title: "Could not load issued raw material log", description: rmseAssignedError.message, variant: "destructive" });
+      } else {
+        issueRows = ((rmseAssigned ?? []) as unknown as RawMaterialStockIssueRow[])
+          .filter((r): r is RawMaterialStockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id))
+          .map((r) => ({
+            id: `rmse-${r.id}`,
+            raw_material_id: r.raw_material_id,
+            recipient_user_id: null,
+            issued_to_user_id: r.issued_to_user_id ?? null,
+            recipient_type: null,
+            issue_type: "raw_material",
+            issue_quantity: r.issue_quantity ?? r.quantity ?? null,
+            issue_unit: r.issue_unit ?? "kg",
+            issue_quantity_kg: r.issue_quantity_kg ?? r.quantity ?? null,
+            gsm: r.gsm ?? null,
+            thickness_mm: r.thickness_mm ?? null,
+            source_lot_number: r.lot_number ?? null,
+            date: r.date ?? null,
+            created_at: r.created_at ?? r.date ?? null,
+          }));
       }
     }
 
@@ -240,11 +280,11 @@ export default function ProductionEntry() {
     if (rmIds.length) {
       const { data: rmseRows, error: rmseErr } = await untypedSupabase
         .from("raw_material_stock_entries")
-        .select("raw_material_id, issued_to_user_id, recipient_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
+        .select("raw_material_id, issued_to_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
         .eq("entry_type", "issue");
       if (rmseErr) console.warn("lot lookup failed", rmseErr);
       for (const e of ((rmseRows ?? []) as Array<Record<string, unknown>>)) {
-        const uid = (e.issued_to_user_id ?? e.recipient_user_id) as string | null;
+        const uid = e.issued_to_user_id as string | null;
         const key = `${e.raw_material_id}|${uid ?? ""}|${e.date ?? ""}|${Number(e.issue_quantity) || 0}|${e.issue_unit ?? ""}|${e.thickness_mm ?? ""}|${e.gsm ?? ""}`;
         if (e.lot_number) lotByIssueKey.set(key, String(e.lot_number));
       }
@@ -252,7 +292,8 @@ export default function ProductionEntry() {
 
     const items: IssuedMaterial[] = issueRows.map((r) => {
       const gsm = r.gsm != null ? Number(r.gsm) : null;
-      const kg = getIssueQuantityKg(r);
+      const pendingFallbackKg = r.issue_quantity_kg ?? (normalizeIssueUnit(r.issue_unit) === "kg" ? r.issue_quantity : null);
+      const kg = getIssueQuantityKg(r) ?? Number(pendingFallbackKg ?? 0);
       const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
       const m = rmMap.get(r.raw_material_id);
       const uid = r.issued_to_user_id ?? r.recipient_user_id ?? "";
@@ -264,10 +305,10 @@ export default function ProductionEntry() {
         unit: m?.unit ?? "kg",
         thickness_mm: t,
         gsm,
-        lot_number: lotByIssueKey.get(lotKey) ?? null,
+        lot_number: r.source_lot_number ?? lotByIssueKey.get(lotKey) ?? null,
         issued_kg: kg,
         pending_kg: Math.max(0, kg - (usedByIssueId.get(r.id) ?? 0)),
-        created_at: r.created_at,
+        created_at: r.created_at ?? r.date ?? "",
       };
     });
 
@@ -288,7 +329,7 @@ export default function ProductionEntry() {
       }
     }
 
-    const pendingRows = items.filter((i) => i.pending_kg > 0.0001);
+    const pendingRows = items.filter((i) => i.pending_kg > 0.0001 || i.issued_kg <= 0);
     console.log("rows after filtering pending", pendingRows);
     setIssuedMaterials(pendingRows);
   };
@@ -479,7 +520,7 @@ export default function ProductionEntry() {
         production_entry_id: entry.id,
         raw_material_id: r.raw_material_id,
         quantity_used: Number(r.quantity_used),
-        stock_issue_id: r.stock_issue_id || null,
+        stock_issue_id: r.stock_issue_id && !r.stock_issue_id.startsWith("rmse-") ? r.stock_issue_id : null,
       }));
       let usageError: any = null;
       const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
