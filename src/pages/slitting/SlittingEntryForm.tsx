@@ -348,7 +348,7 @@ export default function SlittingEntryForm() {
               placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
               options={issuedMaterials.map((i) => ({
                 value: i.issue_id,
-                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · GSM ${i.gsm ?? "—"} · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
               }))}
             />
             {selectedIssue && (
