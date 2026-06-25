@@ -608,11 +608,115 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   };
 
   const confirmDeleteEntry = async () => {
-    if (!deleteEntryId) return;
-    const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", deleteEntryId);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    const row = deleteEntryRow;
+    if (!row) return;
+    const realId = row.source_id ?? row.id;
+    const source = row.source ?? "rmse";
+
+    // 1) Delete the primary row from the table it actually lives in
+    if (source === "stock_issue") {
+      const { error } = await supabase.from("stock_issues").delete().eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("delete stock_issues failed", error);
+        toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      // Try mirror delete in raw_material_stock_entries (best-match)
+      try {
+        const rmId = row.raw_material_id;
+        const issuedTo = row.issued_to_user_id ?? null;
+        const date = row.date ?? null;
+        const oldQty = Number(row.issue_quantity ?? row.quantity ?? 0);
+        const oldUnit = row.issue_unit ?? null;
+        let q = supabase
+          .from("raw_material_stock_entries")
+          .select("id")
+          .eq("raw_material_id", rmId)
+          .eq("entry_type", "issue");
+        if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+        if (date) q = q.eq("date", date);
+        if (oldUnit) q = q.eq("issue_unit", oldUnit);
+        if (oldQty) q = q.eq("issue_quantity", oldQty);
+        if (row.thickness_mm != null) q = q.eq("thickness_mm", row.thickness_mm);
+        if (row.gsm != null) q = q.eq("gsm", row.gsm);
+        const { data: matches } = await q.limit(1);
+        if (matches && matches.length) {
+          const { error: rmErr } = await supabase
+            .from("raw_material_stock_entries")
+            .delete()
+            .eq("id", matches[0].id)
+            .eq("entry_type", "issue");
+          if (rmErr) {
+            // eslint-disable-next-line no-console
+            console.error("mirror delete raw_material_stock_entries failed", rmErr);
+          }
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn("No matching raw_material_stock_entries row found for stock_issue delete", realId);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("mirror delete error", err);
+      }
+    } else {
+      // rmse (or sale never reaches here because actions are hidden)
+      const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("delete raw_material_stock_entries failed", error);
+        toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      // If it was an issue row, try mirror delete in stock_issues
+      if (row.kind === "issue") {
+        try {
+          const rmId = row.raw_material_id;
+          const issuedTo = row.issued_to_user_id ?? null;
+          const date = row.date ?? null;
+          const oldQty = Number(row.issue_quantity ?? row.quantity ?? 0);
+          const oldUnit = row.issue_unit ?? null;
+          let q = supabase
+            .from("stock_issues")
+            .select("id")
+            .eq("raw_material_id", rmId)
+            .eq("issue_type", "raw_material");
+          if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+          if (date) q = q.eq("date", date);
+          if (oldUnit) q = q.eq("issue_unit", oldUnit);
+          if (oldQty) q = q.eq("issue_quantity", oldQty);
+          if (row.thickness_mm != null) q = q.eq("thickness_mm", row.thickness_mm);
+          if (row.gsm != null) q = q.eq("gsm", row.gsm);
+          const { data: matches } = await q.limit(1);
+          if (matches && matches.length) {
+            const { error: siErr } = await supabase
+              .from("stock_issues")
+              .delete()
+              .eq("id", matches[0].id);
+            if (siErr) {
+              // eslint-disable-next-line no-console
+              console.error("mirror delete stock_issues failed", siErr);
+            }
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn("No matching stock_issues row found for rmse issue delete", realId);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn("mirror delete error", err);
+        }
+      }
+    }
+
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|raw_material/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
     toast({ title: "Stock entry deleted" });
-    setDeleteEntryId(null);
+    setDeleteEntryRow(null);
     fetchData();
   };
 
