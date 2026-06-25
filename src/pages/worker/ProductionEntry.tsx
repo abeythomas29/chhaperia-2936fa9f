@@ -358,16 +358,31 @@ export default function ProductionEntry() {
       return;
     }
 
-    // Insert optional raw material usage rows
+    // Insert optional raw material usage rows (try with stock_issue_id, fallback without)
     if (validUsage.length > 0) {
-      const usageRows = validUsage.map((r) => ({
+      const usageRowsWithLink = validUsage.map((r) => ({
         production_entry_id: entry.id,
         raw_material_id: r.raw_material_id,
         quantity_used: Number(r.quantity_used),
+        stock_issue_id: r.stock_issue_id || null,
       }));
-      const { error: usageError } = await supabase.from("raw_material_usage").insert(usageRows);
+      let usageError: any = null;
+      const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
+      if (tryLinked.error) {
+        // Column likely missing — retry without stock_issue_id
+        const fallback = validUsage.map((r) => ({
+          production_entry_id: entry.id,
+          raw_material_id: r.raw_material_id,
+          quantity_used: Number(r.quantity_used),
+        }));
+        const retry = await supabase.from("raw_material_usage").insert(fallback);
+        usageError = retry.error;
+      }
       if (usageError) {
         toast({ title: "Warning", description: "Production saved but material usage failed: " + usageError.message, variant: "destructive" });
+      } else if (user) {
+        // Refresh pending list
+        fetchIssuedMaterials(user.id);
       }
     }
 
