@@ -18,6 +18,8 @@ import { toast } from "@/hooks/use-toast";
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
+  sqm: number | null;
+  kg: number | null;
 }
 
 type UnitKey = "meters" | "sqm" | "kg";
