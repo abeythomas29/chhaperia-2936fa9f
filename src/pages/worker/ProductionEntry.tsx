@@ -57,6 +57,22 @@ interface StockIssueRow {
   unit?: string | null;
   gsm?: number | null;
   thickness_mm?: number | null;
+  source_lot_number?: string | null;
+  date?: string | null;
+  created_at?: string | null;
+}
+
+interface RawMaterialStockIssueRow {
+  id: string;
+  raw_material_id: string | null;
+  issued_to_user_id?: string | null;
+  quantity?: number | null;
+  issue_quantity?: number | null;
+  issue_unit?: string | null;
+  issue_quantity_kg?: number | null;
+  gsm?: number | null;
+  thickness_mm?: number | null;
+  lot_number?: string | null;
   date?: string | null;
   created_at?: string | null;
 }
@@ -198,7 +214,40 @@ export default function ProductionEntry() {
       });
     }
 
-    const issueRows = assigned;
+    let issueRows = assigned;
+    if (issueRows.length === 0) {
+      const { data: rmseAssigned, error: rmseAssignedError } = await untypedSupabase
+        .from("raw_material_stock_entries")
+        .select("id, raw_material_id, issued_to_user_id, quantity, issue_quantity, issue_unit, issue_quantity_kg, thickness_mm, gsm, lot_number, date, created_at, entry_type")
+        .eq("entry_type", "issue")
+        .eq("issued_to_user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      console.log("assigned raw material stock entry issue fallback", rmseAssigned, rmseAssignedError);
+      if (rmseAssignedError) {
+        console.error("raw material stock entry fallback fetch failed", rmseAssignedError);
+        toast({ title: "Could not load issued raw material log", description: rmseAssignedError.message, variant: "destructive" });
+      } else {
+        issueRows = ((rmseAssigned ?? []) as unknown as RawMaterialStockIssueRow[])
+          .filter((r): r is RawMaterialStockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id))
+          .map((r) => ({
+            id: `rmse-${r.id}`,
+            raw_material_id: r.raw_material_id,
+            recipient_user_id: null,
+            issued_to_user_id: r.issued_to_user_id ?? null,
+            recipient_type: null,
+            issue_type: "raw_material",
+            issue_quantity: r.issue_quantity ?? r.quantity ?? null,
+            issue_unit: r.issue_unit ?? "kg",
+            issue_quantity_kg: r.issue_quantity_kg ?? r.quantity ?? null,
+            gsm: r.gsm ?? null,
+            thickness_mm: r.thickness_mm ?? null,
+            source_lot_number: r.lot_number ?? null,
+            date: r.date ?? null,
+            created_at: r.created_at ?? r.date ?? null,
+          }));
+      }
+    }
 
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
     const matsRes = rmIds.length
@@ -258,7 +307,7 @@ export default function ProductionEntry() {
         unit: m?.unit ?? "kg",
         thickness_mm: t,
         gsm,
-        lot_number: lotByIssueKey.get(lotKey) ?? null,
+        lot_number: r.source_lot_number ?? lotByIssueKey.get(lotKey) ?? null,
         issued_kg: kg,
         pending_kg: Math.max(0, kg - (usedByIssueId.get(r.id) ?? 0)),
         created_at: r.created_at ?? r.date ?? "",
@@ -473,7 +522,7 @@ export default function ProductionEntry() {
         production_entry_id: entry.id,
         raw_material_id: r.raw_material_id,
         quantity_used: Number(r.quantity_used),
-        stock_issue_id: r.stock_issue_id || null,
+        stock_issue_id: r.stock_issue_id && !r.stock_issue_id.startsWith("rmse-") ? r.stock_issue_id : null,
       }));
       let usageError: any = null;
       const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
