@@ -57,7 +57,8 @@ interface RawMaterialsProps {
 }
 
 export default function RawMaterials({ embedded = false, readOnly = false }: RawMaterialsProps = {}) {
-  const { user } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isInventoryManager, role: currentUserRole } = useAuth();
+  const canManageEntries = isAdmin || isSuperAdmin || isInventoryManager;
   const { toast } = useToast();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [stockEntries, setStockEntries] = useState<(StockEntry & { material_name?: string; material_unit?: string; person_name?: string })[]>([]);
