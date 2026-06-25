@@ -43,6 +43,9 @@ interface StockEntry {
   issue_quantity_kg?: number | null;
   issued_to_user_id?: string | null;
   kind?: "in" | "out" | "issue";
+  // Source of the row (which table it came from) + original primary key in that table.
+  source?: "rmse" | "stock_issue" | "sale";
+  source_id?: string;
 }
 
 interface RecipientOption {
@@ -90,7 +93,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [eThickness, setEThickness] = useState("");
   const [eGsm, setEGsm] = useState("");
   const [eNotes, setENotes] = useState("");
-  const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
+  const [deleteEntryRow, setDeleteEntryRow] = useState<StockEntry | null>(null);
 
   const [stockMaterialId, setStockMaterialId] = useState("");
   const [stockQty, setStockQty] = useState("");
@@ -148,6 +151,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       return {
         ...e,
         kind: (isOut ? "issue" : "in") as "in" | "issue",
+        source: "rmse" as const,
+        source_id: e.id,
       };
     });
 
@@ -175,7 +180,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         raw_material_id: r.raw_material_id,
         quantity: kg,
         date: r.date ?? r.created_at,
-        lot_number: null,
+        lot_number: r.lot_number ?? null,
         supplier: null,
         pallets: null,
         thickness_mm: r.thickness_mm,
@@ -183,11 +188,13 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         notes: r.notes ?? null,
         added_by: r.issued_by,
         created_at: r.created_at,
-        entry_type: "out",
+        entry_type: "issue",
         issue_unit: unit,
         issue_quantity: qty,
         issued_to_user_id: r.issued_to_user_id ?? r.recipient_user_id ?? null,
-        kind: "out",
+        kind: "issue",
+        source: "stock_issue",
+        source_id: r.id,
       };
     });
 
@@ -224,6 +231,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         added_by: s.sold_by,
         created_at: s.created_at,
         kind: "out",
+        source: "sale",
+        source_id: s.id,
       }));
 
     const allEntries = [...inwardEntries, ...issueOutDeduped, ...outwardEntries]
@@ -580,18 +589,53 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
 
   const saveEntryEdit = async () => {
     if (!editEntry || !eMaterialId || !eQty) return;
-    const { error } = await supabase.from("raw_material_stock_entries").update({
-      raw_material_id: eMaterialId,
-      quantity: Number(eQty),
-      date: eDate,
-      lot_number: eLot.trim() || null,
-      supplier: eSupplier.trim() || null,
-      pallets: ePallets ? Number(ePallets) : null,
-      thickness_mm: eThickness ? Number(eThickness) : null,
-      gsm: eGsm ? Number(eGsm) : null,
-      notes: eNotes || null,
-    } as any).eq("id", editEntry.id);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    const source = editEntry.source ?? "rmse";
+    const realId = editEntry.source_id ?? editEntry.id;
+    if (source === "stock_issue") {
+      const qty = Number(eQty);
+      const update: any = {
+        raw_material_id: eMaterialId,
+        quantity: qty,
+        issue_quantity: qty,
+        date: eDate,
+        lot_number: eLot.trim() || null,
+        thickness_mm: eThickness ? Number(eThickness) : null,
+        gsm: eGsm ? Number(eGsm) : null,
+        notes: eNotes || null,
+      };
+      const { error } = await (supabase as any).from("stock_issues").update(update).eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("update stock_issues failed", error);
+        toast({ title: "Update failed", description: error.message, variant: "destructive" });
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("raw_material_stock_entries").update({
+        raw_material_id: eMaterialId,
+        quantity: Number(eQty),
+        date: eDate,
+        lot_number: eLot.trim() || null,
+        supplier: eSupplier.trim() || null,
+        pallets: ePallets ? Number(ePallets) : null,
+        thickness_mm: eThickness ? Number(eThickness) : null,
+        gsm: eGsm ? Number(eGsm) : null,
+        notes: eNotes || null,
+      } as any).eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("update raw_material_stock_entries failed", error);
+        toast({ title: "Update failed", description: error.message, variant: "destructive" });
+        return;
+      }
+    }
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|raw_material/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
     toast({ title: "Stock entry updated" });
     setEditEntryOpen(false);
     setEditEntry(null);
@@ -599,11 +643,115 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   };
 
   const confirmDeleteEntry = async () => {
-    if (!deleteEntryId) return;
-    const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", deleteEntryId);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    const row = deleteEntryRow;
+    if (!row) return;
+    const realId = row.source_id ?? row.id;
+    const source = row.source ?? "rmse";
+
+    // 1) Delete the primary row from the table it actually lives in
+    if (source === "stock_issue") {
+      const { error } = await supabase.from("stock_issues").delete().eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("delete stock_issues failed", error);
+        toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      // Try mirror delete in raw_material_stock_entries (best-match)
+      try {
+        const rmId = row.raw_material_id;
+        const issuedTo = row.issued_to_user_id ?? null;
+        const date = row.date ?? null;
+        const oldQty = Number(row.issue_quantity ?? row.quantity ?? 0);
+        const oldUnit = row.issue_unit ?? null;
+        let q = supabase
+          .from("raw_material_stock_entries")
+          .select("id")
+          .eq("raw_material_id", rmId)
+          .eq("entry_type", "issue");
+        if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+        if (date) q = q.eq("date", date);
+        if (oldUnit) q = q.eq("issue_unit", oldUnit);
+        if (oldQty) q = q.eq("issue_quantity", oldQty);
+        if (row.thickness_mm != null) q = q.eq("thickness_mm", row.thickness_mm);
+        if (row.gsm != null) q = q.eq("gsm", row.gsm);
+        const { data: matches } = await q.limit(1);
+        if (matches && matches.length) {
+          const { error: rmErr } = await supabase
+            .from("raw_material_stock_entries")
+            .delete()
+            .eq("id", matches[0].id)
+            .eq("entry_type", "issue");
+          if (rmErr) {
+            // eslint-disable-next-line no-console
+            console.error("mirror delete raw_material_stock_entries failed", rmErr);
+          }
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn("No matching raw_material_stock_entries row found for stock_issue delete", realId);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("mirror delete error", err);
+      }
+    } else {
+      // rmse (or sale never reaches here because actions are hidden)
+      const { error } = await supabase.from("raw_material_stock_entries").delete().eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("delete raw_material_stock_entries failed", error);
+        toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      // If it was an issue row, try mirror delete in stock_issues
+      if (row.kind === "issue") {
+        try {
+          const rmId = row.raw_material_id;
+          const issuedTo = row.issued_to_user_id ?? null;
+          const date = row.date ?? null;
+          const oldQty = Number(row.issue_quantity ?? row.quantity ?? 0);
+          const oldUnit = row.issue_unit ?? null;
+          let q: any = (supabase as any)
+            .from("stock_issues")
+            .select("id")
+            .eq("raw_material_id", rmId)
+            .eq("issue_type", "raw_material");
+          if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+          if (date) q = q.eq("date", date);
+          if (oldUnit) q = q.eq("issue_unit", oldUnit);
+          if (oldQty) q = q.eq("issue_quantity", oldQty);
+          if (row.thickness_mm != null) q = q.eq("thickness_mm", row.thickness_mm);
+          if (row.gsm != null) q = q.eq("gsm", row.gsm);
+          const { data: matches } = await q.limit(1);
+          if (matches && matches.length) {
+            const { error: siErr } = await supabase
+              .from("stock_issues")
+              .delete()
+              .eq("id", matches[0].id);
+            if (siErr) {
+              // eslint-disable-next-line no-console
+              console.error("mirror delete stock_issues failed", siErr);
+            }
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn("No matching stock_issues row found for rmse issue delete", realId);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn("mirror delete error", err);
+        }
+      }
+    }
+
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|raw_material/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
     toast({ title: "Stock entry deleted" });
-    setDeleteEntryId(null);
+    setDeleteEntryRow(null);
     fetchData();
   };
 
@@ -1028,13 +1176,14 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
               {filteredEntries.length === 0 ? (
                 <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
               ) : filteredEntries.map((e) => {
-                const isSale = e.kind === "out";
+                const isSale = e.source === "sale";
                 const isIssue = e.kind === "issue";
-                const isOut = isSale || isIssue;
+                const isOut = isSale || isIssue || e.kind === "out";
                 const typeLabel = isSale ? "Sale" : isIssue ? "Issued" : "In";
                 const qtyDisplay = isIssue && e.issue_quantity != null && e.issue_unit
                   ? `${Number(e.issue_quantity).toLocaleString()} ${e.issue_unit} → ${Number(e.quantity).toLocaleString()} kg`
                   : `${Number(e.quantity).toLocaleString()} ${e.material_unit}`;
+                // Allow edit/delete for inward + issue rows. Hide only for Sale rows (handled in Sales tab).
                 const canEditRow = !readOnly && canManageEntries && !isSale;
                 if (!canEditRow) {
                   console.log("raw material row action check", {
@@ -1044,6 +1193,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     isSuperAdmin,
                     rowEntryType: (e as any).entry_type,
                     rowEntryKind: (e as any).entry_kind,
+                    rowSource: e.source,
                     rowAddedBy: e.added_by,
                     currentUserId: user?.id,
                     canEditDelete: canEditRow,
@@ -1073,7 +1223,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     ) : (
                       <>
                         <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteEntryRow(e)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </>
                     )}
                   </TableCell>
@@ -1153,7 +1303,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       </Dialog>
 
       {/* Delete Stock Entry Confirm */}
-      <AlertDialog open={!!deleteEntryId} onOpenChange={(open) => !open && setDeleteEntryId(null)}>
+      <AlertDialog open={!!deleteEntryRow} onOpenChange={(open) => !open && setDeleteEntryRow(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Stock Entry?</AlertDialogTitle>
