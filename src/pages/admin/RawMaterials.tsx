@@ -140,10 +140,14 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setRecipients((recipRes.data as RecipientOption[]) ?? []);
 
     const rawEntries = (entryRes.data ?? []) as any[];
-    const inwardEntries: StockEntry[] = rawEntries.map((e) => ({
-      ...e,
-      kind: (e.entry_type === "out" ? "issue" : "in") as "in" | "issue",
-    }));
+    const inwardEntries: StockEntry[] = rawEntries.map((e) => {
+      const isOut = e.entry_type === "out" || e.entry_type === "issue" || e.entry_kind === "out";
+      return {
+        ...e,
+        kind: (isOut ? "issue" : "in") as "in" | "issue",
+      };
+    });
+
     const salesRows = (saleRes.data ?? []) as any[];
 
     // Convert stock_issues (raw_material) → "out" entries in kg.
@@ -188,8 +192,9 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     // (legacy double-write), avoid double-counting. Match by issued_to_user_id + date + qty.
     const dedupKey = (e: StockEntry) => `${e.raw_material_id}|${e.date}|${e.issued_to_user_id ?? ""}|${Number(e.quantity).toFixed(2)}`;
     const inwardOutKeys = new Set(
-      inwardEntries.filter((e) => e.entry_type === "out").map(dedupKey),
+      inwardEntries.filter((e) => e.kind === "issue").map(dedupKey),
     );
+
     const issueOutDeduped = issueOutEntries.filter((e) => !inwardOutKeys.has(dedupKey(e)));
 
     // Resolve client names for sales (some sales reference company_clients by id)
@@ -409,14 +414,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
+      issue_quantity: qty,
+      issue_unit: issueUnit,
       date: issueDate,
       thickness_mm: issueThickness ? Number(issueThickness) : null,
       gsm: gsmNum,
       notes: issueNotes || null,
       added_by: user.id,
-      entry_type: "out",
+      entry_type: "issue",
+      entry_kind: "out",
       issued_to_user_id: issueRecipientId || null,
     } as any);
+
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
