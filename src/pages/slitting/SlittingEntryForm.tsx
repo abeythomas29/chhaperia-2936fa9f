@@ -22,6 +22,8 @@ interface IssuedMaterial {
   product_code_id: string;
   product_code: string | null;
   thickness_mm: number | null;
+  gsm: number | null;
+  raw_material_id: string | null;
   unit: string | null;
   notes: string | null;
   issued_quantity: number;
