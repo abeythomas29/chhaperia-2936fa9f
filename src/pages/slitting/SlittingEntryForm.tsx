@@ -136,6 +136,8 @@ export default function SlittingEntryForm() {
         product_code_id: r._type === "finished_stock" ? (r.product_code_id ?? "") : "",
         product_code: label,
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
+        gsm: r.gsm != null ? Number(r.gsm) : null,
+        raw_material_id: r.raw_material_id ?? null,
         unit,
         notes: r.notes,
         issued_quantity: issued,
