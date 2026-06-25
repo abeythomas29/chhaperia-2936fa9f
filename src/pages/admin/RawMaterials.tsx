@@ -51,6 +51,7 @@ interface StockEntry {
 interface RecipientOption {
   user_id: string;
   name: string;
+  roles?: string[];
 }
 
 
@@ -143,7 +144,23 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       toast({ title: "Could not load stock issues", description: issueRes.error.message, variant: "destructive" });
     }
     setMaterials(matRes.data ?? []);
-    setRecipients((recipRes.data as RecipientOption[]) ?? []);
+    const recipientRows = ((recipRes.data as RecipientOption[]) ?? []).filter((r) => !!r.user_id);
+    const recipientIds = [...new Set(recipientRows.map((r) => r.user_id))];
+    const recipientRoleMap = new Map<string, string[]>();
+    if (recipientIds.length > 0) {
+      const { data: roleRows, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", recipientIds);
+      if (roleErr) {
+        console.warn("Could not load recipient roles for issue type", roleErr);
+      } else {
+        for (const row of (roleRows ?? []) as { user_id: string; role: string }[]) {
+          recipientRoleMap.set(row.user_id, [...(recipientRoleMap.get(row.user_id) ?? []), row.role]);
+        }
+      }
+    }
+    setRecipients(recipientRows.map((r) => ({ ...r, roles: recipientRoleMap.get(r.user_id) ?? [] })));
 
     const rawEntries = (entryRes.data ?? []) as any[];
     const inwardEntries: StockEntry[] = rawEntries.map((e) => {
@@ -457,6 +474,16 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setIssueNotes("");
   };
 
+  const getRawMaterialRecipientType = (recipientId: string): "production_manager" | "worker" => {
+    const selected = recipients.find((r) => r.user_id === recipientId);
+    const selectedRoles = selected?.roles ?? [];
+    if (selectedRoles.includes("production_manager") || selectedRoles.includes("slitting_manager")) {
+      return "production_manager";
+    }
+    if (selectedRoles.includes("worker")) return "worker";
+    return "production_manager";
+  };
+
   const issueMaterial = async () => {
     if (!user) return;
     if (!issueMaterialId || !issueQty) {
@@ -502,6 +529,14 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const thicknessToSave = selectedVariant?.thickness ?? (issueThickness ? Number(issueThickness) : null);
     const gsmToSave = selectedVariant?.gsm ?? gsmNum;
     const sqmValue = issueUnit === "sqm" ? qty : (gsmToSave && gsmToSave > 0 ? (qtyKg * 1000) / gsmToSave : null);
+    const recipientUserId = issueRecipientId || null;
+    const recipientType = recipientUserId ? getRawMaterialRecipientType(recipientUserId) : "production_manager";
+    console.log("raw material issue recipient", {
+      recipient_user_id: recipientUserId,
+      issued_to_user_id: recipientUserId,
+      recipient_type: recipientType,
+    });
+
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
@@ -515,7 +550,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       added_by: user.id,
       entry_type: "issue",
       entry_kind: "out",
-      issued_to_user_id: issueRecipientId || null,
+      issued_to_user_id: recipientUserId,
     } as any);
 
     if (error) {
@@ -523,13 +558,13 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       return;
     }
     // Also record in stock_issues so the Issued panel and reports can read it.
-    if (issueRecipientId) {
+    if (recipientUserId) {
       const { error: siErr } = await supabase.from("stock_issues").insert({
         raw_material_id: issueMaterialId,
         issue_type: "raw_material",
-        recipient_type: "production_manager",
-        recipient_user_id: issueRecipientId,
-        issued_to_user_id: issueRecipientId,
+        recipient_type: recipientType,
+        recipient_user_id: recipientUserId,
+        issued_to_user_id: recipientUserId,
         quantity: qtyKg,
         unit: "kg",
         issue_quantity: qty,
