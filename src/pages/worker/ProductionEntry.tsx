@@ -160,7 +160,7 @@ export default function ProductionEntry() {
     if (row.issue_quantity_kg != null) return Number(row.issue_quantity_kg) || 0;
     if (unit === "kg") return qty;
     if (unit === "sqm" && gsm && gsm > 0) return (qty * gsm) / 1000;
-    return qty;
+    return null;
   };
 
   const fetchIssuedMaterials = async (userId: string) => {
@@ -245,8 +245,8 @@ export default function ProductionEntry() {
 
     const items: IssuedMaterial[] = issueRows.map((r) => {
       const gsm = r.gsm != null ? Number(r.gsm) : null;
-      const fallbackKg = r.issue_quantity_kg ?? (normalizeIssueUnit(r.issue_unit) === "kg" ? r.issue_quantity : null);
-      const kg = getIssueQuantityKg(r) || Number(fallbackKg ?? 0);
+      const pendingFallbackKg = r.issue_quantity_kg ?? (normalizeIssueUnit(r.issue_unit) === "kg" ? r.issue_quantity : null);
+      const kg = getIssueQuantityKg(r) ?? Number(pendingFallbackKg ?? 0);
       const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
       const m = rmMap.get(r.raw_material_id);
       const uid = r.issued_to_user_id ?? r.recipient_user_id ?? "";
