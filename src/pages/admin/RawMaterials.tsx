@@ -589,18 +589,53 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
 
   const saveEntryEdit = async () => {
     if (!editEntry || !eMaterialId || !eQty) return;
-    const { error } = await supabase.from("raw_material_stock_entries").update({
-      raw_material_id: eMaterialId,
-      quantity: Number(eQty),
-      date: eDate,
-      lot_number: eLot.trim() || null,
-      supplier: eSupplier.trim() || null,
-      pallets: ePallets ? Number(ePallets) : null,
-      thickness_mm: eThickness ? Number(eThickness) : null,
-      gsm: eGsm ? Number(eGsm) : null,
-      notes: eNotes || null,
-    } as any).eq("id", editEntry.id);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    const source = editEntry.source ?? "rmse";
+    const realId = editEntry.source_id ?? editEntry.id;
+    if (source === "stock_issue") {
+      const qty = Number(eQty);
+      const update: any = {
+        raw_material_id: eMaterialId,
+        quantity: qty,
+        issue_quantity: qty,
+        date: eDate,
+        lot_number: eLot.trim() || null,
+        thickness_mm: eThickness ? Number(eThickness) : null,
+        gsm: eGsm ? Number(eGsm) : null,
+        notes: eNotes || null,
+      };
+      const { error } = await (supabase as any).from("stock_issues").update(update).eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("update stock_issues failed", error);
+        toast({ title: "Update failed", description: error.message, variant: "destructive" });
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("raw_material_stock_entries").update({
+        raw_material_id: eMaterialId,
+        quantity: Number(eQty),
+        date: eDate,
+        lot_number: eLot.trim() || null,
+        supplier: eSupplier.trim() || null,
+        pallets: ePallets ? Number(ePallets) : null,
+        thickness_mm: eThickness ? Number(eThickness) : null,
+        gsm: eGsm ? Number(eGsm) : null,
+        notes: eNotes || null,
+      } as any).eq("id", realId);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("update raw_material_stock_entries failed", error);
+        toast({ title: "Update failed", description: error.message, variant: "destructive" });
+        return;
+      }
+    }
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|raw_material/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
     toast({ title: "Stock entry updated" });
     setEditEntryOpen(false);
     setEditEntry(null);
