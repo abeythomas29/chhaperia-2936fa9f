@@ -22,6 +22,8 @@ interface IssuedMaterial {
   product_code_id: string;
   product_code: string | null;
   thickness_mm: number | null;
+  gsm: number | null;
+  raw_material_id: string | null;
   unit: string | null;
   notes: string | null;
   issued_quantity: number;
@@ -134,6 +136,8 @@ export default function SlittingEntryForm() {
         product_code_id: r._type === "finished_stock" ? (r.product_code_id ?? "") : "",
         product_code: label,
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
+        gsm: r.gsm != null ? Number(r.gsm) : null,
+        raw_material_id: r.raw_material_id ?? null,
         unit,
         notes: r.notes,
         issued_quantity: issued,
@@ -316,19 +320,35 @@ export default function SlittingEntryForm() {
             <Label className="font-semibold">Issued Material (from Inventory Manager)</Label>
             <SearchableSelect
               value={form.issue_id}
-              onValueChange={(v) => {
+              onValueChange={async (v) => {
                 const iss = issuedMaterials.find((i) => i.issue_id === v);
+                let gsmFromIssue: number | null = iss?.gsm ?? null;
+                // Fallback: try to find a matching raw_material_stock_entries row
+                if ((!gsmFromIssue || gsmFromIssue <= 0) && iss?.raw_material_id) {
+                  const { data: rmse } = await supabase
+                    .from("raw_material_stock_entries")
+                    .select("gsm")
+                    .eq("raw_material_id", iss.raw_material_id)
+                    .eq("entry_type", "in")
+                    .not("gsm", "is", null)
+                    .order("date", { ascending: false })
+                    .limit(1);
+                  if (rmse && rmse.length && rmse[0].gsm != null) {
+                    gsmFromIssue = Number(rmse[0].gsm);
+                  }
+                }
                 setForm({
                   ...form,
                   issue_id: v,
                   product_code_id: (iss?.product_code_id && iss.product_code_id.length > 0) ? iss.product_code_id : form.product_code_id,
                   source_thickness_mm: iss?.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
+                  source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : "",
                 });
               }}
               placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
               options={issuedMaterials.map((i) => ({
                 value: i.issue_id,
-                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · GSM ${i.gsm ?? "—"} · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
               }))}
             />
             {selectedIssue && (
@@ -422,14 +442,31 @@ export default function SlittingEntryForm() {
 
               <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
-                  <Label className="text-xs">GSM</Label>
-                  <Input type="number" step="any" value={form.source_gsm}
-                    onChange={(e) => setForm({ ...form, source_gsm: e.target.value })} />
+                  <Label className="text-xs">
+                    {selectedIssue ? "GSM (from issued material)" : "GSM"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.source_gsm}
+                    readOnly={!!selectedIssue}
+                    placeholder={selectedIssue && !form.source_gsm ? "GSM not available" : ""}
+                    className={selectedIssue ? "bg-muted cursor-not-allowed" : ""}
+                    onChange={(e) => setForm({ ...form, source_gsm: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Thickness (mm)</Label>
-                  <Input type="number" step="any" value={form.source_thickness_mm}
-                    onChange={(e) => setForm({ ...form, source_thickness_mm: e.target.value })} />
+                  <Label className="text-xs">
+                    {selectedIssue ? "Thickness (mm) (from issued material)" : "Thickness (mm)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.source_thickness_mm}
+                    readOnly={!!selectedIssue}
+                    className={selectedIssue ? "bg-muted cursor-not-allowed" : ""}
+                    onChange={(e) => setForm({ ...form, source_thickness_mm: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Unit</Label>
@@ -520,7 +557,7 @@ export default function SlittingEntryForm() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total (kg)</p>
-              <p className="text-xl font-bold text-primary">{totalKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">kg</span></p>
+              <p className="text-xl font-bold text-primary">{srcGsm > 0 ? totalKg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"} <span className="text-sm font-normal">kg</span></p>
             </div>
           </div>
           {srcGsm <= 0 && (

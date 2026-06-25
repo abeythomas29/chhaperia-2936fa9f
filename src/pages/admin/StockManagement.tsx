@@ -96,6 +96,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [issueThickness, setIssueThickness] = useState("");
   const [issueGsm, setIssueGsm] = useState("");
+  const [issueGsmAuto, setIssueGsmAuto] = useState(false);
+  const [productGsmByCode, setProductGsmByCode] = useState<Record<string, number>>({});
+  const [productGsmByCodeThickness, setProductGsmByCodeThickness] = useState<Record<string, number>>({});
   const [issuing, setIssuing] = useState(false);
 
 
@@ -275,12 +278,20 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return b;
     };
 
+    const gsmByCode: Record<string, number> = {};
+    const gsmByCodeThickness: Record<string, number> = {};
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
       const gsm = p.gsm != null ? Number(p.gsm) : null;
       const u = normUnit(p.unit) ?? "meters";
+
+      if (gsm && gsm > 0) {
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
+      }
 
       let entry = pcTotals.get(pcId);
       if (!entry) {
@@ -298,6 +309,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const tMap = thicknessMap.get(pcId)!;
       tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
     }
+    setProductGsmByCode(gsmByCode);
+    setProductGsmByCodeThickness(gsmByCodeThickness);
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
@@ -533,6 +546,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     setIssueUnit("sqm");
     setIssueThickness("");
     setIssueGsm("");
+    setIssueGsmAuto(false);
     setIssueNotes("");
     setIssueDate(format(new Date(), "yyyy-MM-dd"));
   };
@@ -856,7 +870,17 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <Label>Product Code</Label>
               <SearchableSelect
                 value={issueProductCodeId}
-                onValueChange={(v) => { setIssueProductCodeId(v); }}
+                onValueChange={(v) => {
+                  setIssueProductCodeId(v);
+                  const key = `${v}__${issueThickness ? Number(issueThickness) : ""}`;
+                  const g = productGsmByCodeThickness[key] ?? productGsmByCode[v];
+                  if (g && g > 0) {
+                    setIssueGsm(String(g));
+                    setIssueGsmAuto(true);
+                  } else {
+                    setIssueGsmAuto(false);
+                  }
+                }}
                 placeholder="Select product"
                 options={productCodes.map((p) => {
                   const stock = summaries.find(s => s.product_code_id === p.id);
@@ -919,11 +943,28 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               </div>
               <div className="space-y-2">
                 <Label>Thickness (mm)</Label>
-                <Input type="number" min="0" step="0.01" value={issueThickness} onChange={(e) => setIssueThickness(e.target.value)} placeholder="Optional" />
+                <Input type="number" min="0" step="0.01" value={issueThickness} onChange={(e) => {
+                  const t = e.target.value;
+                  setIssueThickness(t);
+                  if (issueProductCodeId) {
+                    const key = `${issueProductCodeId}__${t ? Number(t) : ""}`;
+                    const g = productGsmByCodeThickness[key] ?? productGsmByCode[issueProductCodeId];
+                    if (g && g > 0) { setIssueGsm(String(g)); setIssueGsmAuto(true); }
+                  }
+                }} placeholder="Optional" />
               </div>
               <div className="space-y-2">
-                <Label>GSM</Label>
-                <Input type="number" min="0" step="1" value={issueGsm} onChange={(e) => setIssueGsm(e.target.value)} placeholder="for conversion" />
+                <Label>GSM{issueGsmAuto ? " (auto from product)" : ""}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={issueGsm}
+                  readOnly={issueGsmAuto}
+                  className={issueGsmAuto ? "bg-muted cursor-not-allowed" : ""}
+                  onChange={(e) => setIssueGsm(e.target.value)}
+                  placeholder="for conversion"
+                />
               </div>
             </div>
             {issueQuantity && (() => {
