@@ -820,48 +820,75 @@ export default function ProductionEntry() {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 space-y-3">
+              {issuedMaterials.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">
+                  No raw material has been issued to you yet. Ask the inventory manager to issue stock to your account.
+                </p>
+              )}
               {materialUsage.map((row, idx) => {
-                const mat = rawMaterials.find((m) => m.id === row.raw_material_id);
-                const variants = row.raw_material_id
-                  ? stockVariants
-                      .filter((v) => v.raw_material_id === row.raw_material_id && (v.thickness_mm != null || v.gsm != null))
-                      .sort((a, b) => (a.thickness_mm ?? 0) - (b.thickness_mm ?? 0) || (a.gsm ?? 0) - (b.gsm ?? 0))
-                  : [];
-                const variantValue = `${row.thickness_mm || ""}|${row.gsm || ""}`;
+                const options = getAvailableIssues(row.stock_issue_id);
+                const selected = issuedMaterials.find((m) => m.stock_issue_id === row.stock_issue_id);
+                const qty = Number(row.quantity_used) || 0;
+                const over = selected ? qty > selected.pending_kg + 0.0001 : false;
                 return (
                   <div key={idx} className="space-y-2 border border-border/50 rounded-md p-2">
                     <div className="flex items-end gap-2">
-                      <div className="flex-1">
-                        {idx === 0 && <Label className="text-xs">Material</Label>}
-                        <Select value={row.raw_material_id} onValueChange={(v) => {
-                          updateMaterialRow(idx, "raw_material_id", v);
-                          updateMaterialRow(idx, "thickness_mm", "");
-                          updateMaterialRow(idx, "gsm", "");
-                        }}>
+                      <div className="flex-1 min-w-0">
+                        {idx === 0 && <Label className="text-xs">Issued Material</Label>}
+                        <Select
+                          value={row.stock_issue_id}
+                          onValueChange={(v) => {
+                            const it = issuedMaterials.find((m) => m.stock_issue_id === v);
+                            if (!it) return;
+                            updateMaterialRow(idx, {
+                              stock_issue_id: it.stock_issue_id,
+                              raw_material_id: it.raw_material_id,
+                              raw_material_name: it.raw_material_name,
+                              unit: it.unit,
+                              thickness_mm: it.thickness_mm != null ? String(it.thickness_mm) : "",
+                              gsm: it.gsm != null ? String(it.gsm) : "",
+                              lot_number: it.lot_number ?? "",
+                              pending_kg: it.pending_kg,
+                            });
+                          }}
+                        >
                           <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select material" />
+                            <SelectValue placeholder="Select issued material" />
                           </SelectTrigger>
                           <SelectContent>
-                            {getAvailableMaterials(row.raw_material_id).map((m) => (
-                              <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>
-                            ))}
+                            {options.map((m) => {
+                              const parts = [m.raw_material_name];
+                              if (m.thickness_mm != null) parts.push(`${m.thickness_mm} mm`);
+                              if (m.gsm != null) parts.push(`${m.gsm} gsm`);
+                              if (m.lot_number) parts.push(`Lot ${m.lot_number}`);
+                              parts.push(`${m.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg pending`);
+                              return (
+                                <SelectItem key={m.stock_issue_id} value={m.stock_issue_id}>
+                                  {parts.join(" · ")}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
-                        {mat && (
+                        {selected && (
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Stock: {mat.current_stock.toLocaleString()} {mat.unit}
+                            Pending: {selected.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                            {selected.thickness_mm != null && ` · ${selected.thickness_mm} mm`}
+                            {selected.gsm != null && ` · ${selected.gsm} gsm`}
+                            {selected.lot_number && ` · Lot ${selected.lot_number}`}
                           </p>
                         )}
                       </div>
                       <div className="w-24">
-                        {idx === 0 && <Label className="text-xs">Qty</Label>}
+                        {idx === 0 && <Label className="text-xs">Qty (kg)</Label>}
                         <Input
                           type="number"
                           min="0"
                           step="0.001"
-                          className="h-9 text-right"
+                          max={selected?.pending_kg}
+                          className={`h-9 text-right ${over ? "border-destructive" : ""}`}
                           value={row.quantity_used}
-                          onChange={(e) => updateMaterialRow(idx, "quantity_used", e.target.value)}
+                          onChange={(e) => updateMaterialRow(idx, { quantity_used: e.target.value })}
                           placeholder="0"
                         />
                       </div>
@@ -869,39 +896,10 @@ export default function ProductionEntry() {
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
-                    {row.raw_material_id && (
-                      <div>
-                        <Label className="text-xs">Thickness / GSM available</Label>
-                        {variants.length > 0 ? (
-                          <Select
-                            value={variantValue === "|" ? "" : variantValue}
-                            onValueChange={(v) => {
-                              const [t, g] = v.split("|");
-                              updateMaterialRow(idx, "thickness_mm", t);
-                              updateMaterialRow(idx, "gsm", g);
-                            }}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select specification" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {variants.map((v) => {
-                                const parts: string[] = [];
-                                if (v.thickness_mm != null) parts.push(`${v.thickness_mm} mm`);
-                                if (v.gsm != null) parts.push(`${v.gsm} gsm`);
-                                const key = `${v.thickness_mm ?? ""}|${v.gsm ?? ""}`;
-                                return (
-                                  <SelectItem key={key} value={key}>
-                                    {parts.join(" · ")} — {v.total.toLocaleString()} {mat?.unit ?? ""} in stock
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <p className="text-xs text-muted-foreground italic">No thickness/GSM variants recorded for this material.</p>
-                        )}
-                      </div>
+                    {over && (
+                      <p className="text-xs text-destructive">
+                        Exceeds pending {selected?.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                      </p>
                     )}
                   </div>
                 );
