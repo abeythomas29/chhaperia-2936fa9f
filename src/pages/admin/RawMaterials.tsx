@@ -180,7 +180,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         raw_material_id: r.raw_material_id,
         quantity: kg,
         date: r.date ?? r.created_at,
-        lot_number: null,
+        lot_number: r.lot_number ?? null,
         supplier: null,
         pallets: null,
         thickness_mm: r.thickness_mm,
@@ -188,11 +188,13 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         notes: r.notes ?? null,
         added_by: r.issued_by,
         created_at: r.created_at,
-        entry_type: "out",
+        entry_type: "issue",
         issue_unit: unit,
         issue_quantity: qty,
         issued_to_user_id: r.issued_to_user_id ?? r.recipient_user_id ?? null,
-        kind: "out",
+        kind: "issue",
+        source: "stock_issue",
+        source_id: r.id,
       };
     });
 
