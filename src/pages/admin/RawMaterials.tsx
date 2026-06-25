@@ -57,7 +57,8 @@ interface RawMaterialsProps {
 }
 
 export default function RawMaterials({ embedded = false, readOnly = false }: RawMaterialsProps = {}) {
-  const { user } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isInventoryManager, role: currentUserRole } = useAuth();
+  const canManageEntries = isAdmin || isSuperAdmin || isInventoryManager;
   const { toast } = useToast();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [stockEntries, setStockEntries] = useState<(StockEntry & { material_name?: string; material_unit?: string; person_name?: string })[]>([]);
@@ -905,9 +906,20 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                 const qtyDisplay = isIssue && e.issue_quantity != null && e.issue_unit
                   ? `${Number(e.issue_quantity).toLocaleString()} ${e.issue_unit} → ${Number(e.quantity).toLocaleString()} kg`
                   : `${Number(e.quantity).toLocaleString()} ${e.material_unit}`;
-                const canEditRow = isIssue
-                  ? false // issues are immutable in this view; deleting/editing trigger needs more UX
-                  : !isSale && !readOnly;
+                const canEditRow = !readOnly && canManageEntries && !isSale;
+                if (!canEditRow) {
+                  console.log("raw material row action check", {
+                    currentUserRole,
+                    isAdmin,
+                    isInventoryManager,
+                    isSuperAdmin,
+                    rowEntryType: (e as any).entry_type,
+                    rowEntryKind: (e as any).entry_kind,
+                    rowAddedBy: e.added_by,
+                    currentUserId: user?.id,
+                    canEditDelete: canEditRow,
+                  });
+                }
                 return (
                 <TableRow key={e.id}>
                   <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>
