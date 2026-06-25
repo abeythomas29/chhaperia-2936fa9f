@@ -195,8 +195,6 @@ export default function ProductionEntry() {
     if (error) {
       console.error("issued raw material fetch failed", error);
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
-      setIssuedMaterials([]);
-      return;
     }
 
     const recentRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
