@@ -177,7 +177,7 @@ export default function ProductionEntry() {
 
     console.log("issued raw material rows fetched", data, error);
 
-    const issueRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
+    const fetchedIssueRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
       (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
     );
     if (error) {
@@ -185,15 +185,26 @@ export default function ProductionEntry() {
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
     }
 
+    let issueRows = fetchedIssueRows;
     if (!error && issueRows.length === 0) {
       const { data: recent, error: recentError } = await untypedSupabase
         .from("stock_issues")
-        .select("id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_quantity, issue_unit, date")
+        .select(issuedSelect)
         .eq("issue_type", "raw_material")
         .not("raw_material_id", "is", null)
         .order("date", { ascending: false })
         .limit(10);
       console.log("recent raw material issues without recipient filter", recent, recentError);
+      const recentRows = ((recent ?? []) as unknown as StockIssueRow[]).filter(
+        (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
+      );
+      const fallbackMatches = recentRows.filter(
+        (r) => r.recipient_user_id === userId || r.issued_to_user_id === userId,
+      );
+      if (fallbackMatches.length > 0) {
+        issueRows = fallbackMatches;
+        console.warn("using fallback-matched raw material issues", fallbackMatches);
+      }
     }
 
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
