@@ -233,11 +233,11 @@ export default function ProductionEntry() {
     if (rmIds.length) {
       const { data: rmseRows, error: rmseErr } = await untypedSupabase
         .from("raw_material_stock_entries")
-        .select("raw_material_id, issued_to_user_id, recipient_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
+        .select("raw_material_id, issued_to_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
         .eq("entry_type", "issue");
       if (rmseErr) console.warn("lot lookup failed", rmseErr);
       for (const e of ((rmseRows ?? []) as Array<Record<string, unknown>>)) {
-        const uid = (e.issued_to_user_id ?? e.recipient_user_id) as string | null;
+        const uid = e.issued_to_user_id as string | null;
         const key = `${e.raw_material_id}|${uid ?? ""}|${e.date ?? ""}|${Number(e.issue_quantity) || 0}|${e.issue_unit ?? ""}|${e.thickness_mm ?? ""}|${e.gsm ?? ""}`;
         if (e.lot_number) lotByIssueKey.set(key, String(e.lot_number));
       }
