@@ -231,6 +231,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         added_by: s.sold_by,
         created_at: s.created_at,
         kind: "out",
+        source: "sale",
+        source_id: s.id,
       }));
 
     const allEntries = [...inwardEntries, ...issueOutDeduped, ...outwardEntries]
