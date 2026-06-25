@@ -271,7 +271,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     // Build per-product-code totals and thickness breakdowns
     const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
-    const thicknessMap = new Map<string, Map<number | null, number>>();
+    type TBucket = { produced: number; sqm: number | null; kg: number | null };
+    const thicknessMap = new Map<string, Map<number | null, TBucket>>();
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
     const ensureIssued = (pcId: string) => {
