@@ -623,33 +623,18 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <CardContent>
                 {(() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  const units: UnitKey[] = ["meters", "sqm", "kg"];
-                  const rows = units
-                    .map((u) => {
-                      const prod = Number(s.producedBuckets[u] ?? 0);
-                      const iss = Number(s.issuedBuckets[u] ?? 0);
-                      if (prod === 0 && iss === 0) return null;
-                      return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
-                    })
-                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
-                  // eslint-disable-next-line no-console
-                  console.log("Rendered stock card", {
-                    product_id: s.product_code_id,
-                    product_code: s.code,
-                    produced_quantity: s.produced,
-                    matched_stock_issues_rows: s.debugMatchedStockIssues,
-                    computed_issued_totals: s.issuedBuckets,
-                    rendered_issued_value: rows.map((r) => ({ unit: r.unit, issued: r.iss, available: r.avail })),
-                  });
-                  if (rows.length === 0) {
-                    return (
-                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                        <div><p className="text-xs text-muted-foreground">Produced</p><p className="text-base font-semibold text-green-600">{fmt(s.produced)} {s.unit}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Issued</p><p className="text-base font-semibold text-red-500">{fmt(s.issued)} {s.unit}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Available</p><p className={`text-base font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>{fmt(s.available)} {s.unit}</p></div>
-                      </div>
-                    );
-                  }
+                  const prodSqm = s.producedBuckets.sqm != null ? Number(s.producedBuckets.sqm) : null;
+                  const prodKg = s.producedBuckets.kg != null ? Number(s.producedBuckets.kg) : null;
+                  const issSqm = s.issuedBuckets.sqm != null ? Number(s.issuedBuckets.sqm) : null;
+                  const issKg = s.issuedBuckets.kg != null ? Number(s.issuedBuckets.kg) : null;
+                  const availSqm = prodSqm != null ? prodSqm - (issSqm ?? 0) : null;
+                  const availKg = prodKg != null ? prodKg - (issKg ?? 0) : null;
+                  const rows: Array<{ unit: "sqm" | "kg"; prod: number | null; iss: number | null; avail: number | null }> = [
+                    { unit: "sqm", prod: prodSqm, iss: issSqm, avail: availSqm },
+                    { unit: "kg", prod: prodKg, iss: issKg, avail: availKg },
+                  ];
+                  const cell = (v: number | null, cls = "") =>
+                    v == null ? <span className="text-muted-foreground">-</span> : <span className={cls}>{fmt(v)}</span>;
                   return (
                     <div className="space-y-2 mb-3">
                       <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
@@ -661,9 +646,11 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       {rows.map((r) => (
                         <div key={r.unit} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
                           <span className="font-medium uppercase text-xs">{r.unit}</span>
-                          <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
-                          <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
-                          <span className={`text-right font-bold ${r.avail == null || r.avail > 0 ? "text-primary" : "text-destructive"}`}>{r.avail == null ? "—" : fmt(r.avail)}</span>
+                          <span className="text-right font-semibold text-green-600">{cell(r.prod)}</span>
+                          <span className="text-right font-semibold text-red-500">{cell(r.iss)}</span>
+                          <span className="text-right font-bold">
+                            {r.avail == null ? <span className="text-muted-foreground">-</span> : <span className={r.avail > 0 ? "text-primary" : "text-destructive"}>{fmt(r.avail)}</span>}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -676,13 +663,23 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                     <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
                       Thickness Breakdown
                     </div>
+                    <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground border-b">
+                      <span>Thickness</span>
+                      <span className="text-right">SQM</span>
+                      <span className="text-right">KG</span>
+                    </div>
                     <div className="divide-y">
                       {s.thicknessBreakdown.map((t) => (
-                        <div key={String(t.thickness_mm)} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                        <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
                           <span className="font-medium">
                             {t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}
                           </span>
-                          <span className="font-semibold">{t.produced.toLocaleString()} {s.unit}</span>
+                          <span className="text-right font-semibold">
+                            {t.sqm == null ? <span className="text-muted-foreground">-</span> : t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-right font-semibold">
+                            {t.kg == null ? <span className="text-muted-foreground">-</span> : t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -695,6 +692,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
           ))
         )}
       </div>
+
 
       {/* Inward & Outward Tables */}
       <div className="space-y-6">
