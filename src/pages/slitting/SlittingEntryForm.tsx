@@ -320,13 +320,29 @@ export default function SlittingEntryForm() {
             <Label className="font-semibold">Issued Material (from Inventory Manager)</Label>
             <SearchableSelect
               value={form.issue_id}
-              onValueChange={(v) => {
+              onValueChange={async (v) => {
                 const iss = issuedMaterials.find((i) => i.issue_id === v);
+                let gsmFromIssue: number | null = iss?.gsm ?? null;
+                // Fallback: try to find a matching raw_material_stock_entries row
+                if ((!gsmFromIssue || gsmFromIssue <= 0) && iss?.raw_material_id) {
+                  const { data: rmse } = await supabase
+                    .from("raw_material_stock_entries")
+                    .select("gsm")
+                    .eq("raw_material_id", iss.raw_material_id)
+                    .eq("entry_type", "in")
+                    .not("gsm", "is", null)
+                    .order("date", { ascending: false })
+                    .limit(1);
+                  if (rmse && rmse.length && rmse[0].gsm != null) {
+                    gsmFromIssue = Number(rmse[0].gsm);
+                  }
+                }
                 setForm({
                   ...form,
                   issue_id: v,
                   product_code_id: (iss?.product_code_id && iss.product_code_id.length > 0) ? iss.product_code_id : form.product_code_id,
                   source_thickness_mm: iss?.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
+                  source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : "",
                 });
               }}
               placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
