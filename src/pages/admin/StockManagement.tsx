@@ -18,8 +18,6 @@ import { toast } from "@/hooks/use-toast";
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
-  sqm: number | null;
-  kg: number | null;
 }
 
 type UnitKey = "meters" | "sqm" | "kg";
@@ -269,180 +267,116 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return buckets;
     };
 
-    // ===== Two-pass aggregation =====
-    // Pass 1: collect raw rows + build GSM fallback maps (from both production and issues).
-    type RawRow = {
-      thickness: number | null;
-      qty: number;
-      unit: UnitKey;
-      gsm: number | null;
-      widthMm: number | null;
-      sqmOverride: number | null;
-      kgOverride: number | null;
+    // Build per-product-code totals and thickness breakdowns
+    const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
+    const thicknessMap = new Map<string, Map<number | null, number>>();
+    const issueMap = new Map<string, number>();
+    const issuedBucketsMap = new Map<string, Buckets>();
+    const ensureIssued = (pcId: string) => {
+      let b = issuedBucketsMap.get(pcId);
+      if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
+      return b;
     };
-    const producedRowsByPc = new Map<string, RawRow[]>();
-    const issuedRowsByPc = new Map<string, RawRow[]>();
-    const pcMeta = new Map<string, { code: string; unit: string }>();
 
     const gsmByCode: Record<string, number> = {};
     const gsmByCodeThickness: Record<string, number> = {};
-    const setGsm = (pcId: string, thickness: number | null, gsm: number | null) => {
-      if (!gsm || gsm <= 0) return;
-      if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-      const key = `${pcId}__${thickness ?? ""}`;
-      if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-    };
-    const lookupGsm = (pcId: string, thickness: number | null): number | null => {
-      const key = `${pcId}__${thickness ?? ""}`;
-      return gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
-    };
-
-    // Production entries
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
       const gsm = p.gsm != null ? Number(p.gsm) : null;
       const u = normUnit(p.unit) ?? "meters";
-      setGsm(pcId, thickness, gsm);
-      if (!pcMeta.has(pcId)) pcMeta.set(pcId, { code: p.product_codes?.code ?? "—", unit: p.unit });
-      if (!producedRowsByPc.has(pcId)) producedRowsByPc.set(pcId, []);
-      producedRowsByPc.get(pcId)!.push({ thickness, qty, unit: u, gsm, widthMm: null, sqmOverride: null, kgOverride: null });
-    }
 
-    // Stock issue rows (finished stock only)
-    const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
-    for (const i of finishedStockIssues) {
-      const pcId = i.product_code_id;
-      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
-      const meta = parseNotesMeta(i.notes);
-      const gsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
-      const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm;
-      const widthMm = widthMmRaw != null ? Number(widthMmRaw) : null;
-      const u = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
-      const qty = Number(i.issue_quantity ?? i.quantity ?? 0);
-      setGsm(pcId, thickness, gsm);
-      if (!pcMeta.has(pcId)) pcMeta.set(pcId, { code: "—", unit: i.issue_unit ?? i.unit ?? "sqm" });
-      if (!issuedRowsByPc.has(pcId)) issuedRowsByPc.set(pcId, []);
-      issuedRowsByPc.get(pcId)!.push({
-        thickness, qty, unit: u, gsm, widthMm,
-        sqmOverride: i.issue_quantity_sqm != null ? Number(i.issue_quantity_sqm) : (meta.sqm ?? null),
-        kgOverride: i.issue_quantity_kg != null ? Number(i.issue_quantity_kg) : (meta.kg ?? null),
-      });
-    }
-
-    // Sales count as issues for finished products
-    for (const s of (salesData ?? []) as any[]) {
-      if (s.item_type === "finished_product" && s.product_code_id) {
-        const pcId = s.product_code_id;
-        const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
-        const u = normUnit(s.unit) ?? "meters";
-        const qty = Number(s.quantity);
-        if (!issuedRowsByPc.has(pcId)) issuedRowsByPc.set(pcId, []);
-        issuedRowsByPc.get(pcId)!.push({ thickness, qty, unit: u, gsm: null, widthMm: null, sqmOverride: null, kgOverride: null });
+      if (gsm && gsm > 0) {
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
       }
-    }
 
+      let entry = pcTotals.get(pcId);
+      if (!entry) {
+        entry = { code: p.product_codes?.code ?? "—", unit: p.unit, produced: 0, buckets: {} };
+        pcTotals.set(pcId, entry);
+      }
+      entry.produced += qty;
+      addBucket(entry.buckets, u, qty);
+      if (gsm && gsm > 0) {
+        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
+        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
+      }
+
+      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
+      const tMap = thicknessMap.get(pcId)!;
+      tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
+    }
     setProductGsmByCode(gsmByCode);
     setProductGsmByCodeThickness(gsmByCodeThickness);
 
-    // Pass 2: convert each row to sqm + kg using row gsm, falling back to product/thickness gsm.
-    const toSqmKg = (row: RawRow, pcId: string): { sqm: number | null; kg: number | null } => {
-      const g = (row.gsm && row.gsm > 0) ? row.gsm : lookupGsm(pcId, row.thickness);
-      let sqm: number | null = row.sqmOverride;
-      let kg: number | null = row.kgOverride;
-      if (sqm == null) {
-        if (row.unit === "sqm") sqm = row.qty;
-        else if (row.unit === "kg" && g && g > 0) sqm = (row.qty * 1000) / g;
-        else if (row.unit === "meters" && row.widthMm && row.widthMm > 0) sqm = row.qty * (row.widthMm / 1000);
+    const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
+    for (const i of finishedStockIssues) {
+      const pcId = i.product_code_id;
+      const b = ensureIssued(pcId);
+      const rowBuckets = getIssueBuckets(i);
+      for (const [unit, qty] of Object.entries(rowBuckets) as Array<[UnitKey, number]>) {
+        addBucket(b, unit, qty);
       }
-      if (kg == null) {
-        if (row.unit === "kg") kg = row.qty;
-        else if (sqm != null && g && g > 0) kg = (sqm * g) / 1000;
-      }
-      if (sqm == null && kg != null && g && g > 0) sqm = (kg * 1000) / g;
-      return { sqm, kg };
-    };
+      const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
+      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
+    }
 
-    const allPcIds = new Set<string>([...producedRowsByPc.keys(), ...issuedRowsByPc.keys()]);
+    // Include finished-product sales in issued totals (they reduce finished stock)
+    for (const s of (salesData ?? []) as any[]) {
+      if (s.item_type === "finished_product" && s.product_code_id) {
+        const pcId = s.product_code_id;
+        const q = Number(s.quantity);
+        issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
+        const b = ensureIssued(pcId);
+        const u = normUnit(s.unit) ?? "meters";
+        addBucket(b, u, q);
+      }
+    }
+
+    const allPcIds = new Set([...pcTotals.keys(), ...issuedBucketsMap.keys(), ...issueMap.keys()]);
     const summaryList: StockSummary[] = [];
     for (const pcId of allPcIds) {
-      const meta = pcMeta.get(pcId);
-      const code = meta?.code && meta.code !== "—" ? meta.code : (issueProductCodeMap.get(pcId) ?? "—");
-      const productUnit = meta?.unit ?? "meters";
-
-      // Totals
-      let prodSqm: number | null = null;
-      let prodKg: number | null = null;
-      let issSqm: number | null = null;
-      let issKg: number | null = null;
-      let producedNative = 0;
-      let issuedNative = 0;
-      const nativeUnit = normUnit(productUnit) ?? "meters";
-
-      for (const row of producedRowsByPc.get(pcId) ?? []) {
-        const { sqm, kg } = toSqmKg(row, pcId);
-        if (sqm != null) prodSqm = (prodSqm ?? 0) + sqm;
-        if (kg != null) prodKg = (prodKg ?? 0) + kg;
-        if (row.unit === nativeUnit) producedNative += row.qty;
-      }
-      for (const row of issuedRowsByPc.get(pcId) ?? []) {
-        const { sqm, kg } = toSqmKg(row, pcId);
-        if (sqm != null) issSqm = (issSqm ?? 0) + sqm;
-        if (kg != null) issKg = (issKg ?? 0) + kg;
-        if (row.unit === nativeUnit) issuedNative += row.qty;
-      }
-
-      const producedBuckets: Buckets = {};
-      const issuedBuckets: Buckets = {};
-      if (prodSqm != null) producedBuckets.sqm = prodSqm;
-      if (prodKg != null) producedBuckets.kg = prodKg;
-      if (issSqm != null) issuedBuckets.sqm = issSqm;
-      if (issKg != null) issuedBuckets.kg = issKg;
-
-      // Thickness breakdown — available stock per thickness, in sqm and kg
-      type TAgg = { prodSqm: number | null; prodKg: number | null; issSqm: number | null; issKg: number | null; produced: number };
-      const tMap = new Map<number | null, TAgg>();
-      const ensureT = (t: number | null): TAgg => {
-        let v = tMap.get(t);
-        if (!v) { v = { prodSqm: null, prodKg: null, issSqm: null, issKg: null, produced: 0 }; tMap.set(t, v); }
-        return v;
-      };
-      for (const row of producedRowsByPc.get(pcId) ?? []) {
-        const agg = ensureT(row.thickness);
-        const { sqm, kg } = toSqmKg(row, pcId);
-        if (sqm != null) agg.prodSqm = (agg.prodSqm ?? 0) + sqm;
-        if (kg != null) agg.prodKg = (agg.prodKg ?? 0) + kg;
-        agg.produced += row.qty;
-      }
-      for (const row of issuedRowsByPc.get(pcId) ?? []) {
-        const agg = ensureT(row.thickness);
-        const { sqm, kg } = toSqmKg(row, pcId);
-        if (sqm != null) agg.issSqm = (agg.issSqm ?? 0) + sqm;
-        if (kg != null) agg.issKg = (agg.issKg ?? 0) + kg;
-      }
+      const prod = pcTotals.get(pcId);
+      const produced = prod?.produced ?? 0;
+      const productUnit = normUnit(prod?.unit) ?? "meters";
+      const issuedBuckets = issuedBucketsMap.get(pcId) ?? {};
+      const issued = Number(issuedBuckets[productUnit] ?? 0);
+      const tMap = thicknessMap.get(pcId);
       const breakdown: ThicknessBreakdown[] = [];
-      for (const [t, agg] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
-        const availSqm = agg.prodSqm != null ? agg.prodSqm - (agg.issSqm ?? 0) : null;
-        const availKg = agg.prodKg != null ? agg.prodKg - (agg.issKg ?? 0) : null;
-        breakdown.push({ thickness_mm: t, produced: agg.produced, sqm: availSqm, kg: availKg });
+      if (tMap) {
+        for (const [t, q] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
+          breakdown.push({ thickness_mm: t, produced: q });
+        }
       }
-
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
       summaryList.push({
         product_code_id: pcId,
-        code,
-        unit: productUnit,
-        produced: producedNative,
-        issued: issuedNative,
-        available: producedNative - issuedNative,
-        producedBuckets,
+        code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
+        unit: prod?.unit ?? "meters",
+        produced,
+        issued,
+        available: produced - issued,
+        producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
+      const computedIssuedTotals = issuedBuckets;
       // eslint-disable-next-line no-console
-      console.log("Stock summary", code, { pcId, prodSqm, prodKg, issSqm, issKg, gsm: lookupGsm(pcId, null) });
+      console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
+        product_id: pcId,
+        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
+        produced_quantity: produced,
+        matched_stock_issues_rows: matchedStockIssues,
+        computed_issued_totals: computedIssuedTotals,
+        rendered_issued_value: computedIssuedTotals,
+        producedBuckets: prod?.buckets ?? {},
+        issuedBuckets,
+      });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
     setSummaries(summaryList);
@@ -672,18 +606,33 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <CardContent>
                 {(() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  const prodSqm = s.producedBuckets.sqm != null ? Number(s.producedBuckets.sqm) : null;
-                  const prodKg = s.producedBuckets.kg != null ? Number(s.producedBuckets.kg) : null;
-                  const issSqm = s.issuedBuckets.sqm != null ? Number(s.issuedBuckets.sqm) : null;
-                  const issKg = s.issuedBuckets.kg != null ? Number(s.issuedBuckets.kg) : null;
-                  const availSqm = prodSqm != null ? prodSqm - (issSqm ?? 0) : null;
-                  const availKg = prodKg != null ? prodKg - (issKg ?? 0) : null;
-                  const rows: Array<{ unit: "sqm" | "kg"; prod: number | null; iss: number | null; avail: number | null }> = [
-                    { unit: "sqm", prod: prodSqm, iss: issSqm, avail: availSqm },
-                    { unit: "kg", prod: prodKg, iss: issKg, avail: availKg },
-                  ];
-                  const cell = (v: number | null, cls = "") =>
-                    v == null ? <span className="text-muted-foreground">-</span> : <span className={cls}>{fmt(v)}</span>;
+                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  const rows = units
+                    .map((u) => {
+                      const prod = Number(s.producedBuckets[u] ?? 0);
+                      const iss = Number(s.issuedBuckets[u] ?? 0);
+                      if (prod === 0 && iss === 0) return null;
+                      return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
+                    })
+                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
+                  // eslint-disable-next-line no-console
+                  console.log("Rendered stock card", {
+                    product_id: s.product_code_id,
+                    product_code: s.code,
+                    produced_quantity: s.produced,
+                    matched_stock_issues_rows: s.debugMatchedStockIssues,
+                    computed_issued_totals: s.issuedBuckets,
+                    rendered_issued_value: rows.map((r) => ({ unit: r.unit, issued: r.iss, available: r.avail })),
+                  });
+                  if (rows.length === 0) {
+                    return (
+                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                        <div><p className="text-xs text-muted-foreground">Produced</p><p className="text-base font-semibold text-green-600">{fmt(s.produced)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Issued</p><p className="text-base font-semibold text-red-500">{fmt(s.issued)} {s.unit}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Available</p><p className={`text-base font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>{fmt(s.available)} {s.unit}</p></div>
+                      </div>
+                    );
+                  }
                   return (
                     <div className="space-y-2 mb-3">
                       <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
@@ -695,11 +644,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       {rows.map((r) => (
                         <div key={r.unit} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
                           <span className="font-medium uppercase text-xs">{r.unit}</span>
-                          <span className="text-right font-semibold text-green-600">{cell(r.prod)}</span>
-                          <span className="text-right font-semibold text-red-500">{cell(r.iss)}</span>
-                          <span className="text-right font-bold">
-                            {r.avail == null ? <span className="text-muted-foreground">-</span> : <span className={r.avail > 0 ? "text-primary" : "text-destructive"}>{fmt(r.avail)}</span>}
-                          </span>
+                          <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
+                          <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
+                          <span className={`text-right font-bold ${r.avail == null || r.avail > 0 ? "text-primary" : "text-destructive"}`}>{r.avail == null ? "—" : fmt(r.avail)}</span>
                         </div>
                       ))}
                     </div>
@@ -712,23 +659,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                     <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
                       Thickness Breakdown
                     </div>
-                    <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground border-b">
-                      <span>Thickness</span>
-                      <span className="text-right">SQM</span>
-                      <span className="text-right">KG</span>
-                    </div>
                     <div className="divide-y">
                       {s.thicknessBreakdown.map((t) => (
-                        <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                        <div key={String(t.thickness_mm)} className="flex items-center justify-between px-3 py-1.5 text-sm">
                           <span className="font-medium">
                             {t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}
                           </span>
-                          <span className="text-right font-semibold">
-                            {t.sqm == null ? <span className="text-muted-foreground">-</span> : t.sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-right font-semibold">
-                            {t.kg == null ? <span className="text-muted-foreground">-</span> : t.kg.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </span>
+                          <span className="font-semibold">{t.produced.toLocaleString()} {s.unit}</span>
                         </div>
                       ))}
                     </div>
@@ -741,7 +678,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
           ))
         )}
       </div>
-
 
       {/* Inward & Outward Tables */}
       <div className="space-y-6">
