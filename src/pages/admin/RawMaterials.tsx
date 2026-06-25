@@ -468,6 +468,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       }
       qtyKg = (qty * gsmNum) / 1000;
     }
+    if (availableVariants.length > 0 && !selectedVariant) {
+      toast({ title: "Select variant", description: "Pick the exact lot/variant to issue from.", variant: "destructive" });
+      return;
+    }
+    if (selectedVariant && qtyKg > selectedVariant.balanceKg + 1e-6) {
+      toast({
+        title: "Exceeds lot balance",
+        description: `Lot ${selectedVariant.lot ?? "—"} has only ${selectedVariant.balanceKg.toFixed(2)} kg available.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const material = materials.find((m) => m.id === issueMaterialId);
     if (material && Number(material.current_stock) < qtyKg) {
       toast({
@@ -477,15 +489,19 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       });
       return;
     }
-    const sqmValue = issueUnit === "sqm" ? qty : (gsmNum && gsmNum > 0 ? (qtyKg * 1000) / gsmNum : null);
+    const lotToSave = selectedVariant?.lot ?? (issueLot.trim() || null);
+    const thicknessToSave = selectedVariant?.thickness ?? (issueThickness ? Number(issueThickness) : null);
+    const gsmToSave = selectedVariant?.gsm ?? gsmNum;
+    const sqmValue = issueUnit === "sqm" ? qty : (gsmToSave && gsmToSave > 0 ? (qtyKg * 1000) / gsmToSave : null);
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
       issue_quantity: qty,
       issue_unit: issueUnit,
       date: issueDate,
-      thickness_mm: issueThickness ? Number(issueThickness) : null,
-      gsm: gsmNum,
+      lot_number: lotToSave,
+      thickness_mm: thicknessToSave,
+      gsm: gsmToSave,
       notes: issueNotes || null,
       added_by: user.id,
       entry_type: "issue",
