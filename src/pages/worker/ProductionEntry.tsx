@@ -94,22 +94,54 @@ export default function ProductionEntry() {
   const [materialUsage, setMaterialUsage] = useState<MaterialUsageRow[]>([]);
   const [materialsOpen, setMaterialsOpen] = useState(false);
 
+  const normalizeIssueUnit = (unit: unknown) => {
+    const s = String(unit ?? "kg").trim().toLowerCase();
+    if (["sqm", "sqmtr", "sq m", "m2"].includes(s)) return "sqm";
+    return "kg";
+  };
+
+  const getIssueQuantityKg = (row: any) => {
+    const unit = normalizeIssueUnit(row.issue_unit ?? row.unit);
+    const qty = Number(row.issue_quantity ?? row.quantity ?? 0);
+    const gsm = row.gsm != null ? Number(row.gsm) : null;
+    if (row.issue_quantity_kg != null) return Number(row.issue_quantity_kg) || 0;
+    if (unit === "kg") return qty;
+    if (unit === "sqm" && gsm && gsm > 0) return (qty * gsm) / 1000;
+    return qty;
+  };
+
   const fetchIssuedMaterials = async (userId: string) => {
-    // Fetch raw-material stock_issues addressed to this user
-    // (handle both column names: recipient_user_id and issued_to_user_id).
-    const [recA, recB] = await Promise.all([
-      supabase.from("stock_issues").select("*").eq("recipient_user_id", userId),
-      (supabase.from("stock_issues") as any).select("*").eq("issued_to_user_id", userId),
-    ]);
-    const rowsMap = new Map<string, any>();
-    for (const r of (recA.data ?? []) as any[]) rowsMap.set(r.id, r);
-    if (!recB.error) {
-      for (const r of (recB.data ?? []) as any[]) rowsMap.set(r.id, r);
+    // eslint-disable-next-line no-console
+    console.log("current user id", userId);
+
+    const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, lot_number, date, created_at";
+    const { data, error } = await (supabase.from("stock_issues") as any)
+      .select(issuedSelect)
+      .eq("issue_type", "raw_material")
+      .not("raw_material_id", "is", null)
+      .or(`recipient_user_id.eq.${userId},issued_to_user_id.eq.${userId}`)
+      .order("date", { ascending: false });
+
+    // eslint-disable-next-line no-console
+    console.log("issued raw material rows fetched", data, error);
+
+    let issueRows = ((data ?? []) as any[]).filter((r) => r.raw_material_id);
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error("issued raw material fetch failed", error);
+      toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
     }
-    const issueRows = Array.from(rowsMap.values()).filter((r) => {
-      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
-      return t === "raw_material" && r.raw_material_id;
-    });
+
+    if (!error && issueRows.length === 0) {
+      const { data: recent, error: recentError } = await (supabase.from("stock_issues") as any)
+        .select("id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_quantity, issue_unit, date")
+        .eq("issue_type", "raw_material")
+        .not("raw_material_id", "is", null)
+        .order("date", { ascending: false })
+        .limit(10);
+      // eslint-disable-next-line no-console
+      console.log("recent raw material issues without recipient filter", recent, recentError);
+    }
 
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
     const matsRes = rmIds.length
@@ -119,13 +151,18 @@ export default function ProductionEntry() {
       ((matsRes.data ?? []) as any[]).map((m) => [m.id, { name: m.name, unit: m.unit }])
     );
 
-    // Fetch this worker's prior usage to compute pending per issue group
-    const usageRes = await supabase
-      .from("raw_material_usage")
-      .select("raw_material_id, quantity_used, production_entries!inner(worker_id, thickness_mm, gsm)")
+    // Fetch this worker's prior usage to compute pending. If stock_issue_id exists,
+    // use exact issue matching; otherwise fall back to FIFO by material/thickness/gsm.
+    const usageRes = await (supabase.from("raw_material_usage") as any)
+      .select("raw_material_id, quantity_used, stock_issue_id, production_entries!inner(worker_id, thickness_mm, gsm)")
       .eq("production_entries.worker_id", userId);
     const usedByKey = new Map<string, number>();
+    const usedByIssueId = new Map<string, number>();
     for (const u of ((usageRes.data ?? []) as any[])) {
+      if (u.stock_issue_id) {
+        usedByIssueId.set(u.stock_issue_id, (usedByIssueId.get(u.stock_issue_id) ?? 0) + (Number(u.quantity_used) || 0));
+        continue;
+      }
       const pe = Array.isArray(u.production_entries) ? u.production_entries[0] : u.production_entries;
       const t = pe?.thickness_mm ?? null;
       const g = pe?.gsm ?? null;
@@ -134,14 +171,8 @@ export default function ProductionEntry() {
     }
 
     const items: IssuedMaterial[] = issueRows.map((r) => {
-      const unit = r.issue_unit ?? r.unit ?? "kg";
-      const qty = Number(r.issue_quantity ?? r.quantity ?? 0);
       const gsm = r.gsm != null ? Number(r.gsm) : null;
-      let kg = 0;
-      if (r.issue_quantity_kg != null) kg = Number(r.issue_quantity_kg);
-      else if (unit === "kg") kg = qty;
-      else if (unit === "sqm" && gsm && gsm > 0) kg = (qty * gsm) / 1000;
-      else kg = qty;
+      const kg = getIssueQuantityKg(r);
       const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
       const m = rmMap.get(r.raw_material_id);
       return {
@@ -153,7 +184,7 @@ export default function ProductionEntry() {
         gsm,
         lot_number: r.lot_number ?? null,
         issued_kg: kg,
-        pending_kg: kg,
+        pending_kg: Math.max(0, kg - (usedByIssueId.get(r.id) ?? 0)),
         created_at: r.created_at,
       };
     });
@@ -169,13 +200,16 @@ export default function ProductionEntry() {
       arr.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
       let remainingUsed = usedByKey.get(k) ?? 0;
       for (const it of arr) {
-        const take = Math.min(remainingUsed, it.issued_kg);
-        it.pending_kg = Math.max(0, it.issued_kg - take);
+        const take = Math.min(remainingUsed, it.pending_kg);
+        it.pending_kg = Math.max(0, it.pending_kg - take);
         remainingUsed -= take;
       }
     }
 
-    setIssuedMaterials(items.filter((i) => i.pending_kg > 0.0001));
+    const pendingRows = items.filter((i) => i.pending_kg > 0.0001);
+    // eslint-disable-next-line no-console
+    console.log("rows after filtering pending", pendingRows);
+    setIssuedMaterials(pendingRows);
   };
 
   const fetchData = async () => {
@@ -887,13 +921,13 @@ export default function ProductionEntry() {
                           <SelectContent>
                             {options.map((m) => {
                               const parts = [m.raw_material_name];
-                              if (m.thickness_mm != null) parts.push(`${m.thickness_mm} mm`);
-                              if (m.gsm != null) parts.push(`${m.gsm} gsm`);
                               if (m.lot_number) parts.push(`Lot ${m.lot_number}`);
+                              if (m.thickness_mm != null) parts.push(`${m.thickness_mm}mm`);
+                              if (m.gsm != null) parts.push(`${m.gsm} gsm`);
                               parts.push(`${m.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg pending`);
                               return (
                                 <SelectItem key={m.stock_issue_id} value={m.stock_issue_id}>
-                                  {parts.join(" · ")}
+                                  {parts.join(" | ")}
                                 </SelectItem>
                               );
                             })}
