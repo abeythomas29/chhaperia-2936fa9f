@@ -235,11 +235,29 @@ export default function ProductionEntry() {
       usedByKey.set(k, (usedByKey.get(k) ?? 0) + (Number(u.quantity_used) || 0));
     }
 
+    // Try to enrich with lot_number from raw_material_stock_entries (entry_type='issue')
+    const lotByIssueKey = new Map<string, string>();
+    if (issueRows.length) {
+      const { data: rmseRows, error: rmseErr } = await untypedSupabase
+        .from("raw_material_stock_entries")
+        .select("raw_material_id, issued_to_user_id, recipient_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
+        .eq("entry_type", "issue")
+        .in("raw_material_id", rmIds.length ? rmIds : ["00000000-0000-0000-0000-000000000000"]);
+      if (rmseErr) console.warn("lot lookup failed", rmseErr);
+      for (const e of ((rmseRows ?? []) as Array<Record<string, unknown>>)) {
+        const uid = (e.issued_to_user_id ?? e.recipient_user_id) as string | null;
+        const key = `${e.raw_material_id}|${uid ?? ""}|${e.date ?? ""}|${Number(e.issue_quantity) || 0}|${e.issue_unit ?? ""}|${e.thickness_mm ?? ""}|${e.gsm ?? ""}`;
+        if (e.lot_number) lotByIssueKey.set(key, String(e.lot_number));
+      }
+    }
+
     const items: IssuedMaterial[] = issueRows.map((r) => {
       const gsm = r.gsm != null ? Number(r.gsm) : null;
       const kg = getIssueQuantityKg(r);
       const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
       const m = rmMap.get(r.raw_material_id);
+      const uid = r.issued_to_user_id ?? r.recipient_user_id ?? "";
+      const lotKey = `${r.raw_material_id}|${uid}|${r.date ?? ""}|${Number(r.issue_quantity) || 0}|${r.issue_unit ?? ""}|${t ?? ""}|${gsm ?? ""}`;
       return {
         stock_issue_id: r.id,
         raw_material_id: r.raw_material_id,
@@ -247,7 +265,7 @@ export default function ProductionEntry() {
         unit: m?.unit ?? "kg",
         thickness_mm: t,
         gsm,
-        lot_number: r.lot_number ?? null,
+        lot_number: lotByIssueKey.get(lotKey) ?? null,
         issued_kg: kg,
         pending_kg: Math.max(0, kg - (usedByIssueId.get(r.id) ?? 0)),
         created_at: r.created_at,
