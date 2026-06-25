@@ -1268,7 +1268,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       </Dialog>
 
       {/* Delete Stock Entry Confirm */}
-      <AlertDialog open={!!deleteEntryId} onOpenChange={(open) => !open && setDeleteEntryId(null)}>
+      <AlertDialog open={!!deleteEntryRow} onOpenChange={(open) => !open && setDeleteEntryRow(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Stock Entry?</AlertDialogTitle>
