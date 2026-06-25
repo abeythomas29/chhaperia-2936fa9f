@@ -236,20 +236,33 @@ export default function ProductionEntry() {
 
   // Material usage helpers
   const addMaterialRow = () => {
-    setMaterialUsage((prev) => [...prev, { raw_material_id: "", quantity_used: "", thickness_mm: "", gsm: "" }]);
+    setMaterialUsage((prev) => [
+      ...prev,
+      {
+        stock_issue_id: "",
+        raw_material_id: "",
+        quantity_used: "",
+        thickness_mm: "",
+        gsm: "",
+        lot_number: "",
+        raw_material_name: "",
+        unit: "kg",
+        pending_kg: 0,
+      },
+    ]);
   };
 
-  const updateMaterialRow = (index: number, field: keyof MaterialUsageRow, value: string) => {
-    setMaterialUsage((prev) => prev.map((row, i) => i === index ? { ...row, [field]: value } : row));
+  const updateMaterialRow = (index: number, patch: Partial<MaterialUsageRow>) => {
+    setMaterialUsage((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
   const removeMaterialRow = (index: number) => {
     setMaterialUsage((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const usedMaterialIds = materialUsage.map((r) => r.raw_material_id).filter(Boolean);
-  const getAvailableMaterials = (currentId: string) =>
-    rawMaterials.filter((m) => m.id === currentId || !usedMaterialIds.includes(m.id));
+  const usedIssueIds = materialUsage.map((r) => r.stock_issue_id).filter(Boolean);
+  const getAvailableIssues = (currentId: string) =>
+    issuedMaterials.filter((m) => m.stock_issue_id === currentId || !usedIssueIds.includes(m.stock_issue_id));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
