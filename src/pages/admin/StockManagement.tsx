@@ -965,7 +965,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   placeholder="for conversion"
                 />
               </div>
-              </div>
             </div>
             {issueQuantity && (() => {
               const qty = Number(issueQuantity);
