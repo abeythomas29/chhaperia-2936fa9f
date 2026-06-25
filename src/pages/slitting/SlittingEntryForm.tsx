@@ -557,7 +557,7 @@ export default function SlittingEntryForm() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total (kg)</p>
-              <p className="text-xl font-bold text-primary">{totalKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">kg</span></p>
+              <p className="text-xl font-bold text-primary">{srcGsm > 0 ? totalKg.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"} <span className="text-sm font-normal">kg</span></p>
             </div>
           </div>
           {srcGsm <= 0 && (
