@@ -146,14 +146,13 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setMaterials(matRes.data ?? []);
     const recipientRows = ((recipRes.data as RecipientOption[]) ?? []).filter((r) => !!r.user_id);
     const recipientIds = [...new Set(recipientRows.map((r) => r.user_id))];
-    let recipientRoleMap = new Map<string, string[]>();
+    const recipientRoleMap = new Map<string, string[]>();
     if (recipientIds.length > 0) {
       const { data: roleRows, error: roleErr } = await supabase
         .from("user_roles")
         .select("user_id, role")
         .in("user_id", recipientIds);
       if (roleErr) {
-        // eslint-disable-next-line no-console
         console.warn("Could not load recipient roles for issue type", roleErr);
       } else {
         for (const row of (roleRows ?? []) as { user_id: string; role: string }[]) {
@@ -532,7 +531,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const sqmValue = issueUnit === "sqm" ? qty : (gsmToSave && gsmToSave > 0 ? (qtyKg * 1000) / gsmToSave : null);
     const recipientUserId = issueRecipientId || null;
     const recipientType = recipientUserId ? getRawMaterialRecipientType(recipientUserId) : "production_manager";
-    // eslint-disable-next-line no-console
     console.log("raw material issue recipient", {
       recipient_user_id: recipientUserId,
       issued_to_user_id: recipientUserId,
