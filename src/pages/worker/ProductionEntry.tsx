@@ -275,8 +275,22 @@ export default function ProductionEntry() {
 
     if (!useMultiThickness && (!form.rolls_count || !form.length_per_roll || !form.width_per_roll)) return;
 
-    setSubmitting(true);
+    // Validate raw material usage does not exceed pending
     const validUsage = materialUsage.filter((r) => r.raw_material_id && Number(r.quantity_used) > 0);
+    for (const r of validUsage) {
+      const it = issuedMaterials.find((m) => m.stock_issue_id === r.stock_issue_id);
+      const pending = it?.pending_kg ?? 0;
+      if (Number(r.quantity_used) > pending + 0.0001) {
+        toast({
+          title: "Quantity exceeds pending",
+          description: `${r.raw_material_name}: ${r.quantity_used} kg requested but only ${pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg pending.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setSubmitting(true);
 
     // Lab fields don't exist as columns in this DB — fold them into notes
     const labParts: string[] = [];
