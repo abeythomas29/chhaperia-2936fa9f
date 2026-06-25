@@ -18,24 +18,28 @@ import { UNIT_OPTIONS } from "@/lib/units";
 interface ThicknessRow { thickness_mm: string; rolls_count: string; length_per_roll: string; width_per_roll: string; }
 
 interface MaterialUsageRow {
+  stock_issue_id: string;
   raw_material_id: string;
   quantity_used: string;
   thickness_mm: string;
   gsm: string;
-}
-
-interface RawMaterial {
-  id: string;
-  name: string;
+  lot_number: string;
+  raw_material_name: string;
   unit: string;
-  current_stock: number;
+  pending_kg: number;
 }
 
-interface StockVariant {
+interface IssuedMaterial {
+  stock_issue_id: string;
   raw_material_id: string;
+  raw_material_name: string;
+  unit: string;
   thickness_mm: number | null;
   gsm: number | null;
-  total: number;
+  lot_number: string | null;
+  issued_kg: number;
+  pending_kg: number;
+  created_at: string;
 }
 
 export default function ProductionEntry() {
@@ -45,7 +49,7 @@ export default function ProductionEntry() {
   const [productCodes, setProductCodes] = useState<{ id: string; code: string; category_id: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [issuedMaterials, setIssuedMaterials] = useState<IssuedMaterial[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [form, setForm] = useState({
@@ -90,41 +94,103 @@ export default function ProductionEntry() {
   const [materialUsage, setMaterialUsage] = useState<MaterialUsageRow[]>([]);
   const [materialsOpen, setMaterialsOpen] = useState(false);
 
-  const [stockVariants, setStockVariants] = useState<StockVariant[]>([]);
+  const fetchIssuedMaterials = async (userId: string) => {
+    // Fetch raw-material stock_issues addressed to this user
+    // (handle both column names: recipient_user_id and issued_to_user_id).
+    const [recA, recB] = await Promise.all([
+      supabase.from("stock_issues").select("*").eq("recipient_user_id", userId),
+      (supabase.from("stock_issues") as any).select("*").eq("issued_to_user_id", userId),
+    ]);
+    const rowsMap = new Map<string, any>();
+    for (const r of (recA.data ?? []) as any[]) rowsMap.set(r.id, r);
+    if (!recB.error) {
+      for (const r of (recB.data ?? []) as any[]) rowsMap.set(r.id, r);
+    }
+    const issueRows = Array.from(rowsMap.values()).filter((r) => {
+      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
+      return t === "raw_material" && r.raw_material_id;
+    });
+
+    const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
+    const matsRes = rmIds.length
+      ? await supabase.from("raw_materials").select("id, name, unit").in("id", rmIds)
+      : { data: [] as any[] };
+    const rmMap = new Map<string, { name: string; unit: string }>(
+      ((matsRes.data ?? []) as any[]).map((m) => [m.id, { name: m.name, unit: m.unit }])
+    );
+
+    // Fetch this worker's prior usage to compute pending per issue group
+    const usageRes = await supabase
+      .from("raw_material_usage")
+      .select("raw_material_id, quantity_used, production_entries!inner(worker_id, thickness_mm, gsm)")
+      .eq("production_entries.worker_id", userId);
+    const usedByKey = new Map<string, number>();
+    for (const u of ((usageRes.data ?? []) as any[])) {
+      const pe = Array.isArray(u.production_entries) ? u.production_entries[0] : u.production_entries;
+      const t = pe?.thickness_mm ?? null;
+      const g = pe?.gsm ?? null;
+      const k = `${u.raw_material_id}|${t ?? ""}|${g ?? ""}`;
+      usedByKey.set(k, (usedByKey.get(k) ?? 0) + (Number(u.quantity_used) || 0));
+    }
+
+    const items: IssuedMaterial[] = issueRows.map((r) => {
+      const unit = r.issue_unit ?? r.unit ?? "kg";
+      const qty = Number(r.issue_quantity ?? r.quantity ?? 0);
+      const gsm = r.gsm != null ? Number(r.gsm) : null;
+      let kg = 0;
+      if (r.issue_quantity_kg != null) kg = Number(r.issue_quantity_kg);
+      else if (unit === "kg") kg = qty;
+      else if (unit === "sqm" && gsm && gsm > 0) kg = (qty * gsm) / 1000;
+      else kg = qty;
+      const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
+      const m = rmMap.get(r.raw_material_id);
+      return {
+        stock_issue_id: r.id,
+        raw_material_id: r.raw_material_id,
+        raw_material_name: m?.name ?? "Raw Material",
+        unit: m?.unit ?? "kg",
+        thickness_mm: t,
+        gsm,
+        lot_number: r.lot_number ?? null,
+        issued_kg: kg,
+        pending_kg: kg,
+        created_at: r.created_at,
+      };
+    });
+
+    // FIFO allocate prior "used" against issues grouped by (material, thickness, gsm)
+    const groups = new Map<string, IssuedMaterial[]>();
+    for (const it of items) {
+      const k = `${it.raw_material_id}|${it.thickness_mm ?? ""}|${it.gsm ?? ""}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(it);
+    }
+    for (const [k, arr] of groups) {
+      arr.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+      let remainingUsed = usedByKey.get(k) ?? 0;
+      for (const it of arr) {
+        const take = Math.min(remainingUsed, it.issued_kg);
+        it.pending_kg = Math.max(0, it.issued_kg - take);
+        remainingUsed -= take;
+      }
+    }
+
+    setIssuedMaterials(items.filter((i) => i.pending_kg > 0.0001));
+  };
 
   const fetchData = async () => {
-    const [codesRes, catsRes, clientsRes, matsRes, stockRes] = await Promise.all([
+    const [codesRes, catsRes, clientsRes] = await Promise.all([
       supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
       supabase.from("product_categories").select("id, name").eq("status", "active").order("name"),
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
-      supabase.from("raw_materials").select("id, name, unit, current_stock").eq("status", "active").order("name"),
-      supabase.from("raw_material_stock_entries").select("raw_material_id, thickness_mm, gsm, quantity"),
     ]);
     setProductCodes(codesRes.data ?? []);
     setCategories(catsRes.data ?? []);
     setClients(clientsRes.data ?? []);
-    setRawMaterials(matsRes.data ?? []);
-
-    // Group stock entries into variants by material + thickness + gsm
-    const map = new Map<string, StockVariant>();
-    for (const row of (stockRes.data ?? []) as Array<{ raw_material_id: string; thickness_mm: number | null; gsm: number | null; quantity: number }>) {
-      const key = `${row.raw_material_id}|${row.thickness_mm ?? ""}|${row.gsm ?? ""}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.total += Number(row.quantity) || 0;
-      } else {
-        map.set(key, {
-          raw_material_id: row.raw_material_id,
-          thickness_mm: row.thickness_mm,
-          gsm: row.gsm,
-          total: Number(row.quantity) || 0,
-        });
-      }
-    }
-    setStockVariants(Array.from(map.values()));
+    if (user) await fetchIssuedMaterials(user.id);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
 
   // Width is entered in millimeters; convert to meters for area calculations
   const qtyPerRoll = (Number(form.length_per_roll) || 0) * ((Number(form.width_per_roll) || 0) / 1000);
