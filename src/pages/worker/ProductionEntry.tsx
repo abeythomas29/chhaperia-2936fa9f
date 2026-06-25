@@ -18,24 +18,28 @@ import { UNIT_OPTIONS } from "@/lib/units";
 interface ThicknessRow { thickness_mm: string; rolls_count: string; length_per_roll: string; width_per_roll: string; }
 
 interface MaterialUsageRow {
+  stock_issue_id: string;
   raw_material_id: string;
   quantity_used: string;
   thickness_mm: string;
   gsm: string;
-}
-
-interface RawMaterial {
-  id: string;
-  name: string;
+  lot_number: string;
+  raw_material_name: string;
   unit: string;
-  current_stock: number;
+  pending_kg: number;
 }
 
-interface StockVariant {
+interface IssuedMaterial {
+  stock_issue_id: string;
   raw_material_id: string;
+  raw_material_name: string;
+  unit: string;
   thickness_mm: number | null;
   gsm: number | null;
-  total: number;
+  lot_number: string | null;
+  issued_kg: number;
+  pending_kg: number;
+  created_at: string;
 }
 
 export default function ProductionEntry() {
@@ -45,7 +49,7 @@ export default function ProductionEntry() {
   const [productCodes, setProductCodes] = useState<{ id: string; code: string; category_id: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [issuedMaterials, setIssuedMaterials] = useState<IssuedMaterial[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [form, setForm] = useState({
@@ -90,41 +94,103 @@ export default function ProductionEntry() {
   const [materialUsage, setMaterialUsage] = useState<MaterialUsageRow[]>([]);
   const [materialsOpen, setMaterialsOpen] = useState(false);
 
-  const [stockVariants, setStockVariants] = useState<StockVariant[]>([]);
+  const fetchIssuedMaterials = async (userId: string) => {
+    // Fetch raw-material stock_issues addressed to this user
+    // (handle both column names: recipient_user_id and issued_to_user_id).
+    const [recA, recB] = await Promise.all([
+      supabase.from("stock_issues").select("*").eq("recipient_user_id", userId),
+      (supabase.from("stock_issues") as any).select("*").eq("issued_to_user_id", userId),
+    ]);
+    const rowsMap = new Map<string, any>();
+    for (const r of (recA.data ?? []) as any[]) rowsMap.set(r.id, r);
+    if (!recB.error) {
+      for (const r of (recB.data ?? []) as any[]) rowsMap.set(r.id, r);
+    }
+    const issueRows = Array.from(rowsMap.values()).filter((r) => {
+      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
+      return t === "raw_material" && r.raw_material_id;
+    });
+
+    const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
+    const matsRes = rmIds.length
+      ? await supabase.from("raw_materials").select("id, name, unit").in("id", rmIds)
+      : { data: [] as any[] };
+    const rmMap = new Map<string, { name: string; unit: string }>(
+      ((matsRes.data ?? []) as any[]).map((m) => [m.id, { name: m.name, unit: m.unit }])
+    );
+
+    // Fetch this worker's prior usage to compute pending per issue group
+    const usageRes = await supabase
+      .from("raw_material_usage")
+      .select("raw_material_id, quantity_used, production_entries!inner(worker_id, thickness_mm, gsm)")
+      .eq("production_entries.worker_id", userId);
+    const usedByKey = new Map<string, number>();
+    for (const u of ((usageRes.data ?? []) as any[])) {
+      const pe = Array.isArray(u.production_entries) ? u.production_entries[0] : u.production_entries;
+      const t = pe?.thickness_mm ?? null;
+      const g = pe?.gsm ?? null;
+      const k = `${u.raw_material_id}|${t ?? ""}|${g ?? ""}`;
+      usedByKey.set(k, (usedByKey.get(k) ?? 0) + (Number(u.quantity_used) || 0));
+    }
+
+    const items: IssuedMaterial[] = issueRows.map((r) => {
+      const unit = r.issue_unit ?? r.unit ?? "kg";
+      const qty = Number(r.issue_quantity ?? r.quantity ?? 0);
+      const gsm = r.gsm != null ? Number(r.gsm) : null;
+      let kg = 0;
+      if (r.issue_quantity_kg != null) kg = Number(r.issue_quantity_kg);
+      else if (unit === "kg") kg = qty;
+      else if (unit === "sqm" && gsm && gsm > 0) kg = (qty * gsm) / 1000;
+      else kg = qty;
+      const t = r.thickness_mm != null ? Number(r.thickness_mm) : null;
+      const m = rmMap.get(r.raw_material_id);
+      return {
+        stock_issue_id: r.id,
+        raw_material_id: r.raw_material_id,
+        raw_material_name: m?.name ?? "Raw Material",
+        unit: m?.unit ?? "kg",
+        thickness_mm: t,
+        gsm,
+        lot_number: r.lot_number ?? null,
+        issued_kg: kg,
+        pending_kg: kg,
+        created_at: r.created_at,
+      };
+    });
+
+    // FIFO allocate prior "used" against issues grouped by (material, thickness, gsm)
+    const groups = new Map<string, IssuedMaterial[]>();
+    for (const it of items) {
+      const k = `${it.raw_material_id}|${it.thickness_mm ?? ""}|${it.gsm ?? ""}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(it);
+    }
+    for (const [k, arr] of groups) {
+      arr.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+      let remainingUsed = usedByKey.get(k) ?? 0;
+      for (const it of arr) {
+        const take = Math.min(remainingUsed, it.issued_kg);
+        it.pending_kg = Math.max(0, it.issued_kg - take);
+        remainingUsed -= take;
+      }
+    }
+
+    setIssuedMaterials(items.filter((i) => i.pending_kg > 0.0001));
+  };
 
   const fetchData = async () => {
-    const [codesRes, catsRes, clientsRes, matsRes, stockRes] = await Promise.all([
+    const [codesRes, catsRes, clientsRes] = await Promise.all([
       supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
       supabase.from("product_categories").select("id, name").eq("status", "active").order("name"),
       supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
-      supabase.from("raw_materials").select("id, name, unit, current_stock").eq("status", "active").order("name"),
-      supabase.from("raw_material_stock_entries").select("raw_material_id, thickness_mm, gsm, quantity"),
     ]);
     setProductCodes(codesRes.data ?? []);
     setCategories(catsRes.data ?? []);
     setClients(clientsRes.data ?? []);
-    setRawMaterials(matsRes.data ?? []);
-
-    // Group stock entries into variants by material + thickness + gsm
-    const map = new Map<string, StockVariant>();
-    for (const row of (stockRes.data ?? []) as Array<{ raw_material_id: string; thickness_mm: number | null; gsm: number | null; quantity: number }>) {
-      const key = `${row.raw_material_id}|${row.thickness_mm ?? ""}|${row.gsm ?? ""}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.total += Number(row.quantity) || 0;
-      } else {
-        map.set(key, {
-          raw_material_id: row.raw_material_id,
-          thickness_mm: row.thickness_mm,
-          gsm: row.gsm,
-          total: Number(row.quantity) || 0,
-        });
-      }
-    }
-    setStockVariants(Array.from(map.values()));
+    if (user) await fetchIssuedMaterials(user.id);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
 
   // Width is entered in millimeters; convert to meters for area calculations
   const qtyPerRoll = (Number(form.length_per_roll) || 0) * ((Number(form.width_per_roll) || 0) / 1000);
@@ -170,20 +236,33 @@ export default function ProductionEntry() {
 
   // Material usage helpers
   const addMaterialRow = () => {
-    setMaterialUsage((prev) => [...prev, { raw_material_id: "", quantity_used: "", thickness_mm: "", gsm: "" }]);
+    setMaterialUsage((prev) => [
+      ...prev,
+      {
+        stock_issue_id: "",
+        raw_material_id: "",
+        quantity_used: "",
+        thickness_mm: "",
+        gsm: "",
+        lot_number: "",
+        raw_material_name: "",
+        unit: "kg",
+        pending_kg: 0,
+      },
+    ]);
   };
 
-  const updateMaterialRow = (index: number, field: keyof MaterialUsageRow, value: string) => {
-    setMaterialUsage((prev) => prev.map((row, i) => i === index ? { ...row, [field]: value } : row));
+  const updateMaterialRow = (index: number, patch: Partial<MaterialUsageRow>) => {
+    setMaterialUsage((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
   const removeMaterialRow = (index: number) => {
     setMaterialUsage((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const usedMaterialIds = materialUsage.map((r) => r.raw_material_id).filter(Boolean);
-  const getAvailableMaterials = (currentId: string) =>
-    rawMaterials.filter((m) => m.id === currentId || !usedMaterialIds.includes(m.id));
+  const usedIssueIds = materialUsage.map((r) => r.stock_issue_id).filter(Boolean);
+  const getAvailableIssues = (currentId: string) =>
+    issuedMaterials.filter((m) => m.stock_issue_id === currentId || !usedIssueIds.includes(m.stock_issue_id));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,8 +275,22 @@ export default function ProductionEntry() {
 
     if (!useMultiThickness && (!form.rolls_count || !form.length_per_roll || !form.width_per_roll)) return;
 
-    setSubmitting(true);
+    // Validate raw material usage does not exceed pending
     const validUsage = materialUsage.filter((r) => r.raw_material_id && Number(r.quantity_used) > 0);
+    for (const r of validUsage) {
+      const it = issuedMaterials.find((m) => m.stock_issue_id === r.stock_issue_id);
+      const pending = it?.pending_kg ?? 0;
+      if (Number(r.quantity_used) > pending + 0.0001) {
+        toast({
+          title: "Quantity exceeds pending",
+          description: `${r.raw_material_name}: ${r.quantity_used} kg requested but only ${pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg pending.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setSubmitting(true);
 
     // Lab fields don't exist as columns in this DB — fold them into notes
     const labParts: string[] = [];
@@ -265,16 +358,31 @@ export default function ProductionEntry() {
       return;
     }
 
-    // Insert optional raw material usage rows
+    // Insert optional raw material usage rows (try with stock_issue_id, fallback without)
     if (validUsage.length > 0) {
-      const usageRows = validUsage.map((r) => ({
+      const usageRowsWithLink = validUsage.map((r) => ({
         production_entry_id: entry.id,
         raw_material_id: r.raw_material_id,
         quantity_used: Number(r.quantity_used),
+        stock_issue_id: r.stock_issue_id || null,
       }));
-      const { error: usageError } = await supabase.from("raw_material_usage").insert(usageRows);
+      let usageError: any = null;
+      const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
+      if (tryLinked.error) {
+        // Column likely missing — retry without stock_issue_id
+        const fallback = validUsage.map((r) => ({
+          production_entry_id: entry.id,
+          raw_material_id: r.raw_material_id,
+          quantity_used: Number(r.quantity_used),
+        }));
+        const retry = await supabase.from("raw_material_usage").insert(fallback);
+        usageError = retry.error;
+      }
       if (usageError) {
         toast({ title: "Warning", description: "Production saved but material usage failed: " + usageError.message, variant: "destructive" });
+      } else if (user) {
+        // Refresh pending list
+        fetchIssuedMaterials(user.id);
       }
     }
 
@@ -741,48 +849,75 @@ export default function ProductionEntry() {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 space-y-3">
+              {issuedMaterials.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">
+                  No raw material has been issued to you yet. Ask the inventory manager to issue stock to your account.
+                </p>
+              )}
               {materialUsage.map((row, idx) => {
-                const mat = rawMaterials.find((m) => m.id === row.raw_material_id);
-                const variants = row.raw_material_id
-                  ? stockVariants
-                      .filter((v) => v.raw_material_id === row.raw_material_id && (v.thickness_mm != null || v.gsm != null))
-                      .sort((a, b) => (a.thickness_mm ?? 0) - (b.thickness_mm ?? 0) || (a.gsm ?? 0) - (b.gsm ?? 0))
-                  : [];
-                const variantValue = `${row.thickness_mm || ""}|${row.gsm || ""}`;
+                const options = getAvailableIssues(row.stock_issue_id);
+                const selected = issuedMaterials.find((m) => m.stock_issue_id === row.stock_issue_id);
+                const qty = Number(row.quantity_used) || 0;
+                const over = selected ? qty > selected.pending_kg + 0.0001 : false;
                 return (
                   <div key={idx} className="space-y-2 border border-border/50 rounded-md p-2">
                     <div className="flex items-end gap-2">
-                      <div className="flex-1">
-                        {idx === 0 && <Label className="text-xs">Material</Label>}
-                        <Select value={row.raw_material_id} onValueChange={(v) => {
-                          updateMaterialRow(idx, "raw_material_id", v);
-                          updateMaterialRow(idx, "thickness_mm", "");
-                          updateMaterialRow(idx, "gsm", "");
-                        }}>
+                      <div className="flex-1 min-w-0">
+                        {idx === 0 && <Label className="text-xs">Issued Material</Label>}
+                        <Select
+                          value={row.stock_issue_id}
+                          onValueChange={(v) => {
+                            const it = issuedMaterials.find((m) => m.stock_issue_id === v);
+                            if (!it) return;
+                            updateMaterialRow(idx, {
+                              stock_issue_id: it.stock_issue_id,
+                              raw_material_id: it.raw_material_id,
+                              raw_material_name: it.raw_material_name,
+                              unit: it.unit,
+                              thickness_mm: it.thickness_mm != null ? String(it.thickness_mm) : "",
+                              gsm: it.gsm != null ? String(it.gsm) : "",
+                              lot_number: it.lot_number ?? "",
+                              pending_kg: it.pending_kg,
+                            });
+                          }}
+                        >
                           <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select material" />
+                            <SelectValue placeholder="Select issued material" />
                           </SelectTrigger>
                           <SelectContent>
-                            {getAvailableMaterials(row.raw_material_id).map((m) => (
-                              <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>
-                            ))}
+                            {options.map((m) => {
+                              const parts = [m.raw_material_name];
+                              if (m.thickness_mm != null) parts.push(`${m.thickness_mm} mm`);
+                              if (m.gsm != null) parts.push(`${m.gsm} gsm`);
+                              if (m.lot_number) parts.push(`Lot ${m.lot_number}`);
+                              parts.push(`${m.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg pending`);
+                              return (
+                                <SelectItem key={m.stock_issue_id} value={m.stock_issue_id}>
+                                  {parts.join(" · ")}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
-                        {mat && (
+                        {selected && (
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Stock: {mat.current_stock.toLocaleString()} {mat.unit}
+                            Pending: {selected.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                            {selected.thickness_mm != null && ` · ${selected.thickness_mm} mm`}
+                            {selected.gsm != null && ` · ${selected.gsm} gsm`}
+                            {selected.lot_number && ` · Lot ${selected.lot_number}`}
                           </p>
                         )}
                       </div>
                       <div className="w-24">
-                        {idx === 0 && <Label className="text-xs">Qty</Label>}
+                        {idx === 0 && <Label className="text-xs">Qty (kg)</Label>}
                         <Input
                           type="number"
                           min="0"
                           step="0.001"
-                          className="h-9 text-right"
+                          max={selected?.pending_kg}
+                          className={`h-9 text-right ${over ? "border-destructive" : ""}`}
                           value={row.quantity_used}
-                          onChange={(e) => updateMaterialRow(idx, "quantity_used", e.target.value)}
+                          onChange={(e) => updateMaterialRow(idx, { quantity_used: e.target.value })}
                           placeholder="0"
                         />
                       </div>
@@ -790,39 +925,10 @@ export default function ProductionEntry() {
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
-                    {row.raw_material_id && (
-                      <div>
-                        <Label className="text-xs">Thickness / GSM available</Label>
-                        {variants.length > 0 ? (
-                          <Select
-                            value={variantValue === "|" ? "" : variantValue}
-                            onValueChange={(v) => {
-                              const [t, g] = v.split("|");
-                              updateMaterialRow(idx, "thickness_mm", t);
-                              updateMaterialRow(idx, "gsm", g);
-                            }}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select specification" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {variants.map((v) => {
-                                const parts: string[] = [];
-                                if (v.thickness_mm != null) parts.push(`${v.thickness_mm} mm`);
-                                if (v.gsm != null) parts.push(`${v.gsm} gsm`);
-                                const key = `${v.thickness_mm ?? ""}|${v.gsm ?? ""}`;
-                                return (
-                                  <SelectItem key={key} value={key}>
-                                    {parts.join(" · ")} — {v.total.toLocaleString()} {mat?.unit ?? ""} in stock
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <p className="text-xs text-muted-foreground italic">No thickness/GSM variants recorded for this material.</p>
-                        )}
-                      </div>
+                    {over && (
+                      <p className="text-xs text-destructive">
+                        Exceeds pending {selected?.pending_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                      </p>
                     )}
                   </div>
                 );
