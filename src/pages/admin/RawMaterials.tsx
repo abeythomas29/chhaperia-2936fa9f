@@ -351,27 +351,89 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   };
 
   // Auto-fill GSM from latest stock entry for selected material (GSM is fixed by raw material entry).
-  // Reset thickness when material changes (it's a dropdown of available variants).
+  // Reset variant selection when material changes.
   useEffect(() => {
-    if (!issueMaterialId) { setIssueGsm(""); setIssueThickness(""); return; }
+    if (!issueMaterialId) {
+      setIssueGsm(""); setIssueThickness(""); setIssueLot(""); setIssueVariantKey("");
+      return;
+    }
     const latest = stockEntries
       .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in")
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
     setIssueGsm(latest?.gsm != null ? String(latest.gsm) : "");
     setIssueThickness("");
+    setIssueLot("");
+    setIssueVariantKey("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issueMaterialId]);
 
-  // Available thickness variants for the selected material (from inward entries).
-  const availableThicknesses = (() => {
-    if (!issueMaterialId) return [] as string[];
-    const set = new Set<string>();
-    stockEntries
-      .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in" && e.thickness_mm != null)
-      .forEach((e) => set.add(String(e.thickness_mm)));
-    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  // Build available variants for the selected material: group inward by (lot, thickness, gsm)
+  // and subtract issued/sales attributable to that exact lot. Issue rows with null lot are
+  // attributed only when a single inward lot matches their (thickness, gsm).
+  type Variant = {
+    key: string;
+    lot: string | null;
+    thickness: number | null;
+    gsm: number | null;
+    inKg: number;
+    outKg: number;
+    balanceKg: number;
+    packCount: number;
+    packType: "pallet" | "roll" | null;
+  };
+  const availableVariants = ((): Variant[] => {
+    if (!issueMaterialId) return [];
+    const mat = stockEntries.filter((e) => e.raw_material_id === issueMaterialId);
+    const ins = mat.filter((e) => e.kind === "in");
+    const outs = mat.filter((e) => e.kind === "out" || e.kind === "issue");
+    const map = new Map<string, Variant>();
+    const keyOf = (lot: string | null, t: number | null, g: number | null) =>
+      `${lot ?? "-"}|${t ?? "-"}|${g ?? "-"}`;
+    ins.forEach((e) => {
+      const lot = e.lot_number?.trim() || null;
+      const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+      const g = e.gsm != null ? Number(e.gsm) : null;
+      const k = keyOf(lot, t, g);
+      const v = map.get(k) ?? { key: k, lot, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
+      v.inKg += Number(e.quantity) || 0;
+      const pc = (e as any).pallet_count != null ? Number((e as any).pallet_count) : null;
+      const rc = (e as any).roll_count != null ? Number((e as any).roll_count) : null;
+      if (pc != null && pc > 0) { v.packCount += pc; v.packType = v.packType ?? "pallet"; }
+      else if (rc != null && rc > 0) { v.packCount += rc; v.packType = v.packType ?? "roll"; }
+      else if (e.pallets != null && Number(e.pallets) > 0) { v.packCount += Number(e.pallets); v.packType = v.packType ?? "pallet"; }
+      map.set(k, v);
+    });
+    // Attribute outs
+    outs.forEach((e) => {
+      const lot = e.lot_number?.trim() || null;
+      const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+      const g = e.gsm != null ? Number(e.gsm) : null;
+      const qty = Number(e.quantity) || 0;
+      if (lot) {
+        const k = keyOf(lot, t, g);
+        const v = map.get(k);
+        if (v) { v.outKg += qty; return; }
+      }
+      // Backward-compat: match by (thickness, gsm) when exactly one inward lot fits
+      const candidates = Array.from(map.values()).filter((v) =>
+        (t == null || v.thickness === t) && (g == null || v.gsm === g),
+      );
+      if (candidates.length === 1) {
+        candidates[0].outKg += qty;
+      } else {
+        const k = keyOf(null, t, g);
+        const v = map.get(k) ?? { key: k, lot: null, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
+        v.outKg += qty;
+        map.set(k, v);
+      }
+    });
+    return Array.from(map.values())
+      .map((v) => ({ ...v, balanceKg: v.inKg - v.outKg }))
+      .filter((v) => v.inKg > 0)
+      .sort((a, b) => (a.thickness ?? Infinity) - (b.thickness ?? Infinity));
   })();
 
+  const selectedVariant = availableVariants.find((v) => v.key === issueVariantKey) || null;
 
   const resetIssueForm = () => {
     setIssueMaterialId("");
@@ -379,6 +441,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setIssueQty("");
     setIssueGsm("");
     setIssueThickness("");
+    setIssueLot("");
+    setIssueVariantKey("");
     setIssueDate(format(new Date(), "yyyy-MM-dd"));
     setIssueRecipientId("");
     setIssueNotes("");
