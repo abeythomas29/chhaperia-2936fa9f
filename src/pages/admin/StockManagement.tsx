@@ -96,6 +96,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [issueThickness, setIssueThickness] = useState("");
   const [issueGsm, setIssueGsm] = useState("");
+  const [issueGsmAuto, setIssueGsmAuto] = useState(false);
+  const [productGsmByCode, setProductGsmByCode] = useState<Record<string, number>>({});
+  const [productGsmByCodeThickness, setProductGsmByCodeThickness] = useState<Record<string, number>>({});
   const [issuing, setIssuing] = useState(false);
 
 
