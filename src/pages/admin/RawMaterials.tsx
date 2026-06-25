@@ -1037,13 +1037,14 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
               {filteredEntries.length === 0 ? (
                 <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No stock entries match your filters</TableCell></TableRow>
               ) : filteredEntries.map((e) => {
-                const isSale = e.kind === "out";
+                const isSale = e.source === "sale";
                 const isIssue = e.kind === "issue";
-                const isOut = isSale || isIssue;
+                const isOut = isSale || isIssue || e.kind === "out";
                 const typeLabel = isSale ? "Sale" : isIssue ? "Issued" : "In";
                 const qtyDisplay = isIssue && e.issue_quantity != null && e.issue_unit
                   ? `${Number(e.issue_quantity).toLocaleString()} ${e.issue_unit} → ${Number(e.quantity).toLocaleString()} kg`
                   : `${Number(e.quantity).toLocaleString()} ${e.material_unit}`;
+                // Allow edit/delete for inward + issue rows. Hide only for Sale rows (handled in Sales tab).
                 const canEditRow = !readOnly && canManageEntries && !isSale;
                 if (!canEditRow) {
                   console.log("raw material row action check", {
@@ -1053,6 +1054,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     isSuperAdmin,
                     rowEntryType: (e as any).entry_type,
                     rowEntryKind: (e as any).entry_kind,
+                    rowSource: e.source,
                     rowAddedBy: e.added_by,
                     currentUserId: user?.id,
                     canEditDelete: canEditRow,
@@ -1082,7 +1084,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     ) : (
                       <>
                         <Button variant="ghost" size="icon" onClick={() => openEditEntry(e)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteEntryId(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteEntryRow(e)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </>
                     )}
                   </TableCell>
