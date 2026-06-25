@@ -676,7 +676,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
           const date = row.date ?? null;
           const oldQty = Number(row.issue_quantity ?? row.quantity ?? 0);
           const oldUnit = row.issue_unit ?? null;
-          let q: any = supabase
+          let q: any = (supabase as any)
             .from("stock_issues")
             .select("id")
             .eq("raw_material_id", rmId)
