@@ -68,6 +68,33 @@ interface RawMaterialUsageRow {
   production_entries?: { worker_id?: string; thickness_mm?: number | null; gsm?: number | null } | { worker_id?: string; thickness_mm?: number | null; gsm?: number | null }[] | null;
 }
 
+interface SupabaseErrorLike {
+  message: string;
+}
+
+interface UntypedQueryResult {
+  data: unknown;
+  error: SupabaseErrorLike | null;
+}
+
+interface UntypedFilter {
+  eq(column: string, value: unknown): UntypedFilter;
+  not(column: string, operator: string, value: unknown): UntypedFilter;
+  or(filters: string): UntypedFilter;
+  order(column: string, options?: { ascending?: boolean }): UntypedFilter;
+  limit(count: number): UntypedFilter;
+  then<TResult1 = UntypedQueryResult, TResult2 = never>(
+    onfulfilled?: ((value: UntypedQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2>;
+}
+
+interface UntypedSupabaseTable {
+  select(columns?: string): UntypedFilter;
+}
+
+const untypedSupabase = supabase as unknown as { from(table: string): UntypedSupabaseTable };
+
 export default function ProductionEntry() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -140,7 +167,7 @@ export default function ProductionEntry() {
     console.log("current user id", userId);
 
     const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, lot_number, date, created_at";
-    const { data, error } = await supabase
+    const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
       .eq("issue_type", "raw_material")
@@ -150,14 +177,16 @@ export default function ProductionEntry() {
 
     console.log("issued raw material rows fetched", data, error);
 
-    const issueRows = ((data ?? []) as StockIssueRow[]).filter((r) => r.raw_material_id);
+    const issueRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
+      (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
+    );
     if (error) {
       console.error("issued raw material fetch failed", error);
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
     }
 
     if (!error && issueRows.length === 0) {
-      const { data: recent, error: recentError } = await supabase
+      const { data: recent, error: recentError } = await untypedSupabase
         .from("stock_issues")
         .select("id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_quantity, issue_unit, date")
         .eq("issue_type", "raw_material")
@@ -170,20 +199,20 @@ export default function ProductionEntry() {
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
     const matsRes = rmIds.length
       ? await supabase.from("raw_materials").select("id, name, unit").in("id", rmIds)
-      : { data: [] as any[] };
+      : { data: [] as { id: string; name: string; unit: string }[] };
     const rmMap = new Map<string, { name: string; unit: string }>(
         ((matsRes.data ?? []) as { id: string; name: string; unit: string }[]).map((m) => [m.id, { name: m.name, unit: m.unit }])
     );
 
     // Fetch this worker's prior usage to compute pending. If stock_issue_id exists,
     // use exact issue matching; otherwise fall back to FIFO by material/thickness/gsm.
-    const usageRes = await supabase
+    const usageRes = await untypedSupabase
       .from("raw_material_usage")
       .select("raw_material_id, quantity_used, stock_issue_id, production_entries!inner(worker_id, thickness_mm, gsm)")
       .eq("production_entries.worker_id", userId);
     const usedByKey = new Map<string, number>();
     const usedByIssueId = new Map<string, number>();
-    for (const u of ((usageRes.data ?? []) as RawMaterialUsageRow[])) {
+    for (const u of ((usageRes.data ?? []) as unknown as RawMaterialUsageRow[])) {
       if (u.stock_issue_id) {
         usedByIssueId.set(u.stock_issue_id, (usedByIssueId.get(u.stock_issue_id) ?? 0) + (Number(u.quantity_used) || 0));
         continue;
