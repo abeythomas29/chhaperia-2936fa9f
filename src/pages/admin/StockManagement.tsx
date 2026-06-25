@@ -869,7 +869,17 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <Label>Product Code</Label>
               <SearchableSelect
                 value={issueProductCodeId}
-                onValueChange={(v) => { setIssueProductCodeId(v); }}
+                onValueChange={(v) => {
+                  setIssueProductCodeId(v);
+                  const key = `${v}__${issueThickness ? Number(issueThickness) : ""}`;
+                  const g = productGsmByCodeThickness[key] ?? productGsmByCode[v];
+                  if (g && g > 0) {
+                    setIssueGsm(String(g));
+                    setIssueGsmAuto(true);
+                  } else {
+                    setIssueGsmAuto(false);
+                  }
+                }}
                 placeholder="Select product"
                 options={productCodes.map((p) => {
                   const stock = summaries.find(s => s.product_code_id === p.id);
