@@ -942,7 +942,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               </div>
               <div className="space-y-2">
                 <Label>Thickness (mm)</Label>
-                <Input type="number" min="0" step="0.01" value={issueThickness} onChange={(e) => setIssueThickness(e.target.value)} placeholder="Optional" />
+                <Input type="number" min="0" step="0.01" value={issueThickness} onChange={(e) => {
+                  const t = e.target.value;
+                  setIssueThickness(t);
+                  if (issueProductCodeId) {
+                    const key = `${issueProductCodeId}__${t ? Number(t) : ""}`;
+                    const g = productGsmByCodeThickness[key] ?? productGsmByCode[issueProductCodeId];
+                    if (g && g > 0) { setIssueGsm(String(g)); setIssueGsmAuto(true); }
+                  }
+                }} placeholder="Optional" />
               </div>
               <div className="space-y-2">
                 <Label>GSM</Label>
