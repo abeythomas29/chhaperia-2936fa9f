@@ -546,6 +546,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     setIssueUnit("sqm");
     setIssueThickness("");
     setIssueGsm("");
+    setIssueGsmAuto(false);
     setIssueNotes("");
     setIssueDate(format(new Date(), "yyyy-MM-dd"));
   };
