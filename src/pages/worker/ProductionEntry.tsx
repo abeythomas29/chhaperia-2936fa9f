@@ -166,7 +166,7 @@ export default function ProductionEntry() {
   const fetchIssuedMaterials = async (userId: string) => {
     console.log("current user id", userId);
 
-    const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, lot_number, date, created_at";
+    const issuedSelect = "id, raw_material_id, recipient_user_id, issued_to_user_id, recipient_type, issue_type, issue_quantity, issue_unit, issue_quantity_kg, quantity, unit, gsm, thickness_mm, date, created_at, notes";
     const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
