@@ -269,131 +269,180 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return buckets;
     };
 
-    // Build per-product-code totals and thickness breakdowns
-    const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
-    type TBucket = { produced: number; sqm: number | null; kg: number | null };
-    const thicknessMap = new Map<string, Map<number | null, TBucket>>();
-    const issueMap = new Map<string, number>();
-    const issuedBucketsMap = new Map<string, Buckets>();
-    const ensureIssued = (pcId: string) => {
-      let b = issuedBucketsMap.get(pcId);
-      if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
-      return b;
+    // ===== Two-pass aggregation =====
+    // Pass 1: collect raw rows + build GSM fallback maps (from both production and issues).
+    type RawRow = {
+      thickness: number | null;
+      qty: number;
+      unit: UnitKey;
+      gsm: number | null;
+      widthMm: number | null;
+      sqmOverride: number | null;
+      kgOverride: number | null;
     };
+    const producedRowsByPc = new Map<string, RawRow[]>();
+    const issuedRowsByPc = new Map<string, RawRow[]>();
+    const pcMeta = new Map<string, { code: string; unit: string }>();
 
     const gsmByCode: Record<string, number> = {};
     const gsmByCodeThickness: Record<string, number> = {};
+    const setGsm = (pcId: string, thickness: number | null, gsm: number | null) => {
+      if (!gsm || gsm <= 0) return;
+      if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
+      const key = `${pcId}__${thickness ?? ""}`;
+      if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
+    };
+    const lookupGsm = (pcId: string, thickness: number | null): number | null => {
+      const key = `${pcId}__${thickness ?? ""}`;
+      return gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
+    };
+
+    // Production entries
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
       const gsm = p.gsm != null ? Number(p.gsm) : null;
       const u = normUnit(p.unit) ?? "meters";
-
-      if (gsm && gsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-      }
-
-      let entry = pcTotals.get(pcId);
-      if (!entry) {
-        entry = { code: p.product_codes?.code ?? "—", unit: p.unit, produced: 0, buckets: {} };
-        pcTotals.set(pcId, entry);
-      }
-      entry.produced += qty;
-      addBucket(entry.buckets, u, qty);
-      if (gsm && gsm > 0) {
-        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
-        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
-      }
-
-      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
-      const tMap = thicknessMap.get(pcId)!;
-      const prev = tMap.get(thickness) ?? { produced: 0, sqm: null as number | null, kg: null as number | null };
-      prev.produced += qty;
-      // produced is stored in unit u
-      let sqmAdd: number | null = null;
-      let kgAdd: number | null = null;
-      if (u === "sqm") {
-        sqmAdd = qty;
-        if (gsm && gsm > 0) kgAdd = (qty * gsm) / 1000;
-      } else if (u === "kg") {
-        kgAdd = qty;
-        if (gsm && gsm > 0) sqmAdd = (qty * 1000) / gsm;
-      }
-      if (sqmAdd != null) prev.sqm = (prev.sqm ?? 0) + sqmAdd;
-      if (kgAdd != null) prev.kg = (prev.kg ?? 0) + kgAdd;
-      tMap.set(thickness, prev);
+      setGsm(pcId, thickness, gsm);
+      if (!pcMeta.has(pcId)) pcMeta.set(pcId, { code: p.product_codes?.code ?? "—", unit: p.unit });
+      if (!producedRowsByPc.has(pcId)) producedRowsByPc.set(pcId, []);
+      producedRowsByPc.get(pcId)!.push({ thickness, qty, unit: u, gsm, widthMm: null, sqmOverride: null, kgOverride: null });
     }
-    setProductGsmByCode(gsmByCode);
-    setProductGsmByCodeThickness(gsmByCodeThickness);
 
+    // Stock issue rows (finished stock only)
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
       const pcId = i.product_code_id;
-      const b = ensureIssued(pcId);
-      const rowBuckets = getIssueBuckets(i);
-      for (const [unit, qty] of Object.entries(rowBuckets) as Array<[UnitKey, number]>) {
-        addBucket(b, unit, qty);
-      }
-      const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
-      const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
-      issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
+      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
+      const meta = parseNotesMeta(i.notes);
+      const gsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
+      const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm;
+      const widthMm = widthMmRaw != null ? Number(widthMmRaw) : null;
+      const u = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
+      const qty = Number(i.issue_quantity ?? i.quantity ?? 0);
+      setGsm(pcId, thickness, gsm);
+      if (!pcMeta.has(pcId)) pcMeta.set(pcId, { code: "—", unit: i.issue_unit ?? i.unit ?? "sqm" });
+      if (!issuedRowsByPc.has(pcId)) issuedRowsByPc.set(pcId, []);
+      issuedRowsByPc.get(pcId)!.push({
+        thickness, qty, unit: u, gsm, widthMm,
+        sqmOverride: i.issue_quantity_sqm != null ? Number(i.issue_quantity_sqm) : (meta.sqm ?? null),
+        kgOverride: i.issue_quantity_kg != null ? Number(i.issue_quantity_kg) : (meta.kg ?? null),
+      });
     }
 
-    // Include finished-product sales in issued totals (they reduce finished stock)
+    // Sales count as issues for finished products
     for (const s of (salesData ?? []) as any[]) {
       if (s.item_type === "finished_product" && s.product_code_id) {
         const pcId = s.product_code_id;
-        const q = Number(s.quantity);
-        issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
-        const b = ensureIssued(pcId);
+        const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
         const u = normUnit(s.unit) ?? "meters";
-        addBucket(b, u, q);
+        const qty = Number(s.quantity);
+        if (!issuedRowsByPc.has(pcId)) issuedRowsByPc.set(pcId, []);
+        issuedRowsByPc.get(pcId)!.push({ thickness, qty, unit: u, gsm: null, widthMm: null, sqmOverride: null, kgOverride: null });
       }
     }
 
-    const allPcIds = new Set([...pcTotals.keys(), ...issuedBucketsMap.keys(), ...issueMap.keys()]);
+    setProductGsmByCode(gsmByCode);
+    setProductGsmByCodeThickness(gsmByCodeThickness);
+
+    // Pass 2: convert each row to sqm + kg using row gsm, falling back to product/thickness gsm.
+    const toSqmKg = (row: RawRow, pcId: string): { sqm: number | null; kg: number | null } => {
+      const g = (row.gsm && row.gsm > 0) ? row.gsm : lookupGsm(pcId, row.thickness);
+      let sqm: number | null = row.sqmOverride;
+      let kg: number | null = row.kgOverride;
+      if (sqm == null) {
+        if (row.unit === "sqm") sqm = row.qty;
+        else if (row.unit === "kg" && g && g > 0) sqm = (row.qty * 1000) / g;
+        else if (row.unit === "meters" && row.widthMm && row.widthMm > 0) sqm = row.qty * (row.widthMm / 1000);
+      }
+      if (kg == null) {
+        if (row.unit === "kg") kg = row.qty;
+        else if (sqm != null && g && g > 0) kg = (sqm * g) / 1000;
+      }
+      if (sqm == null && kg != null && g && g > 0) sqm = (kg * 1000) / g;
+      return { sqm, kg };
+    };
+
+    const allPcIds = new Set<string>([...producedRowsByPc.keys(), ...issuedRowsByPc.keys()]);
     const summaryList: StockSummary[] = [];
     for (const pcId of allPcIds) {
-      const prod = pcTotals.get(pcId);
-      const produced = prod?.produced ?? 0;
-      const productUnit = normUnit(prod?.unit) ?? "meters";
-      const issuedBuckets = issuedBucketsMap.get(pcId) ?? {};
-      const issued = Number(issuedBuckets[productUnit] ?? 0);
-      const tMap = thicknessMap.get(pcId);
-      const breakdown: ThicknessBreakdown[] = [];
-      if (tMap) {
-        for (const [t, q] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
-          breakdown.push({ thickness_mm: t, produced: q.produced, sqm: q.sqm, kg: q.kg });
-        }
+      const meta = pcMeta.get(pcId);
+      const code = meta?.code && meta.code !== "—" ? meta.code : (issueProductCodeMap.get(pcId) ?? "—");
+      const productUnit = meta?.unit ?? "meters";
+
+      // Totals
+      let prodSqm: number | null = null;
+      let prodKg: number | null = null;
+      let issSqm: number | null = null;
+      let issKg: number | null = null;
+      let producedNative = 0;
+      let issuedNative = 0;
+      const nativeUnit = normUnit(productUnit) ?? "meters";
+
+      for (const row of producedRowsByPc.get(pcId) ?? []) {
+        const { sqm, kg } = toSqmKg(row, pcId);
+        if (sqm != null) prodSqm = (prodSqm ?? 0) + sqm;
+        if (kg != null) prodKg = (prodKg ?? 0) + kg;
+        if (row.unit === nativeUnit) producedNative += row.qty;
       }
+      for (const row of issuedRowsByPc.get(pcId) ?? []) {
+        const { sqm, kg } = toSqmKg(row, pcId);
+        if (sqm != null) issSqm = (issSqm ?? 0) + sqm;
+        if (kg != null) issKg = (issKg ?? 0) + kg;
+        if (row.unit === nativeUnit) issuedNative += row.qty;
+      }
+
+      const producedBuckets: Buckets = {};
+      const issuedBuckets: Buckets = {};
+      if (prodSqm != null) producedBuckets.sqm = prodSqm;
+      if (prodKg != null) producedBuckets.kg = prodKg;
+      if (issSqm != null) issuedBuckets.sqm = issSqm;
+      if (issKg != null) issuedBuckets.kg = issKg;
+
+      // Thickness breakdown — available stock per thickness, in sqm and kg
+      type TAgg = { prodSqm: number | null; prodKg: number | null; issSqm: number | null; issKg: number | null; produced: number };
+      const tMap = new Map<number | null, TAgg>();
+      const ensureT = (t: number | null): TAgg => {
+        let v = tMap.get(t);
+        if (!v) { v = { prodSqm: null, prodKg: null, issSqm: null, issKg: null, produced: 0 }; tMap.set(t, v); }
+        return v;
+      };
+      for (const row of producedRowsByPc.get(pcId) ?? []) {
+        const agg = ensureT(row.thickness);
+        const { sqm, kg } = toSqmKg(row, pcId);
+        if (sqm != null) agg.prodSqm = (agg.prodSqm ?? 0) + sqm;
+        if (kg != null) agg.prodKg = (agg.prodKg ?? 0) + kg;
+        agg.produced += row.qty;
+      }
+      for (const row of issuedRowsByPc.get(pcId) ?? []) {
+        const agg = ensureT(row.thickness);
+        const { sqm, kg } = toSqmKg(row, pcId);
+        if (sqm != null) agg.issSqm = (agg.issSqm ?? 0) + sqm;
+        if (kg != null) agg.issKg = (agg.issKg ?? 0) + kg;
+      }
+      const breakdown: ThicknessBreakdown[] = [];
+      for (const [t, agg] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
+        const availSqm = agg.prodSqm != null ? agg.prodSqm - (agg.issSqm ?? 0) : null;
+        const availKg = agg.prodKg != null ? agg.prodKg - (agg.issKg ?? 0) : null;
+        breakdown.push({ thickness_mm: t, produced: agg.produced, sqm: availSqm, kg: availKg });
+      }
+
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
       summaryList.push({
         product_code_id: pcId,
-        code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
-        unit: prod?.unit ?? "meters",
-        produced,
-        issued,
-        available: produced - issued,
-        producedBuckets: prod?.buckets ?? {},
+        code,
+        unit: productUnit,
+        produced: producedNative,
+        issued: issuedNative,
+        available: producedNative - issuedNative,
+        producedBuckets,
         issuedBuckets,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
-      const computedIssuedTotals = issuedBuckets;
       // eslint-disable-next-line no-console
-      console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
-        product_id: pcId,
-        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
-        produced_quantity: produced,
-        matched_stock_issues_rows: matchedStockIssues,
-        computed_issued_totals: computedIssuedTotals,
-        rendered_issued_value: computedIssuedTotals,
-        producedBuckets: prod?.buckets ?? {},
-        issuedBuckets,
-      });
+      console.log("Stock summary", code, { pcId, prodSqm, prodKg, issSqm, issKg, gsm: lookupGsm(pcId, null) });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
     setSummaries(summaryList);
