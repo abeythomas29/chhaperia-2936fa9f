@@ -953,8 +953,18 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 }} placeholder="Optional" />
               </div>
               <div className="space-y-2">
-                <Label>GSM</Label>
-                <Input type="number" min="0" step="1" value={issueGsm} onChange={(e) => setIssueGsm(e.target.value)} placeholder="for conversion" />
+                <Label>GSM{issueGsmAuto ? " (auto from product)" : ""}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={issueGsm}
+                  readOnly={issueGsmAuto}
+                  className={issueGsmAuto ? "bg-muted cursor-not-allowed" : ""}
+                  onChange={(e) => setIssueGsm(e.target.value)}
+                  placeholder="for conversion"
+                />
+              </div>
               </div>
             </div>
             {issueQuantity && (() => {
