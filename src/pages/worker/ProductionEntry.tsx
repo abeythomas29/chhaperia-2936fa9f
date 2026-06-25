@@ -180,39 +180,48 @@ export default function ProductionEntry() {
   };
 
   const fetchIssuedMaterials = async (userId: string) => {
-    console.log("current auth user", user?.id, user?.email);
+    console.log("production current user", userId, user?.email);
 
     const issuedSelect = "id, issue_type, raw_material_id, issue_quantity, issue_unit, issue_quantity_kg, issue_quantity_sqm, recipient_user_id, issued_to_user_id, recipient_type, thickness_mm, gsm, notes, date, created_at";
+
+    // Primary query: fetch ALL raw material issues assigned to the current user
+    // directly (do not pull a small global window and filter client-side — that
+    // misses rows when other users have more recent issues).
     const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
       .eq("issue_type", "raw_material")
+      .or(`recipient_user_id.eq.${userId},issued_to_user_id.eq.${userId}`)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(500);
 
-    console.log("all recent raw material stock_issues", data, error);
+    console.log("production raw material stock_issues fetched", data, error);
 
     if (error) {
       console.error("issued raw material fetch failed", error);
       toast({ title: "Could not load issued raw material", description: error.message, variant: "destructive" });
     }
 
-    const recentRows = ((data ?? []) as unknown as StockIssueRow[]).filter(
+    const assigned = ((data ?? []) as unknown as StockIssueRow[]).filter(
       (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
     );
-    const assigned = recentRows.filter(
-      (row) => row.recipient_user_id === userId || row.issued_to_user_id === userId,
-    );
-    console.log("assigned raw material stock_issues", assigned);
-    if (assigned.length === 0 && recentRows.length > 0) {
-      console.warn("no assigned raw material stock_issues for current user; check recipient_user_id/issued_to_user_id saved on issue insert", {
-        currentUserId: userId,
-        currentUserEmail: user?.email,
-        recentRows,
-      });
+    console.log("production assigned issued materials", assigned);
+
+    // Debug: if no assigned rows, fetch last 20 raw material issues without recipient filter
+    if (assigned.length === 0) {
+      const { data: recentAny, error: recentErr } = await untypedSupabase
+        .from("stock_issues")
+        .select(issuedSelect)
+        .eq("issue_type", "raw_material")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      console.log("debug: last 20 raw material stock_issues (no recipient filter)", recentAny, recentErr);
     }
 
-    let issueRows = assigned;
+    let issueRows: StockIssueRow[] = assigned;
+
+    // Fallback: if backend hasn't recorded into stock_issues yet, look at the
+    // raw_material_stock_entries issue log.
     if (issueRows.length === 0) {
       const { data: rmseAssigned, error: rmseAssignedError } = await untypedSupabase
         .from("raw_material_stock_entries")
@@ -220,11 +229,10 @@ export default function ProductionEntry() {
         .eq("entry_type", "issue")
         .eq("issued_to_user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(20);
-      console.log("assigned raw material stock entry issue fallback", rmseAssigned, rmseAssignedError);
+        .limit(200);
+      console.log("fallback raw_material_stock_entries issues for user", rmseAssigned, rmseAssignedError);
       if (rmseAssignedError) {
         console.error("raw material stock entry fallback fetch failed", rmseAssignedError);
-        toast({ title: "Could not load issued raw material log", description: rmseAssignedError.message, variant: "destructive" });
       } else {
         issueRows = ((rmseAssigned ?? []) as unknown as RawMaterialStockIssueRow[])
           .filter((r): r is RawMaterialStockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id))
@@ -246,6 +254,7 @@ export default function ProductionEntry() {
           }));
       }
     }
+
 
     const rmIds = Array.from(new Set(issueRows.map((r) => r.raw_material_id)));
     const matsRes = rmIds.length
