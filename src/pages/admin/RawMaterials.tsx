@@ -110,6 +110,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [issueQty, setIssueQty] = useState("");
   const [issueGsm, setIssueGsm] = useState("");
   const [issueThickness, setIssueThickness] = useState("");
+  const [issueLot, setIssueLot] = useState("");
+  const [issueVariantKey, setIssueVariantKey] = useState("");
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [issueRecipientId, setIssueRecipientId] = useState("");
   const [issueNotes, setIssueNotes] = useState("");
@@ -349,27 +351,89 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   };
 
   // Auto-fill GSM from latest stock entry for selected material (GSM is fixed by raw material entry).
-  // Reset thickness when material changes (it's a dropdown of available variants).
+  // Reset variant selection when material changes.
   useEffect(() => {
-    if (!issueMaterialId) { setIssueGsm(""); setIssueThickness(""); return; }
+    if (!issueMaterialId) {
+      setIssueGsm(""); setIssueThickness(""); setIssueLot(""); setIssueVariantKey("");
+      return;
+    }
     const latest = stockEntries
       .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in")
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
     setIssueGsm(latest?.gsm != null ? String(latest.gsm) : "");
     setIssueThickness("");
+    setIssueLot("");
+    setIssueVariantKey("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issueMaterialId]);
 
-  // Available thickness variants for the selected material (from inward entries).
-  const availableThicknesses = (() => {
-    if (!issueMaterialId) return [] as string[];
-    const set = new Set<string>();
-    stockEntries
-      .filter((e) => e.raw_material_id === issueMaterialId && e.kind === "in" && e.thickness_mm != null)
-      .forEach((e) => set.add(String(e.thickness_mm)));
-    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  // Build available variants for the selected material: group inward by (lot, thickness, gsm)
+  // and subtract issued/sales attributable to that exact lot. Issue rows with null lot are
+  // attributed only when a single inward lot matches their (thickness, gsm).
+  type Variant = {
+    key: string;
+    lot: string | null;
+    thickness: number | null;
+    gsm: number | null;
+    inKg: number;
+    outKg: number;
+    balanceKg: number;
+    packCount: number;
+    packType: "pallet" | "roll" | null;
+  };
+  const availableVariants = ((): Variant[] => {
+    if (!issueMaterialId) return [];
+    const mat = stockEntries.filter((e) => e.raw_material_id === issueMaterialId);
+    const ins = mat.filter((e) => e.kind === "in");
+    const outs = mat.filter((e) => e.kind === "out" || e.kind === "issue");
+    const map = new Map<string, Variant>();
+    const keyOf = (lot: string | null, t: number | null, g: number | null) =>
+      `${lot ?? "-"}|${t ?? "-"}|${g ?? "-"}`;
+    ins.forEach((e) => {
+      const lot = e.lot_number?.trim() || null;
+      const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+      const g = e.gsm != null ? Number(e.gsm) : null;
+      const k = keyOf(lot, t, g);
+      const v = map.get(k) ?? { key: k, lot, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
+      v.inKg += Number(e.quantity) || 0;
+      const pc = (e as any).pallet_count != null ? Number((e as any).pallet_count) : null;
+      const rc = (e as any).roll_count != null ? Number((e as any).roll_count) : null;
+      if (pc != null && pc > 0) { v.packCount += pc; v.packType = v.packType ?? "pallet"; }
+      else if (rc != null && rc > 0) { v.packCount += rc; v.packType = v.packType ?? "roll"; }
+      else if (e.pallets != null && Number(e.pallets) > 0) { v.packCount += Number(e.pallets); v.packType = v.packType ?? "pallet"; }
+      map.set(k, v);
+    });
+    // Attribute outs
+    outs.forEach((e) => {
+      const lot = e.lot_number?.trim() || null;
+      const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+      const g = e.gsm != null ? Number(e.gsm) : null;
+      const qty = Number(e.quantity) || 0;
+      if (lot) {
+        const k = keyOf(lot, t, g);
+        const v = map.get(k);
+        if (v) { v.outKg += qty; return; }
+      }
+      // Backward-compat: match by (thickness, gsm) when exactly one inward lot fits
+      const candidates = Array.from(map.values()).filter((v) =>
+        (t == null || v.thickness === t) && (g == null || v.gsm === g),
+      );
+      if (candidates.length === 1) {
+        candidates[0].outKg += qty;
+      } else {
+        const k = keyOf(null, t, g);
+        const v = map.get(k) ?? { key: k, lot: null, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
+        v.outKg += qty;
+        map.set(k, v);
+      }
+    });
+    return Array.from(map.values())
+      .map((v) => ({ ...v, balanceKg: v.inKg - v.outKg }))
+      .filter((v) => v.inKg > 0)
+      .sort((a, b) => (a.thickness ?? Infinity) - (b.thickness ?? Infinity));
   })();
 
+  const selectedVariant = availableVariants.find((v) => v.key === issueVariantKey) || null;
 
   const resetIssueForm = () => {
     setIssueMaterialId("");
@@ -377,6 +441,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setIssueQty("");
     setIssueGsm("");
     setIssueThickness("");
+    setIssueLot("");
+    setIssueVariantKey("");
     setIssueDate(format(new Date(), "yyyy-MM-dd"));
     setIssueRecipientId("");
     setIssueNotes("");
@@ -402,6 +468,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       }
       qtyKg = (qty * gsmNum) / 1000;
     }
+    if (availableVariants.length > 0 && !selectedVariant) {
+      toast({ title: "Select variant", description: "Pick the exact lot/variant to issue from.", variant: "destructive" });
+      return;
+    }
+    if (selectedVariant && qtyKg > selectedVariant.balanceKg + 1e-6) {
+      toast({
+        title: "Exceeds lot balance",
+        description: `Lot ${selectedVariant.lot ?? "—"} has only ${selectedVariant.balanceKg.toFixed(2)} kg available.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const material = materials.find((m) => m.id === issueMaterialId);
     if (material && Number(material.current_stock) < qtyKg) {
       toast({
@@ -411,15 +489,19 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       });
       return;
     }
-    const sqmValue = issueUnit === "sqm" ? qty : (gsmNum && gsmNum > 0 ? (qtyKg * 1000) / gsmNum : null);
+    const lotToSave = selectedVariant?.lot ?? (issueLot.trim() || null);
+    const thicknessToSave = selectedVariant?.thickness ?? (issueThickness ? Number(issueThickness) : null);
+    const gsmToSave = selectedVariant?.gsm ?? gsmNum;
+    const sqmValue = issueUnit === "sqm" ? qty : (gsmToSave && gsmToSave > 0 ? (qtyKg * 1000) / gsmToSave : null);
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
       issue_quantity: qty,
       issue_unit: issueUnit,
       date: issueDate,
-      thickness_mm: issueThickness ? Number(issueThickness) : null,
-      gsm: gsmNum,
+      lot_number: lotToSave,
+      thickness_mm: thicknessToSave,
+      gsm: gsmToSave,
       notes: issueNotes || null,
       added_by: user.id,
       entry_type: "issue",
@@ -445,8 +527,9 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         issue_unit: issueUnit,
         issue_quantity_kg: qtyKg,
         issue_quantity_sqm: sqmValue,
-        gsm: gsmNum,
-        thickness_mm: issueThickness ? Number(issueThickness) : null,
+        gsm: gsmToSave,
+        thickness_mm: thicknessToSave,
+        lot_number: lotToSave,
         notes: issueNotes || null,
         issued_by: user.id,
         date: issueDate,
@@ -621,26 +704,49 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                 <Input type="number" min="0" step="0.01" value={issueQty} onChange={(e) => setIssueQty(e.target.value)} placeholder="0" />
               </div>
             </div>
+            <div>
+              <Label>Variant (Lot · Thickness · GSM)</Label>
+              <Select
+                value={issueVariantKey}
+                onValueChange={(v) => {
+                  setIssueVariantKey(v);
+                  const variant = availableVariants.find((x) => x.key === v);
+                  if (variant) {
+                    setIssueThickness(variant.thickness != null ? String(variant.thickness) : "");
+                    setIssueLot(variant.lot ?? "");
+                    if (variant.gsm != null) setIssueGsm(String(variant.gsm));
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={availableVariants.length ? "Select variant" : "No inward stock available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableVariants.map((v) => (
+                    <SelectItem key={v.key} value={v.key}>
+                      {v.thickness != null ? `${v.thickness} mm` : "— mm"} | Lot {v.lot ?? "—"} | {v.balanceKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg available
+                      {v.packCount > 0 ? ` | ${v.packCount} ${v.packType === "roll" ? "rolls" : "pallets"}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedVariant && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Lot {selectedVariant.lot ?? "—"} balance: {selectedVariant.balanceKg.toFixed(2)} kg
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>GSM (from raw material) {issueUnit === "sqm" && <span className="text-destructive">*</span>}</Label>
+                <Label>GSM</Label>
                 <Input value={issueGsm || "—"} readOnly disabled className="bg-muted" />
                 {issueUnit === "sqm" && !issueGsm && (
-                  <p className="text-xs text-destructive mt-1">No GSM on file for this material. Cannot issue in sqm.</p>
+                  <p className="text-xs text-destructive mt-1">No GSM on file. Cannot issue in sqm.</p>
                 )}
               </div>
               <div>
-                <Label>Thickness (mm)</Label>
-                <Select value={issueThickness} onValueChange={setIssueThickness}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={availableThicknesses.length ? "Select thickness" : "No variants available"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableThicknesses.map((t) => (
-                      <SelectItem key={t} value={t}>{t} mm</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Thickness</Label>
+                <Input value={issueThickness ? `${issueThickness} mm` : "—"} readOnly disabled className="bg-muted" />
               </div>
             </div>
             {issueUnit === "sqm" && issueQty && issueGsm && Number(issueGsm) > 0 && (
@@ -755,7 +861,8 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   out: number;
                 };
                 const groupMap = new Map<string, Group>();
-                matEntries.forEach((e) => {
+                // First pass: build inward groups (keyed by lot+thickness+gsm)
+                matEntries.filter((e) => !(e.kind === "out" || e.kind === "issue")).forEach((e) => {
                   const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
                   const g = e.gsm != null ? Number(e.gsm) : null;
                   const lot = e.lot_number?.trim() || null;
@@ -763,17 +870,39 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   const grp = groupMap.get(key) ?? {
                     thickness: t, gsm: g, lot, packType: null, packCount: 0, in: 0, out: 0,
                   };
-                  const isOut = e.kind === "out" || e.kind === "issue";
-                  if (isOut) grp.out += Number(e.quantity) || 0;
-                  else {
-                    grp.in += Number(e.quantity) || 0;
-                    // Aggregate pack counts only from "in" entries
-                    const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
-                    const rc = e.roll_count != null ? Number(e.roll_count) : null;
-                    if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
-                    else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
-                    else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  grp.in += Number(e.quantity) || 0;
+                  const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
+                  const rc = e.roll_count != null ? Number(e.roll_count) : null;
+                  if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
+                  else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
+                  else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  groupMap.set(key, grp);
+                });
+                // Second pass: attribute outs. Exact lot match preferred; else if exactly one
+                // inward lot matches (thickness, gsm) attach there; else show as "Unassigned issue".
+                matEntries.filter((e) => e.kind === "out" || e.kind === "issue").forEach((e) => {
+                  const t = e.thickness_mm != null ? Number(e.thickness_mm) : null;
+                  const g = e.gsm != null ? Number(e.gsm) : null;
+                  const lot = e.lot_number?.trim() || null;
+                  const qty = Number(e.quantity) || 0;
+                  if (lot) {
+                    const key = `${t ?? "-"}|${g ?? "-"}|${lot}`;
+                    const grp = groupMap.get(key);
+                    if (grp) { grp.out += qty; return; }
                   }
+                  // Backward-compat fallback by (thickness, gsm)
+                  const candidates = Array.from(groupMap.values()).filter((v) =>
+                    (t == null || v.thickness === t) && (g == null || v.gsm === g) && v.lot != null,
+                  );
+                  if (candidates.length === 1) {
+                    candidates[0].out += qty;
+                    return;
+                  }
+                  const key = `${t ?? "-"}|${g ?? "-"}|unassigned`;
+                  const grp = groupMap.get(key) ?? {
+                    thickness: t, gsm: g, lot: "Unassigned issue", packType: null, packCount: 0, in: 0, out: 0,
+                  };
+                  grp.out += qty;
                   groupMap.set(key, grp);
                 });
                 const variants = Array.from(groupMap.values())
