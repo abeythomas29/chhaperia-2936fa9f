@@ -43,6 +43,9 @@ interface StockEntry {
   issue_quantity_kg?: number | null;
   issued_to_user_id?: string | null;
   kind?: "in" | "out" | "issue";
+  // Source of the row (which table it came from) + original primary key in that table.
+  source?: "rmse" | "stock_issue" | "sale";
+  source_id?: string;
 }
 
 interface RecipientOption {
