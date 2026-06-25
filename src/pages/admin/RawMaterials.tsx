@@ -409,14 +409,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
       quantity: qtyKg,
+      issue_quantity: qty,
+      issue_unit: issueUnit,
       date: issueDate,
       thickness_mm: issueThickness ? Number(issueThickness) : null,
       gsm: gsmNum,
       notes: issueNotes || null,
       added_by: user.id,
-      entry_type: "out",
+      entry_type: "issue",
+      entry_kind: "out",
       issued_to_user_id: issueRecipientId || null,
     } as any);
+
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
