@@ -309,7 +309,21 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
       if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
       const tMap = thicknessMap.get(pcId)!;
-      tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
+      const prev = tMap.get(thickness) ?? { produced: 0, sqm: null as number | null, kg: null as number | null };
+      prev.produced += qty;
+      // produced is stored in unit u
+      let sqmAdd: number | null = null;
+      let kgAdd: number | null = null;
+      if (u === "sqm") {
+        sqmAdd = qty;
+        if (gsm && gsm > 0) kgAdd = (qty * gsm) / 1000;
+      } else if (u === "kg") {
+        kgAdd = qty;
+        if (gsm && gsm > 0) sqmAdd = (qty * 1000) / gsm;
+      }
+      if (sqmAdd != null) prev.sqm = (prev.sqm ?? 0) + sqmAdd;
+      if (kgAdd != null) prev.kg = (prev.kg ?? 0) + kgAdd;
+      tMap.set(thickness, prev);
     }
     setProductGsmByCode(gsmByCode);
     setProductGsmByCodeThickness(gsmByCodeThickness);
