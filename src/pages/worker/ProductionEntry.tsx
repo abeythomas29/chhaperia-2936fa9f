@@ -238,11 +238,10 @@ export default function ProductionEntry() {
     // Try to enrich with lot_number from raw_material_stock_entries (entry_type='issue')
     const lotByIssueKey = new Map<string, string>();
     if (rmIds.length) {
-      const { data: rmseRows, error: rmseErr } = await supabase
+      const { data: rmseRows, error: rmseErr } = await untypedSupabase
         .from("raw_material_stock_entries")
         .select("raw_material_id, issued_to_user_id, recipient_user_id, date, issue_quantity, issue_unit, thickness_mm, gsm, lot_number, entry_type")
-        .eq("entry_type", "issue")
-        .in("raw_material_id", rmIds);
+        .eq("entry_type", "issue");
       if (rmseErr) console.warn("lot lookup failed", rmseErr);
       for (const e of ((rmseRows ?? []) as Array<Record<string, unknown>>)) {
         const uid = (e.issued_to_user_id ?? e.recipient_user_id) as string | null;
