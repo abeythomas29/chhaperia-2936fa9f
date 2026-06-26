@@ -531,6 +531,7 @@ export default function ProductionEntry() {
         quantity_used: Number(r.quantity_used),
         stock_issue_id: r.stock_issue_id && !r.stock_issue_id.startsWith("rmse-") ? r.stock_issue_id : null,
       }));
+      console.log("production save raw_material_usage rows", usageRowsWithLink);
       let usageError: any = null;
       const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
       if (tryLinked.error) {
