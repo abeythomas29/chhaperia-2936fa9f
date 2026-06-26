@@ -333,6 +333,16 @@ export default function MaterialReturn() {
         return_type: "reusable",
         location: "",
       });
+      // Clear caches so Material Return + Wastage Count refresh from server
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(MATERIAL_RETURN_ROWS_CACHE_KEY);
+          clearLegacyCache();
+          Object.keys(window.localStorage)
+            .filter((k) => /slitting|wastage|material[-_ ]?return/i.test(k))
+            .forEach((k) => window.localStorage.removeItem(k));
+        }
+      } catch { /* ignore */ }
       await load();
     }
     setSubmitting(false);
