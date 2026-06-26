@@ -308,10 +308,20 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     // Per-product-code aggregates
     const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
-    // thicknessMap: pcId -> thickness -> { produced (primary unit), producedBuckets }
     const thicknessMap = new Map<string, Map<number | null, { produced: number; producedBuckets: Buckets; issuedBuckets: Buckets }>>();
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
+    // Fallback width/gsm dictionaries used to backfill rows missing per-entry data.
+    const widthByCode: Record<string, number> = {};
+    const widthByCodeThickness: Record<string, number> = {};
+    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined) => {
+      if (!pcId || w == null) return;
+      const wn = Number(w);
+      if (!isFinite(wn) || wn <= 0) return;
+      if (widthByCode[pcId] == null) widthByCode[pcId] = wn;
+      const key = `${pcId}__${thickness ?? ""}`;
+      if (widthByCodeThickness[key] == null) widthByCodeThickness[key] = wn;
+    };
     const ensureIssued = (pcId: string) => {
       let b = issuedBucketsMap.get(pcId);
       if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
@@ -387,25 +397,31 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       mergeBuckets(trow.producedBuckets, eb);
     };
     for (const s of (slitProd ?? []) as any[]) {
+      const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
+      const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
+      recordWidth(s.product_code_id, thickness, widthMm);
       addProduced(
         s.product_code_id,
         Number(s.cut_quantity_produced ?? 0),
         s.unit,
         s.gsm != null ? Number(s.gsm) : null,
-        s.thickness_mm != null ? Number(s.thickness_mm) : null,
-        s.cut_width_mm != null ? Number(s.cut_width_mm) : null,
+        thickness,
+        widthMm,
         null,
       );
     }
     for (const h of (head36Prod ?? []) as any[]) {
       const qty = Number(h.total_quantity ?? (Number(h.rolls_produced ?? 0) * Number(h.length_per_tape_mtr ?? 0)));
+      const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
+      const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
+      recordWidth(h.product_code_id, thickness, widthMm);
       addProduced(
         h.product_code_id,
         qty,
         h.unit,
         h.gsm != null ? Number(h.gsm) : null,
-        h.thickness_mm != null ? Number(h.thickness_mm) : null,
-        h.roll_width_mm != null ? Number(h.roll_width_mm) : null,
+        thickness,
+        widthMm,
         null,
       );
     }
@@ -416,13 +432,23 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
       const pcId = i.product_code_id;
+      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
+      // Capture fallbacks from issue rows.
+      const meta = parseNotesMeta(i.notes);
+      const issueGsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
+      if (issueGsm && issueGsm > 0) {
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = issueGsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = issueGsm;
+      }
+      recordWidth(pcId, thickness, i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm);
+
       const b = ensureIssued(pcId);
       const rowBuckets = getIssueBuckets(i);
       mergeBuckets(b, rowBuckets);
       const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
       const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
-      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
       const trow = ensureThickness(pcId, thickness);
       mergeBuckets(trow.issuedBuckets, rowBuckets);
     }
@@ -441,6 +467,62 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         const trow = ensureThickness(pcId, thickness);
         mergeBuckets(trow.issuedBuckets, saleBuckets);
       }
+    }
+
+    // ── Backfill pass: fill missing sqm/kg in every thickness row using
+    // the best known width/gsm for the (product, thickness) group, then
+    // recompute pcTotals/issued buckets from the resulting thickness rows.
+    const backfillBuckets = (b: Buckets, width: number | null, gsm: number | null) => {
+      if (b.sqm == null && b.meters != null && width && width > 0) {
+        b.sqm = b.meters * (width / 1000);
+      }
+      if (b.meters == null && b.sqm != null && width && width > 0) {
+        b.meters = b.sqm / (width / 1000);
+      }
+      if (b.kg == null && b.sqm != null && gsm && gsm > 0) {
+        b.kg = (b.sqm * gsm) / 1000;
+      }
+      if (b.sqm == null && b.kg != null && gsm && gsm > 0) {
+        b.sqm = (b.kg * 1000) / gsm;
+        if (b.meters == null && width && width > 0) b.meters = b.sqm / (width / 1000);
+      }
+    };
+    for (const [pcId, tMap] of thicknessMap.entries()) {
+      const codeForLog = pcTotals.get(pcId)?.code ?? "—";
+      for (const [t, row] of tMap.entries()) {
+        const key = `${pcId}__${t ?? ""}`;
+        const widthSource = widthByCodeThickness[key] != null ? "thickness" : widthByCode[pcId] != null ? "product" : "none";
+        const width = widthByCodeThickness[key] ?? widthByCode[pcId] ?? null;
+        const gsmSource = gsmByCodeThickness[key] != null ? "thickness" : gsmByCode[pcId] != null ? "product" : "none";
+        const gsm = gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
+        backfillBuckets(row.producedBuckets, width, gsm);
+        backfillBuckets(row.issuedBuckets, width, gsm);
+        // eslint-disable-next-line no-console
+        console.log("conversion debug", {
+          productCode: codeForLog,
+          thickness: t,
+          meters: row.producedBuckets.meters,
+          widthSource,
+          widthMm: width,
+          gsmSource,
+          gsm,
+          sqm: row.producedBuckets.sqm,
+          kg: row.producedBuckets.kg,
+        });
+      }
+      // Recompute top-card produced + issued buckets as sum of thickness rows.
+      const pcEntry = pcTotals.get(pcId);
+      const summedProduced: Buckets = {};
+      const summedIssued: Buckets = {};
+      for (const row of tMap.values()) {
+        (["meters", "sqm", "kg"] as UnitKey[]).forEach((u) => {
+          if (row.producedBuckets[u] != null) summedProduced[u] = (summedProduced[u] ?? 0) + (row.producedBuckets[u] as number);
+          if (row.issuedBuckets[u] != null) summedIssued[u] = (summedIssued[u] ?? 0) + (row.issuedBuckets[u] as number);
+        });
+      }
+      if (pcEntry) pcEntry.buckets = summedProduced;
+      else pcTotals.set(pcId, { code: "—", unit: "meters", produced: 0, buckets: summedProduced });
+      if (Object.keys(summedIssued).length) issuedBucketsMap.set(pcId, summedIssued);
     }
 
     const allPcIds = new Set([...pcTotals.keys(), ...issuedBucketsMap.keys(), ...issueMap.keys()]);
