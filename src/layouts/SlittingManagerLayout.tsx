@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function SlittingManagerLayout() {
-  const { user, loading, signOut, profileName, isAdmin, isSlittingManager, isWorker, isSalesManager, isInventoryManager } = useAuth();
+  const { user, loading, signOut, profileName, isAdmin, isSlittingManager, isWorker, isSalesManager } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
