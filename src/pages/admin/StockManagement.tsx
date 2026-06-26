@@ -880,35 +880,69 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   );
                 })()}
 
-                {/* Thickness Breakdown — Meters | SQM | KG | Missing Data */}
+                {/* Thickness Breakdown — Produced | Issued | Available per unit */}
                 {s.thicknessBreakdown.length > 0 && (() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  const label: Record<UnitKey, string> = { meters: "m", sqm: "sqm", kg: "kg" };
                   return (
                     <div className="mt-2 border rounded-md overflow-hidden">
                       <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
                         Thickness Breakdown
                       </div>
                       <div className="divide-y">
-                        <div className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
-                          <span>Thickness</span>
-                          <span className="text-right">Meters</span>
-                          <span className="text-right">SQM</span>
-                          <span className="text-right">KG</span>
-                          <span>Missing Data</span>
-                        </div>
                         {s.thicknessBreakdown.map((t) => {
-                          const m = t.producedBuckets.meters;
-                          const sq = t.producedBuckets.sqm;
-                          const kg = t.producedBuckets.kg;
-                          const missingSqm = getMissingUnitReason("sqm", t.conversion);
-                          const missingKg = getMissingUnitReason("kg", t.conversion);
+                          const missingReason: Record<UnitKey, string | null> = {
+                            meters: null,
+                            sqm: getMissingUnitReason("sqm", t.conversion),
+                            kg: getMissingUnitReason("kg", t.conversion),
+                          };
+                          // Debug log per row
+                          console.log("finished stock thickness calc", {
+                            product_code_id: s.product_code_id,
+                            code: s.code,
+                            thickness_mm: t.thickness_mm,
+                            produced: t.producedBuckets,
+                            issued: t.issuedBuckets,
+                            width_mm: t.conversion.widthMm,
+                            gsm: t.conversion.gsm,
+                          });
+                          const rows = units.map((u) => {
+                            const p = t.producedBuckets[u];
+                            const i = t.issuedBuckets[u];
+                            const prod = p != null && isFinite(p) ? Number(p) : null;
+                            const iss = i != null && isFinite(i) ? Number(i) : null;
+                            let avail: number | null = null;
+                            if (prod != null && iss != null) avail = prod - iss;
+                            else if (prod != null && iss == null) avail = prod;
+                            return { unit: u, prod, iss, avail, missing: missingReason[u] };
+                          });
+                          const renderVal = (v: number | null, missing: string | null, cls: string) => {
+                            if (v != null) return <span className={cls}>{fmt(v)}</span>;
+                            return <span className="text-[10px] leading-tight text-muted-foreground">{missing ?? "—"}</span>;
+                          };
                           return (
-                            <div key={String(t.thickness_mm)} className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-sm items-center">
-                              <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
-                              <span className="text-right font-semibold">{m != null && isFinite(m) ? fmt(m) : "—"}</span>
-                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : <span className="text-[11px] font-normal text-muted-foreground">{missingSqm ?? "—"}</span>}</span>
-                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : <span className="text-[11px] font-normal text-muted-foreground">{missingKg ?? "—"}</span>}</span>
-                              <span className="text-[11px] leading-tight text-muted-foreground">{t.conversion.missingData}</span>
+                            <div key={String(t.thickness_mm)} className="px-3 py-2 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
+                                <span className="text-[10px] text-muted-foreground">{t.conversion.missingData}</span>
+                              </div>
+                              <div className="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 text-[10px] text-muted-foreground">
+                                <span>Unit</span>
+                                <span className="text-right">Produced</span>
+                                <span className="text-right">Issued</span>
+                                <span className="text-right">Available</span>
+                              </div>
+                              {rows.map((r) => (
+                                <div key={r.unit} className="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center text-xs">
+                                  <span className="font-medium">{label[r.unit]}</span>
+                                  <span className="text-right">{renderVal(r.prod, r.missing, "text-green-600 font-medium")}</span>
+                                  <span className="text-right">{renderVal(r.iss, r.missing, "text-red-500 font-medium")}</span>
+                                  <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
+                                    {r.avail == null ? <span className="text-[10px] font-normal text-muted-foreground">{r.missing ?? "—"}</span> : fmt(r.avail)}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           );
                         })}
