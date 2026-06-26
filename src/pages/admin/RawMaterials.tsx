@@ -347,6 +347,12 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const addStockEntry = async () => {
     if (!stockMaterialId || !stockQty || !user) return;
     const packNum = stockPackCount ? Number(stockPackCount) : null;
+    // Live schema has only `pallets` (no pallet_count/roll_count). Encode pack
+    // type into notes so it isn't lost.
+    const packNote = packNum != null && packNum > 0
+      ? `${packNum} ${stockPackType === "roll" ? "roll(s)" : "pallet(s)"}`
+      : "";
+    const combinedNotes = [packNote, stockNotes].filter(Boolean).join(" | ") || null;
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: stockMaterialId,
       quantity: Number(stockQty),
@@ -354,11 +360,9 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       lot_number: stockLot.trim() || null,
       supplier: stockSupplier.trim() || null,
       pallets: packNum,
-      pallet_count: stockPackType === "pallet" ? packNum : null,
-      roll_count: stockPackType === "roll" ? packNum : null,
       thickness_mm: stockThickness ? Number(stockThickness) : null,
       gsm: stockGsm ? Number(stockGsm) : null,
-      notes: stockNotes || null,
+      notes: combinedNotes,
       added_by: user.id,
     } as any);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
