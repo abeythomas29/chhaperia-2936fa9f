@@ -180,13 +180,9 @@ export default function ProductionEntry() {
   };
 
   const fetchIssuedMaterials = async (userId: string) => {
-    console.log("production current user", userId, user?.email);
-
     const issuedSelect = "id, issue_type, raw_material_id, issue_quantity, issue_unit, issue_quantity_kg, issue_quantity_sqm, recipient_user_id, issued_to_user_id, recipient_type, thickness_mm, gsm, notes, date, created_at";
 
-    // Primary query: fetch ALL raw material issues assigned to the current user
-    // directly (do not pull a small global window and filter client-side — that
-    // misses rows when other users have more recent issues).
+    // Primary query: fetch ALL raw material issues assigned to the current user.
     const { data, error } = await untypedSupabase
       .from("stock_issues")
       .select(issuedSelect)
@@ -194,8 +190,6 @@ export default function ProductionEntry() {
       .or(`recipient_user_id.eq.${userId},issued_to_user_id.eq.${userId}`)
       .order("created_at", { ascending: false })
       .limit(500);
-
-    console.log("production raw material stock_issues fetched", data, error);
 
     if (error) {
       console.error("issued raw material fetch failed", error);
@@ -205,18 +199,7 @@ export default function ProductionEntry() {
     const assigned = ((data ?? []) as unknown as StockIssueRow[]).filter(
       (r): r is StockIssueRow & { raw_material_id: string } => Boolean(r.raw_material_id),
     );
-    console.log("production assigned issued materials", assigned);
 
-    // Debug: if no assigned rows, fetch last 20 raw material issues without recipient filter
-    if (assigned.length === 0) {
-      const { data: recentAny, error: recentErr } = await untypedSupabase
-        .from("stock_issues")
-        .select(issuedSelect)
-        .eq("issue_type", "raw_material")
-        .order("created_at", { ascending: false })
-        .limit(20);
-      console.log("debug: last 20 raw material stock_issues (no recipient filter)", recentAny, recentErr);
-    }
 
     let issueRows: StockIssueRow[] = assigned;
 
@@ -230,7 +213,6 @@ export default function ProductionEntry() {
         .eq("issued_to_user_id", userId)
         .order("created_at", { ascending: false })
         .limit(200);
-      console.log("fallback raw_material_stock_entries issues for user", rmseAssigned, rmseAssignedError);
       if (rmseAssignedError) {
         console.error("raw material stock entry fallback fetch failed", rmseAssignedError);
       } else {
@@ -339,7 +321,7 @@ export default function ProductionEntry() {
     }
 
     const pendingRows = items.filter((i) => i.pending_kg > 0.0001 || i.issued_kg <= 0);
-    console.log("rows after filtering pending", pendingRows);
+    
     setIssuedMaterials(pendingRows);
   };
 
@@ -531,7 +513,7 @@ export default function ProductionEntry() {
         quantity_used: Number(r.quantity_used),
         stock_issue_id: r.stock_issue_id && !r.stock_issue_id.startsWith("rmse-") ? r.stock_issue_id : null,
       }));
-      console.log("production save raw_material_usage rows", usageRowsWithLink);
+      
       let usageError: any = null;
       const tryLinked = await (supabase.from("raw_material_usage") as any).insert(usageRowsWithLink);
       if (tryLinked.error) {

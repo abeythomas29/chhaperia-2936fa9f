@@ -156,22 +156,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       toast({ title: "Could not load stock issues", description: issueErr.message, variant: "destructive" });
     }
     const stockIssueRows = (issueData ?? []) as any[];
-    // eslint-disable-next-line no-console
-    console.log("Inventory stock_issues rows", stockIssueRows.length, stockIssueRows);
-    stockIssueRows.forEach((row) => {
-      // eslint-disable-next-line no-console
-      console.log("Inventory stock_issues row", {
-        id: row.id,
-        product_code_id: row.product_code_id,
-        issue_type: row.issue_type,
-        issue_quantity: row.issue_quantity,
-        issue_unit: row.issue_unit,
-        issue_quantity_sqm: row.issue_quantity_sqm,
-        issue_quantity_kg: row.issue_quantity_kg,
-        quantity: row.quantity,
-        unit: row.unit,
-      });
-    });
 
 
 
@@ -380,13 +364,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     setProductGsmByCode(gsmByCode);
     setProductGsmByCodeThickness(gsmByCodeThickness);
-    // eslint-disable-next-line no-console
-    console.log("[Inventory] produced sources counts:", {
-      production_entries: (prodData ?? []).length,
-      slitting_entries: (slitProd ?? []).length,
-      head36_entries: (head36Prod ?? []).length,
-      stock_issues: stockIssueRows.length,
-    });
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
@@ -440,18 +417,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         issuedBuckets,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
-      });
-      const computedIssuedTotals = issuedBuckets;
-      // eslint-disable-next-line no-console
-      console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
-        product_id: pcId,
-        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
-        produced_quantity: produced,
-        matched_stock_issues_rows: matchedStockIssues,
-        computed_issued_totals: computedIssuedTotals,
-        rendered_issued_value: computedIssuedTotals,
-        producedBuckets: prod?.buckets ?? {},
-        issuedBuckets,
       });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
@@ -682,7 +647,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <CardContent>
                 {(() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  // Per spec: Finished Stock cards show only SQM and KG (not meters).
+                  const units: UnitKey[] = ["sqm", "kg"];
                   const rows = units
                     .map((u) => {
                       const prod = Number(s.producedBuckets[u] ?? 0);
@@ -691,15 +657,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
                     })
                     .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
-                  // eslint-disable-next-line no-console
-                  console.log("Rendered stock card", {
-                    product_id: s.product_code_id,
-                    product_code: s.code,
-                    produced_quantity: s.produced,
-                    matched_stock_issues_rows: s.debugMatchedStockIssues,
-                    computed_issued_totals: s.issuedBuckets,
-                    rendered_issued_value: rows.map((r) => ({ unit: r.unit, issued: r.iss, available: r.avail })),
-                  });
                   if (rows.length === 0) {
                     return (
                       <div className="grid grid-cols-3 gap-2 text-center mb-3">
@@ -729,24 +686,50 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   );
                 })()}
 
-                {/* Thickness Breakdown */}
-                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (
-                  <div className="mt-2 border rounded-md overflow-hidden">
-                    <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                      Thickness Breakdown
-                    </div>
-                    <div className="divide-y">
-                      {s.thicknessBreakdown.map((t) => (
-                        <div key={String(t.thickness_mm)} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                          <span className="font-medium">
-                            {t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}
-                          </span>
-                          <span className="font-semibold">{t.produced.toLocaleString()} {s.unit}</span>
+                {/* Thickness Breakdown — show SQM and KG per thickness */}
+                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (() => {
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const primary = (() => {
+                    const u = String(s.unit ?? "").toLowerCase();
+                    if (u === "sqm" || u === "sqmtr" || u === "sq m" || u === "m2") return "sqm";
+                    if (u === "kg" || u === "kgs" || u === "kilogram") return "kg";
+                    return "meters";
+                  })();
+                  return (
+                    <div className="mt-2 border rounded-md overflow-hidden">
+                      <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                        Thickness Breakdown
+                      </div>
+                      <div className="divide-y">
+                        <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                          <span>Thickness</span>
+                          <span className="text-right">SQM</span>
+                          <span className="text-right">KG</span>
                         </div>
-                      ))}
+                        {s.thicknessBreakdown.map((t) => {
+                          const gsmKey = `${s.product_code_id}__${t.thickness_mm ?? ""}`;
+                          const gsm = productGsmByCodeThickness[gsmKey] ?? productGsmByCode[s.product_code_id] ?? null;
+                          let sqm: number | null = null;
+                          let kg: number | null = null;
+                          if (primary === "sqm") {
+                            sqm = t.produced;
+                            if (gsm && gsm > 0) kg = (t.produced * gsm) / 1000;
+                          } else if (primary === "kg") {
+                            kg = t.produced;
+                            if (gsm && gsm > 0) sqm = (t.produced * 1000) / gsm;
+                          }
+                          return (
+                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                              <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
+                              <span className="text-right font-semibold">{sqm != null ? fmt(sqm) : "—"}</span>
+                              <span className="text-right font-semibold">{kg != null ? fmt(kg) : "—"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Per-card Issue button removed — use top-level Issue Stock button */}
               </CardContent>

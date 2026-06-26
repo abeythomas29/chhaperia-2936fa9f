@@ -149,8 +149,6 @@ export default function IssuedHistory() {
         .order("created_at", { ascending: false })
         .limit(2000);
 
-      // eslint-disable-next-line no-console
-      console.log("stock_issues fetched", data?.length, error, data);
 
       if (error) {
         toast({
