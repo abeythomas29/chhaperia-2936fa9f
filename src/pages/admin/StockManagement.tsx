@@ -110,6 +110,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
   const fetchData = async () => {
     setLoading(true);
+    // Clear any stale finished-stock caches so display always reflects DB.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|finished/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
 
     // Fetch production entries (IN) — include gsm for unit conversion
     const { data: prodData, error: prodErr } = await supabase
@@ -118,6 +126,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       .order("date", { ascending: false })
       .limit(2000);
     if (prodErr) console.error("production_entries fetch error", prodErr);
+
+    // Slitting + Head36 also produce finished stock under their own product_code_id.
+    const [{ data: slitProd, error: slitErr }, { data: head36Prod, error: head36Err }] = await Promise.all([
+      (supabase as any)
+        .from("slitting_entries")
+        .select("id, date, product_code_id, cut_quantity_produced, unit, thickness_mm, gsm")
+        .order("date", { ascending: false })
+        .limit(2000),
+      (supabase as any)
+        .from("head36_entries")
+        .select("id, date, product_code_id, total_quantity, rolls_produced, length_per_tape_mtr, unit, thickness_mm, gsm")
+        .order("date", { ascending: false })
+        .limit(2000),
+    ]);
+    if (slitErr) console.warn("slitting_entries fetch error", slitErr);
+    if (head36Err) console.warn("head36_entries fetch error", head36Err);
 
     // Fetch stock issues (OUT) from the same source used by Issued History.
     // Keep this flat: embedded relationship joins can fail independently and make
