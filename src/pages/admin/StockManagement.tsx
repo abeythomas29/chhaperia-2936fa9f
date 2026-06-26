@@ -706,82 +706,63 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <CardContent>
                 {(() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  // Per spec: Finished Stock cards show only SQM and KG (not meters).
-                  const units: UnitKey[] = ["sqm", "kg"];
-                  const rows = units
-                    .map((u) => {
-                      const prod = Number(s.producedBuckets[u] ?? 0);
-                      const iss = Number(s.issuedBuckets[u] ?? 0);
-                      if (prod === 0 && iss === 0) return null;
-                      return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
-                    })
-                    .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
-                  if (rows.length === 0) {
-                    return (
-                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                        <div><p className="text-xs text-muted-foreground">Produced</p><p className="text-base font-semibold text-green-600">{fmt(s.produced)} {s.unit}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Issued</p><p className="text-base font-semibold text-red-500">{fmt(s.issued)} {s.unit}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Available</p><p className={`text-base font-bold ${s.available > 0 ? "text-primary" : "text-destructive"}`}>{fmt(s.available)} {s.unit}</p></div>
-                      </div>
-                    );
-                  }
+                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  const label: Record<UnitKey, string> = { meters: "Meters", sqm: "SQM", kg: "KG" };
+                  const rows = units.map((u) => {
+                    const prodRaw = s.producedBuckets[u];
+                    const issRaw = s.issuedBuckets[u];
+                    const prod = prodRaw != null && isFinite(prodRaw) ? Number(prodRaw) : null;
+                    const iss = issRaw != null && isFinite(issRaw) ? Number(issRaw) : null;
+                    const avail = prod != null ? (prod - (iss ?? 0)) : null;
+                    return { unit: u, prod, iss, avail };
+                  });
                   return (
                     <div className="space-y-2 mb-3">
-                      <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
+                      <div className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
                         <span>Unit</span>
                         <span className="text-right">Produced</span>
                         <span className="text-right">Issued</span>
                         <span className="text-right">Available</span>
                       </div>
                       {rows.map((r) => (
-                        <div key={r.unit} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
-                          <span className="font-medium uppercase text-xs">{r.unit}</span>
-                          <span className="text-right text-green-600 font-semibold">{fmt(r.prod)}</span>
-                          <span className="text-right text-red-500 font-semibold">{fmt(r.iss)}</span>
-                          <span className={`text-right font-bold ${r.avail == null || r.avail > 0 ? "text-primary" : "text-destructive"}`}>{r.avail == null ? "—" : fmt(r.avail)}</span>
+                        <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
+                          <span className="font-medium text-xs">{label[r.unit]}</span>
+                          <span className="text-right text-green-600 font-semibold">{r.prod != null ? fmt(r.prod) : "—"}</span>
+                          <span className="text-right text-red-500 font-semibold">{r.iss != null ? fmt(r.iss) : "—"}</span>
+                          <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
+                            {r.avail == null ? "—" : fmt(r.avail)}
+                          </span>
                         </div>
                       ))}
                     </div>
                   );
                 })()}
 
-                {/* Thickness Breakdown — show SQM and KG per thickness */}
+                {/* Thickness Breakdown — Meters | SQM | KG */}
                 {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  const primary = (() => {
-                    const u = String(s.unit ?? "").toLowerCase();
-                    if (u === "sqm" || u === "sqmtr" || u === "sq m" || u === "m2") return "sqm";
-                    if (u === "kg" || u === "kgs" || u === "kilogram") return "kg";
-                    return "meters";
-                  })();
                   return (
                     <div className="mt-2 border rounded-md overflow-hidden">
                       <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
                         Thickness Breakdown
                       </div>
                       <div className="divide-y">
-                        <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                        <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
                           <span>Thickness</span>
+                          <span className="text-right">Meters</span>
                           <span className="text-right">SQM</span>
                           <span className="text-right">KG</span>
                         </div>
                         {s.thicknessBreakdown.map((t) => {
-                          const gsmKey = `${s.product_code_id}__${t.thickness_mm ?? ""}`;
-                          const gsm = productGsmByCodeThickness[gsmKey] ?? productGsmByCode[s.product_code_id] ?? null;
-                          let sqm: number | null = null;
-                          let kg: number | null = null;
-                          if (primary === "sqm") {
-                            sqm = t.produced;
-                            if (gsm && gsm > 0) kg = (t.produced * gsm) / 1000;
-                          } else if (primary === "kg") {
-                            kg = t.produced;
-                            if (gsm && gsm > 0) sqm = (t.produced * 1000) / gsm;
-                          }
+                          const m = t.producedBuckets.meters;
+                          const sq = t.producedBuckets.sqm;
+                          const kg = t.producedBuckets.kg;
                           return (
-                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
                               <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
-                              <span className="text-right font-semibold">{sqm != null ? fmt(sqm) : "—"}</span>
-                              <span className="text-right font-semibold">{kg != null ? fmt(kg) : "—"}</span>
+                              <span className="text-right font-semibold">{m != null && isFinite(m) ? fmt(m) : "—"}</span>
+                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : "—"}</span>
+                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : "—"}</span>
                             </div>
                           );
                         })}
@@ -792,6 +773,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
                 {/* Per-card Issue button removed — use top-level Issue Stock button */}
               </CardContent>
+
             </Card>
           ))
         )}
