@@ -31,7 +31,7 @@ export default function SlittingManagerLayout() {
     { to: "/slitting", label: "New Slitting", icon: Scissors, end: true },
     { to: "/slitting/history", label: "My History", icon: History, end: true },
     { to: "/slitting/head36-history", label: "36 Head History", icon: Layers, end: false },
-    { to: "/slitting/inventory", label: "Inventory", icon: Package, end: false },
+    { to: "/slitting/inventory", label: "Inventory Management", icon: Package, end: false },
   ];
 
   if (isWorker) {
@@ -41,9 +41,8 @@ export default function SlittingManagerLayout() {
     navItems.push({ to: "/sales", label: "Record Sale", icon: ShoppingCart, end: true });
     navItems.push({ to: "/sales/history", label: "Sales History", icon: ListOrdered, end: false });
   }
-  if (isInventoryManager) {
-    navItems.push({ to: "/inventory", label: "Inventory", icon: Package, end: false });
-  }
+  // Inventory Management is already shown above; do not add a duplicate
+  // "Inventory" entry for users who also hold the inventory_manager role.
 
   return (
     <div className="min-h-screen bg-background">

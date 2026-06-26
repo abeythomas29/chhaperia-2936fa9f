@@ -30,7 +30,7 @@ export default function WorkerLayout() {
   const navItems = [
     { to: "/worker", label: "New Entry", icon: ClipboardList, end: true },
     { to: "/worker/history", label: "My History", icon: History, end: false },
-    { to: "/worker/inventory", label: "Inventory", icon: Boxes, end: false },
+    { to: "/worker/inventory", label: "Inventory Management", icon: Boxes, end: false },
     { to: "/worker/issues", label: "My Issues", icon: Send, end: false },
   ];
 
