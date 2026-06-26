@@ -541,7 +541,7 @@ function WastageCountDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         entryIds.length
           ? supabase
               .from("slitting_entries")
-              .select("id, thickness_mm, product_codes(code)")
+              .select("id, thickness_mm, gsm, product_codes(code)" as any)
               .in("id", entryIds)
           : Promise.resolve({ data: [] as any[] }),
         clientIds.length
@@ -560,7 +560,7 @@ function WastageCountDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           ...r,
           product: ent?.product_codes?.code ?? "—",
           thickness_mm: ent?.thickness_mm ?? null,
-          gsm: null,
+          gsm: ent?.gsm ?? null,
           client_name: r.client_id ? (clientMap.get(r.client_id) ?? "—") : "—",
           qty: Number(r.wastage_quantity ?? r.returned_quantity ?? 0),
         };
