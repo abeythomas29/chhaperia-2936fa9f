@@ -249,6 +249,7 @@ export default function SlittingEntryForm() {
     }
 
     setSubmitting(true);
+    console.log("slitting save selected stock_issue_id", form.issue_id, "selectedIssue", selectedIssue);
 
     const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
