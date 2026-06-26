@@ -440,37 +440,12 @@ export default function IssuedHistory() {
       return;
     }
 
-    // Mirror delete on raw_material_stock_entries (entry_type='issue' only)
+    // Mirror delete on raw_material_stock_entries (entry_type='issue' only).
+    // Spec §3: never delete inward rows.
     if (deleteRow.kind === "Raw Material" && deleteRow.raw?.raw_material_id) {
-      const rmId = deleteRow.raw.raw_material_id;
-      const issuedTo = deleteRow.raw.issued_to_user_id ?? deleteRow.raw.recipient_user_id ?? null;
-      const oldDate = deleteRow.raw.date ?? null;
-      const oldQty = Number(deleteRow.raw.issue_quantity ?? deleteRow.raw.quantity ?? 0);
-      const oldUnit = deleteRow.raw.issue_unit ?? deleteRow.raw.unit ?? null;
-
-      let q = supabase
-        .from("raw_material_stock_entries")
-        .select("id")
-        .eq("raw_material_id", rmId)
-        .eq("entry_type", "issue");
-      if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
-      if (oldDate) q = q.eq("date", oldDate);
-      if (oldUnit) q = q.eq("issue_unit", oldUnit);
-      const { data: matches } = await q.limit(5);
-      let matchId: string | null = null;
-      if (matches && matches.length) {
-        matchId = matches[0].id;
-        const { data: exactRows } = await supabase
-          .from("raw_material_stock_entries")
-          .select("id")
-          .eq("raw_material_id", rmId)
-          .eq("entry_type", "issue")
-          .eq("issue_quantity", oldQty)
-          .limit(1);
-        if (exactRows && exactRows.length) matchId = exactRows[0].id;
-      }
+      const matchId = await findMirrorRmseId(deleteRow.raw);
       if (matchId) {
-        const { error: rmErr } = await supabase
+        const { error: rmErr } = await (supabase as any)
           .from("raw_material_stock_entries")
           .delete()
           .eq("id", matchId)
@@ -489,6 +464,7 @@ export default function IssuedHistory() {
         console.warn("No matching raw_material_stock_entries row found for delete", deleteRow.id);
       }
     }
+
 
     setDeleting(false);
     clearInventoryCaches();
