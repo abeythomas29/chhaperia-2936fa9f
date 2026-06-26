@@ -432,13 +432,23 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
       const pcId = i.product_code_id;
+      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
+      // Capture fallbacks from issue rows.
+      const meta = parseNotesMeta(i.notes);
+      const issueGsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
+      if (issueGsm && issueGsm > 0) {
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = issueGsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = issueGsm;
+      }
+      recordWidth(pcId, thickness, i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm);
+
       const b = ensureIssued(pcId);
       const rowBuckets = getIssueBuckets(i);
       mergeBuckets(b, rowBuckets);
       const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
       const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
-      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
       const trow = ensureThickness(pcId, thickness);
       mergeBuckets(trow.issuedBuckets, rowBuckets);
     }
