@@ -562,6 +562,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         issue_unit: issueUnit,
         issue_quantity_kg: qtyKg,
         issue_quantity_sqm: sqmValue,
+        lot_number: lotToSave,
         gsm: gsmToSave,
         thickness_mm: thicknessToSave,
         notes: issueNotes || null,
@@ -896,7 +897,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                 <SelectContent>
                   {availableVariants.map((v) => (
                     <SelectItem key={v.key} value={v.key}>
-                      {v.thickness != null ? `${v.thickness} mm` : "— mm"} | Lot {v.lot ?? "—"} | {v.balanceKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg available
+                      Lot {v.lot ?? "—"} | {v.thickness != null ? `${v.thickness} mm` : "— mm"} | {v.gsm != null ? `${v.gsm} gsm` : "— gsm"} | {v.balanceKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg available
                       {v.packCount > 0 ? ` | ${v.packCount} ${v.packType === "roll" ? "rolls" : "pallets"}` : ""}
                     </SelectItem>
                   ))}
