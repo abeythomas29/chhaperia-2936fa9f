@@ -222,70 +222,110 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return null;
     };
     const addBucket = (b: Buckets, u: UnitKey, q: number) => {
-      if (!q) return;
+      if (!q || !isFinite(q)) return;
       b[u] = (b[u] ?? 0) + q;
+    };
+    const mergeBuckets = (target: Buckets, src: Buckets) => {
+      (["meters", "sqm", "kg"] as UnitKey[]).forEach((u) => {
+        const v = src[u];
+        if (v != null && isFinite(v)) addBucket(target, u, v);
+      });
+    };
+    // Compute meters/sqm/kg for a single entry given its raw qty, unit, width, gsm.
+    const computeAllUnits = (rawQty: number, unitRaw: any, widthMm: number | null, gsm: number | null): Buckets => {
+      const out: Buckets = {};
+      if (!isFinite(rawQty) || rawQty === 0) return out;
+      const u = normUnit(unitRaw);
+      let meters: number | null = null;
+      let sqm: number | null = null;
+      let kg: number | null = null;
+      if (u === "meters") {
+        meters = rawQty;
+        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
+        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+      } else if (u === "sqm") {
+        sqm = rawQty;
+        if (gsm && gsm > 0) kg = (rawQty * gsm) / 1000;
+        if (widthMm && widthMm > 0) meters = rawQty / (widthMm / 1000);
+      } else if (u === "kg") {
+        kg = rawQty;
+        if (gsm && gsm > 0) sqm = (rawQty * 1000) / gsm;
+        if (sqm != null && widthMm && widthMm > 0) meters = sqm / (widthMm / 1000);
+      } else {
+        // unknown unit — assume meters as best-effort default
+        meters = rawQty;
+        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
+        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+      }
+      if (meters != null) out.meters = meters;
+      if (sqm != null) out.sqm = sqm;
+      if (kg != null) out.kg = kg;
+      return out;
     };
     const parseNotesMeta = (notes: string | null | undefined) => {
       const value = (key: string) => {
         const match = String(notes ?? "").match(new RegExp(`${key}=([\\d.]+)`, "i"));
         return match ? Number(match[1]) : null;
       };
-      return { sqm: value("sqm"), kg: value("kg"), gsm: value("gsm") };
+      const widthM = String(notes ?? "").match(/width[_ ]?mm[=: ]\s*([\d.]+)/i);
+      return { sqm: value("sqm"), kg: value("kg"), gsm: value("gsm"), width_mm: widthM ? Number(widthM[1]) : null };
     };
     const isFinishedStockIssue = (i: any) => {
       const issueType = i.issue_type ?? null;
       return Boolean(i.product_code_id) && (issueType === null || issueType === "" || issueType === "finished_stock");
     };
     const getIssueBuckets = (i: any): Buckets => {
-      const buckets: Buckets = {};
-      const rawQty = Number(i.issue_quantity ?? i.quantity ?? 0);
-      const issueUnit = normUnit(i.issue_unit ?? i.unit) ?? "sqm";
       const meta = parseNotesMeta(i.notes);
+      const rawQty = Number(i.issue_quantity ?? i.quantity ?? 0);
       const gsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
-      const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm;
+      const widthMmRaw = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm;
       const widthMm = widthMmRaw != null ? Number(widthMmRaw) : null;
+      const unit = i.issue_unit ?? i.unit;
 
-      const sqm = i.issue_quantity_sqm != null
-        ? Number(i.issue_quantity_sqm)
-        : meta.sqm != null
-          ? meta.sqm
-        : issueUnit === "sqm"
-          ? rawQty
-          : issueUnit === "meters" && widthMm && widthMm > 0
-            ? rawQty * (widthMm / 1000)
-            : issueUnit === "kg" && gsm && gsm > 0
-              ? (rawQty * 1000) / gsm
-              : null;
-      const kg = i.issue_quantity_kg != null
-        ? Number(i.issue_quantity_kg)
-        : meta.kg != null
-          ? meta.kg
-        : issueUnit === "kg"
-          ? rawQty
-          : sqm != null && gsm && gsm > 0
-            ? (sqm * gsm) / 1000
-            : null;
-      const meters = issueUnit === "meters"
-        ? rawQty
-        : sqm != null && widthMm && widthMm > 0
-          ? sqm / (widthMm / 1000)
-          : null;
+      const buckets = computeAllUnits(rawQty, unit, widthMm, gsm);
 
-      if (sqm != null) addBucket(buckets, "sqm", sqm);
-      if (kg != null) addBucket(buckets, "kg", kg);
-      if (meters != null) addBucket(buckets, "meters", meters);
+      // Honor explicit stored sqm/kg if present (override computed)
+      if (i.issue_quantity_sqm != null) buckets.sqm = Number(i.issue_quantity_sqm);
+      else if (meta.sqm != null) buckets.sqm = meta.sqm;
+      if (i.issue_quantity_kg != null) buckets.kg = Number(i.issue_quantity_kg);
+      else if (meta.kg != null) buckets.kg = meta.kg;
+
+      // Backfill meters from sqm+width if not yet set
+      if (buckets.meters == null && buckets.sqm != null && widthMm && widthMm > 0) {
+        buckets.meters = buckets.sqm / (widthMm / 1000);
+      }
+      // Backfill kg from sqm+gsm if not yet set
+      if (buckets.kg == null && buckets.sqm != null && gsm && gsm > 0) {
+        buckets.kg = (buckets.sqm * gsm) / 1000;
+      }
+      // Backfill sqm from kg+gsm or meters+width
+      if (buckets.sqm == null) {
+        if (buckets.kg != null && gsm && gsm > 0) buckets.sqm = (buckets.kg * 1000) / gsm;
+        else if (buckets.meters != null && widthMm && widthMm > 0) buckets.sqm = buckets.meters * (widthMm / 1000);
+      }
       return buckets;
     };
 
-    // Build per-product-code totals and thickness breakdowns
+    // Per-product-code aggregates
     const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
-    const thicknessMap = new Map<string, Map<number | null, number>>();
+    // thicknessMap: pcId -> thickness -> { produced (primary unit), producedBuckets }
+    const thicknessMap = new Map<string, Map<number | null, { produced: number; producedBuckets: Buckets; issuedBuckets: Buckets }>>();
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
     const ensureIssued = (pcId: string) => {
       let b = issuedBucketsMap.get(pcId);
       if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
       return b;
+    };
+    const ensureThickness = (pcId: string, thickness: number | null) => {
+      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
+      const tMap = thicknessMap.get(pcId)!;
+      let row = tMap.get(thickness);
+      if (!row) {
+        row = { produced: 0, producedBuckets: {}, issuedBuckets: {} };
+        tMap.set(thickness, row);
+      }
+      return row;
     };
 
     const gsmByCode: Record<string, number> = {};
@@ -295,7 +335,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
       const gsm = p.gsm != null ? Number(p.gsm) : null;
-      const u = normUnit(p.unit) ?? "meters";
+      // production_entries has no width column
+      const widthMm: number | null = null;
 
       if (gsm && gsm > 0) {
         if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
@@ -309,38 +350,41 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         pcTotals.set(pcId, entry);
       }
       entry.produced += qty;
-      addBucket(entry.buckets, u, qty);
-      if (gsm && gsm > 0) {
-        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
-        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
-      }
+      const entryBuckets = computeAllUnits(qty, p.unit, widthMm, gsm);
+      mergeBuckets(entry.buckets, entryBuckets);
 
-      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
-      const tMap = thicknessMap.get(pcId)!;
-      tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
+      const trow = ensureThickness(pcId, thickness);
+      trow.produced += qty;
+      mergeBuckets(trow.producedBuckets, entryBuckets);
     }
 
-    // Add slitting produced (cut_quantity_produced) and head36 produced.
-    const addProduced = (pcId: string, qty: number, unitRaw: any, gsm: number | null, thickness: number | null, code: string | null) => {
+    // Add slitting + head36 produced (these carry their own width).
+    const addProduced = (
+      pcId: string,
+      qty: number,
+      unitRaw: any,
+      gsm: number | null,
+      thickness: number | null,
+      widthMm: number | null,
+      code: string | null,
+    ) => {
       if (!pcId || !isFinite(qty) || qty <= 0) return;
-      const u = normUnit(unitRaw) ?? "meters";
       let entry = pcTotals.get(pcId);
       if (!entry) {
         entry = { code: code ?? "—", unit: String(unitRaw ?? "meters"), produced: 0, buckets: {} };
         pcTotals.set(pcId, entry);
       }
       entry.produced += qty;
-      addBucket(entry.buckets, u, qty);
+      const eb = computeAllUnits(qty, unitRaw, widthMm, gsm);
+      mergeBuckets(entry.buckets, eb);
       if (gsm && gsm > 0) {
-        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
-        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
         if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
         const key = `${pcId}__${thickness ?? ""}`;
         if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
       }
-      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
-      const tMap = thicknessMap.get(pcId)!;
-      tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
+      const trow = ensureThickness(pcId, thickness);
+      trow.produced += qty;
+      mergeBuckets(trow.producedBuckets, eb);
     };
     for (const s of (slitProd ?? []) as any[]) {
       addProduced(
@@ -349,6 +393,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         s.unit,
         s.gsm != null ? Number(s.gsm) : null,
         s.thickness_mm != null ? Number(s.thickness_mm) : null,
+        s.cut_width_mm != null ? Number(s.cut_width_mm) : null,
         null,
       );
     }
@@ -360,6 +405,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         h.unit,
         h.gsm != null ? Number(h.gsm) : null,
         h.thickness_mm != null ? Number(h.thickness_mm) : null,
+        h.roll_width_mm != null ? Number(h.roll_width_mm) : null,
         null,
       );
     }
@@ -372,12 +418,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const pcId = i.product_code_id;
       const b = ensureIssued(pcId);
       const rowBuckets = getIssueBuckets(i);
-      for (const [unit, qty] of Object.entries(rowBuckets) as Array<[UnitKey, number]>) {
-        addBucket(b, unit, qty);
-      }
+      mergeBuckets(b, rowBuckets);
       const primaryUnit = normUnit(pcTotals.get(pcId)?.unit) ?? normUnit(i.issue_unit ?? i.unit) ?? "sqm";
       const primaryIssued = Number(rowBuckets[primaryUnit] ?? i.issue_quantity ?? i.quantity ?? 0);
       issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + primaryIssued);
+      const thickness = i.thickness_mm != null ? Number(i.thickness_mm) : null;
+      const trow = ensureThickness(pcId, thickness);
+      mergeBuckets(trow.issuedBuckets, rowBuckets);
     }
 
     // Include finished-product sales in issued totals (they reduce finished stock)
@@ -387,8 +434,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         const q = Number(s.quantity);
         issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
         const b = ensureIssued(pcId);
-        const u = normUnit(s.unit) ?? "meters";
-        addBucket(b, u, q);
+        const gsm = gsmByCode[pcId] ?? null;
+        const saleBuckets = computeAllUnits(q, s.unit, null, gsm);
+        mergeBuckets(b, saleBuckets);
+        const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
+        const trow = ensureThickness(pcId, thickness);
+        mergeBuckets(trow.issuedBuckets, saleBuckets);
       }
     }
 
@@ -403,8 +454,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const tMap = thicknessMap.get(pcId);
       const breakdown: ThicknessBreakdown[] = [];
       if (tMap) {
-        for (const [t, q] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
-          breakdown.push({ thickness_mm: t, produced: q });
+        for (const [t, row] of Array.from(tMap.entries()).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0))) {
+          breakdown.push({
+            thickness_mm: t,
+            produced: row.produced,
+            producedBuckets: row.producedBuckets,
+            issuedBuckets: row.issuedBuckets,
+          });
         }
       }
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
@@ -421,6 +477,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         debugMatchedStockIssues: matchedStockIssues,
       });
     }
+
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
     setSummaries(summaryList);
 
