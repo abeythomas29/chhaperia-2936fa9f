@@ -308,10 +308,20 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     // Per-product-code aggregates
     const pcTotals = new Map<string, { code: string; unit: string; produced: number; buckets: Buckets }>();
-    // thicknessMap: pcId -> thickness -> { produced (primary unit), producedBuckets }
     const thicknessMap = new Map<string, Map<number | null, { produced: number; producedBuckets: Buckets; issuedBuckets: Buckets }>>();
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
+    // Fallback width/gsm dictionaries used to backfill rows missing per-entry data.
+    const widthByCode: Record<string, number> = {};
+    const widthByCodeThickness: Record<string, number> = {};
+    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined) => {
+      if (!pcId || w == null) return;
+      const wn = Number(w);
+      if (!isFinite(wn) || wn <= 0) return;
+      if (widthByCode[pcId] == null) widthByCode[pcId] = wn;
+      const key = `${pcId}__${thickness ?? ""}`;
+      if (widthByCodeThickness[key] == null) widthByCodeThickness[key] = wn;
+    };
     const ensureIssued = (pcId: string) => {
       let b = issuedBucketsMap.get(pcId);
       if (!b) { b = {}; issuedBucketsMap.set(pcId, b); }
