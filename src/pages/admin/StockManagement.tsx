@@ -18,11 +18,20 @@ import { toast } from "@/hooks/use-toast";
 type UnitKey = "meters" | "sqm" | "kg";
 type Buckets = Partial<Record<UnitKey, number>>;
 
+interface ConversionInfo {
+  widthMm: number | null;
+  widthSource: string | null;
+  gsm: number | null;
+  gsmSource: string | null;
+  missingData: string;
+}
+
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
   producedBuckets: Buckets;
   issuedBuckets: Buckets;
+  conversion: ConversionInfo;
 }
 
 interface StockSummary {
@@ -34,6 +43,7 @@ interface StockSummary {
   available: number;
   producedBuckets: Buckets;
   issuedBuckets: Buckets;
+  conversion: ConversionInfo;
   thicknessBreakdown: ThicknessBreakdown[];
   debugMatchedStockIssues: any[];
 }
@@ -124,7 +134,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     // Fetch production entries (IN) — include gsm for unit conversion
     const { data: prodData, error: prodErr } = await supabase
       .from("production_entries")
-      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, gsm, product_codes(code), profiles:worker_id(name)")
+      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, gsm, notes, product_codes(code), profiles:worker_id(name)")
       .order("date", { ascending: false })
       .limit(2000);
     if (prodErr) console.error("production_entries fetch error", prodErr);
@@ -263,12 +273,27 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return out;
     };
     const parseNotesMeta = (notes: string | null | undefined) => {
-      const value = (key: string) => {
-        const match = String(notes ?? "").match(new RegExp(`${key}=([\\d.]+)`, "i"));
-        return match ? Number(match[1]) : null;
+      const text = String(notes ?? "");
+      const firstNumber = (patterns: RegExp[]) => {
+        for (const pattern of patterns) {
+          const match = text.match(pattern);
+          if (match) {
+            const value = Number(match[1]);
+            if (isFinite(value) && value > 0) return value;
+          }
+        }
+        return null;
       };
-      const widthM = String(notes ?? "").match(/width[_ ]?mm[=: ]\s*([\d.]+)/i);
-      return { sqm: value("sqm"), kg: value("kg"), gsm: value("gsm"), width_mm: widthM ? Number(widthM[1]) : null };
+      return {
+        sqm: firstNumber([/\bsqm\s*[=:]\s*([\d.]+)/i, /square\s*meters?\s*[=:]\s*([\d.]+)/i]),
+        kg: firstNumber([/\bkg\s*[=:]\s*([\d.]+)/i, /kilograms?\s*[=:]\s*([\d.]+)/i]),
+        gsm: firstNumber([/\bgsm\s*[=:]\s*([\d.]+)/i, /\bGSM:\s*([\d.]+)/]),
+        width_mm: firstNumber([
+          /width[_\s-]?mm\s*[=:]\s*([\d.]+)/i,
+          /width[_\s-]?per[_\s-]?roll\s*[=:]\s*([\d.]+)/i,
+          /\bwidth\s*[=:]\s*([\d.]+)/i,
+        ]),
+      };
     };
     const isFinishedStockIssue = (i: any) => {
       const issueType = i.issue_type ?? null;
@@ -312,15 +337,50 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
     // Fallback width/gsm dictionaries used to backfill rows missing per-entry data.
-    const widthByCode: Record<string, number> = {};
-    const widthByCodeThickness: Record<string, number> = {};
-    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined) => {
+    type ConversionFact = { value: number; source: string; priority: number };
+    const widthByCode: Record<string, ConversionFact> = {};
+    const widthByCodeThickness: Record<string, ConversionFact> = {};
+    const gsmByCode: Record<string, ConversionFact> = {};
+    const gsmByCodeThickness: Record<string, ConversionFact> = {};
+    const setFact = (target: Record<string, ConversionFact>, key: string, fact: ConversionFact) => {
+      const existing = target[key];
+      if (!existing || fact.priority < existing.priority) target[key] = fact;
+    };
+    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined, source: string, priority: number) => {
       if (!pcId || w == null) return;
       const wn = Number(w);
       if (!isFinite(wn) || wn <= 0) return;
-      if (widthByCode[pcId] == null) widthByCode[pcId] = wn;
+      const fact = { value: wn, source, priority };
+      setFact(widthByCode, pcId, fact);
+      setFact(widthByCodeThickness, `${pcId}__${thickness ?? ""}`, fact);
+    };
+    const recordGsm = (pcId: string, thickness: number | null, g: number | null | undefined, source: string, priority: number) => {
+      if (!pcId || g == null) return;
+      const gn = Number(g);
+      if (!isFinite(gn) || gn <= 0) return;
+      const fact = { value: gn, source, priority };
+      setFact(gsmByCode, pcId, fact);
+      setFact(gsmByCodeThickness, `${pcId}__${thickness ?? ""}`, fact);
+    };
+    const missingDataLabel = (widthFact: ConversionFact | null, gsmFact: ConversionFact | null) => {
+      const missing = [!widthFact ? "width" : null, !gsmFact ? "GSM" : null].filter(Boolean);
+      return missing.length ? `Missing ${missing.join(" + ")}` : "Complete";
+    };
+    const getConversionInfo = (pcId: string, thickness: number | null, productLevel = false): ConversionInfo => {
       const key = `${pcId}__${thickness ?? ""}`;
-      if (widthByCodeThickness[key] == null) widthByCodeThickness[key] = wn;
+      const rowWidth = productLevel ? null : (widthByCodeThickness[key] ?? null);
+      const rowGsm = productLevel ? null : (gsmByCodeThickness[key] ?? null);
+      const productWidth = widthByCode[pcId] ?? null;
+      const productGsm = gsmByCode[pcId] ?? null;
+      const widthFact = rowWidth ?? productWidth;
+      const gsmFact = rowGsm ?? productGsm;
+      return {
+        widthMm: widthFact?.value ?? null,
+        widthSource: rowWidth?.source ?? (productWidth ? (productLevel ? productWidth.source : `product-level ${productWidth.source}`) : null),
+        gsm: gsmFact?.value ?? null,
+        gsmSource: rowGsm?.source ?? (productGsm ? (productLevel ? productGsm.source : `product-level ${productGsm.source}`) : null),
+        missingData: missingDataLabel(widthFact, gsmFact),
+      };
     };
     const ensureIssued = (pcId: string) => {
       let b = issuedBucketsMap.get(pcId);
@@ -337,22 +397,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
       return row;
     };
-
-    const gsmByCode: Record<string, number> = {};
-    const gsmByCodeThickness: Record<string, number> = {};
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
-      const gsm = p.gsm != null ? Number(p.gsm) : null;
-      // production_entries has no width column
-      const widthMm: number | null = null;
-
-      if (gsm && gsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-      }
+      const meta = parseNotesMeta(p.notes);
+      const gsm = p.gsm != null ? Number(p.gsm) : meta.gsm;
+      const widthMm = meta.width_mm;
+      recordWidth(pcId, thickness, widthMm, "production entry notes width_mm", 3);
+      recordGsm(pcId, thickness, gsm, p.gsm != null ? "production_entries.gsm" : "production entry notes GSM", 2);
 
       let entry = pcTotals.get(pcId);
       if (!entry) {
@@ -387,11 +440,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       entry.produced += qty;
       const eb = computeAllUnits(qty, unitRaw, widthMm, gsm);
       mergeBuckets(entry.buckets, eb);
-      if (gsm && gsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-      }
       const trow = ensureThickness(pcId, thickness);
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, eb);
@@ -399,12 +447,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
-      recordWidth(s.product_code_id, thickness, widthMm);
+      const gsm = s.gsm != null ? Number(s.gsm) : null;
+      recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 1);
+      recordGsm(s.product_code_id, thickness, gsm, "slitting_entries.gsm", 1);
       addProduced(
         s.product_code_id,
         Number(s.cut_quantity_produced ?? 0),
         s.unit,
-        s.gsm != null ? Number(s.gsm) : null,
+        gsm,
         thickness,
         widthMm,
         null,
@@ -414,12 +464,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const qty = Number(h.total_quantity ?? (Number(h.rolls_produced ?? 0) * Number(h.length_per_tape_mtr ?? 0)));
       const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
       const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
-      recordWidth(h.product_code_id, thickness, widthMm);
+      const gsm = h.gsm != null ? Number(h.gsm) : null;
+      recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 1);
+      recordGsm(h.product_code_id, thickness, gsm, "head36_entries.gsm", 1);
       addProduced(
         h.product_code_id,
         qty,
         h.unit,
-        h.gsm != null ? Number(h.gsm) : null,
+        gsm,
         thickness,
         widthMm,
         null,
@@ -436,12 +488,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       // Capture fallbacks from issue rows.
       const meta = parseNotesMeta(i.notes);
       const issueGsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
-      if (issueGsm && issueGsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = issueGsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = issueGsm;
-      }
-      recordWidth(pcId, thickness, i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm);
+      const issueWidth = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm;
+      const issueWidthSource = i.width_mm != null ? "stock_issues.width_mm" : i.roll_width_mm != null ? "stock_issues.roll_width_mm" : i.product_width_mm != null ? "stock_issues.product_width_mm" : "stock issue notes width_mm";
+      recordGsm(pcId, thickness, issueGsm, i.gsm != null ? "stock_issues.gsm" : "stock issue notes GSM", 3);
+      recordWidth(pcId, thickness, issueWidth, issueWidthSource, 4);
 
       const b = ensureIssued(pcId);
       const rowBuckets = getIssueBuckets(i);
@@ -460,10 +510,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         const q = Number(s.quantity);
         issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
         const b = ensureIssued(pcId);
-        const gsm = gsmByCode[pcId] ?? null;
-        const saleBuckets = computeAllUnits(q, s.unit, null, gsm);
-        mergeBuckets(b, saleBuckets);
         const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
+        const conversion = getConversionInfo(pcId, thickness);
+        const saleBuckets = computeAllUnits(q, s.unit, conversion.widthMm, conversion.gsm);
+        mergeBuckets(b, saleBuckets);
         const trow = ensureThickness(pcId, thickness);
         mergeBuckets(trow.issuedBuckets, saleBuckets);
       }
@@ -490,25 +540,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     for (const [pcId, tMap] of thicknessMap.entries()) {
       const codeForLog = pcTotals.get(pcId)?.code ?? "—";
       for (const [t, row] of tMap.entries()) {
-        const key = `${pcId}__${t ?? ""}`;
-        const widthSource = widthByCodeThickness[key] != null ? "thickness" : widthByCode[pcId] != null ? "product" : "none";
-        const width = widthByCodeThickness[key] ?? widthByCode[pcId] ?? null;
-        const gsmSource = gsmByCodeThickness[key] != null ? "thickness" : gsmByCode[pcId] != null ? "product" : "none";
-        const gsm = gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
-        backfillBuckets(row.producedBuckets, width, gsm);
-        backfillBuckets(row.issuedBuckets, width, gsm);
-        // eslint-disable-next-line no-console
-        console.log("conversion debug", {
-          productCode: codeForLog,
-          thickness: t,
-          meters: row.producedBuckets.meters,
-          widthSource,
-          widthMm: width,
-          gsmSource,
-          gsm,
-          sqm: row.producedBuckets.sqm,
-          kg: row.producedBuckets.kg,
-        });
+        const conversion = getConversionInfo(pcId, t);
+        backfillBuckets(row.producedBuckets, conversion.widthMm, conversion.gsm);
+        backfillBuckets(row.issuedBuckets, conversion.widthMm, conversion.gsm);
       }
       // Recompute top-card produced + issued buckets as sum of thickness rows.
       const pcEntry = pcTotals.get(pcId);
@@ -542,6 +576,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
             produced: row.produced,
             producedBuckets: row.producedBuckets,
             issuedBuckets: row.issuedBuckets,
+            conversion: getConversionInfo(pcId, t),
           });
         }
       }
@@ -555,6 +590,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         available: produced - issued,
         producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
+        conversion: getConversionInfo(pcId, null, true),
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
