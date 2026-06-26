@@ -41,6 +41,7 @@ interface Row {
   date: string;
   kind: "Finished" | "Raw Material";
   item: string;
+  lot: string;
   recipient: string;
   recipientType: string;
   quantity: number;
