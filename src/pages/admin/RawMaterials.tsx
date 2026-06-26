@@ -347,6 +347,12 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const addStockEntry = async () => {
     if (!stockMaterialId || !stockQty || !user) return;
     const packNum = stockPackCount ? Number(stockPackCount) : null;
+    // Live schema has only `pallets` (no pallet_count/roll_count). Encode pack
+    // type into notes so it isn't lost.
+    const packNote = packNum != null && packNum > 0
+      ? `${packNum} ${stockPackType === "roll" ? "roll(s)" : "pallet(s)"}`
+      : "";
+    const combinedNotes = [packNote, stockNotes].filter(Boolean).join(" | ") || null;
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: stockMaterialId,
       quantity: Number(stockQty),
@@ -354,11 +360,9 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       lot_number: stockLot.trim() || null,
       supplier: stockSupplier.trim() || null,
       pallets: packNum,
-      pallet_count: stockPackType === "pallet" ? packNum : null,
-      roll_count: stockPackType === "roll" ? packNum : null,
       thickness_mm: stockThickness ? Number(stockThickness) : null,
       gsm: stockGsm ? Number(stockGsm) : null,
-      notes: stockNotes || null,
+      notes: combinedNotes,
       added_by: user.id,
     } as any);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
@@ -422,11 +426,11 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       const k = keyOf(lot, t, g);
       const v = map.get(k) ?? { key: k, lot, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
       v.inKg += Number(e.quantity) || 0;
-      const pc = (e as any).pallet_count != null ? Number((e as any).pallet_count) : null;
-      const rc = (e as any).roll_count != null ? Number((e as any).roll_count) : null;
-      if (pc != null && pc > 0) { v.packCount += pc; v.packType = v.packType ?? "pallet"; }
-      else if (rc != null && rc > 0) { v.packCount += rc; v.packType = v.packType ?? "roll"; }
-      else if (e.pallets != null && Number(e.pallets) > 0) { v.packCount += Number(e.pallets); v.packType = v.packType ?? "pallet"; }
+      // Live schema has only `pallets`; treat as pack count, type unknown.
+      if (e.pallets != null && Number(e.pallets) > 0) {
+        v.packCount += Number(e.pallets);
+        v.packType = v.packType ?? "pallet";
+      }
       map.set(k, v);
     });
     // Attribute outs
