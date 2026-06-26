@@ -26,6 +26,20 @@ interface ConversionInfo {
   missingData: string;
 }
 
+const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
+  if (unit === "meters") return null;
+  if (unit === "sqm") return conversion.widthMm ? null : "Missing width";
+  const missing = [!conversion.widthMm ? "width" : null, !conversion.gsm ? "GSM" : null].filter(Boolean);
+  return missing.length ? `Missing ${missing.join(" + ")}` : null;
+};
+
+const formatConversionData = (conversion: ConversionInfo) => {
+  const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
+  const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
+  if (width || gsm) return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}.`;
+  return "Conversion data missing: width/GSM not found.";
+};
+
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
