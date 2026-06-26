@@ -478,9 +478,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       );
     }
 
-    setProductGsmByCode(gsmByCode);
-    setProductGsmByCodeThickness(gsmByCodeThickness);
-
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
       const pcId = i.product_code_id;
@@ -502,6 +499,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const trow = ensureThickness(pcId, thickness);
       mergeBuckets(trow.issuedBuckets, rowBuckets);
     }
+
+    setProductGsmByCode(Object.fromEntries(Object.entries(gsmByCode).map(([key, fact]) => [key, fact.value])));
+    setProductGsmByCodeThickness(Object.fromEntries(Object.entries(gsmByCodeThickness).map(([key, fact]) => [key, fact.value])));
 
     // Include finished-product sales in issued totals (they reduce finished stock)
     for (const s of (salesData ?? []) as any[]) {
@@ -538,7 +538,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
     };
     for (const [pcId, tMap] of thicknessMap.entries()) {
-      const codeForLog = pcTotals.get(pcId)?.code ?? "—";
       for (const [t, row] of tMap.entries()) {
         const conversion = getConversionInfo(pcId, t);
         backfillBuckets(row.producedBuckets, conversion.widthMm, conversion.gsm);
