@@ -122,6 +122,15 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
   const [recipients, setRecipients] = useState<RecipientOption[]>([]);
 
   const fetchData = async () => {
+    // Clear any stale inventory caches before reading fresh data.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|raw_material/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+
     const [matRes, entryRes, saleRes, recipRes, issueRes] = await Promise.all([
       supabase.from("raw_materials").select("*").order("name"),
       supabase.from("raw_material_stock_entries").select("*").order("created_at", { ascending: false }).limit(2000),
@@ -132,16 +141,18 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         .order("created_at", { ascending: false })
         .limit(2000),
       supabase.rpc("list_production_manager_recipients"),
-      // Raw material issues live in stock_issues — fetch them directly.
-      supabase
+      // stock_issues is fetched only for diagnostic logging. The balance is
+      // computed strictly from raw_material_stock_entries (entry_type 'inward' | 'issue')
+      // per confirmed live schema. Combining both tables double-counts because
+      // issueMaterial() writes a mirror row to raw_material_stock_entries.
+      (supabase as any)
         .from("stock_issues")
-        .select("*")
+        .select("id, raw_material_id, issue_type, issue_quantity, issue_unit, issue_quantity_kg, gsm, thickness_mm, lot_number, recipient_user_id, issued_to_user_id, date")
         .order("created_at", { ascending: false })
         .limit(2000),
     ]);
     if (issueRes.error) {
-      console.error("stock_issues fetch error", issueRes.error);
-      toast({ title: "Could not load stock issues", description: issueRes.error.message, variant: "destructive" });
+      console.warn("stock_issues fetch (diagnostic only) failed", issueRes.error);
     }
     setMaterials(matRes.data ?? []);
     const recipientRows = ((recipRes.data as RecipientOption[]) ?? []).filter((r) => !!r.user_id);
@@ -163,8 +174,11 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     setRecipients(recipientRows.map((r) => ({ ...r, roles: recipientRoleMap.get(r.user_id) ?? [] })));
 
     const rawEntries = (entryRes.data ?? []) as any[];
+    // Confirmed live schema: entry_type ∈ {'inward','issue'}.
+    // Treat anything not matching the issue markers as inward (backward compat with legacy nulls).
     const inwardEntries: StockEntry[] = rawEntries.map((e) => {
-      const isOut = e.entry_type === "out" || e.entry_type === "issue" || e.entry_kind === "out";
+      const t = String(e.entry_type ?? "").toLowerCase();
+      const isOut = t === "issue" || t === "out" || String(e.entry_kind ?? "").toLowerCase() === "out";
       return {
         ...e,
         kind: (isOut ? "issue" : "in") as "in" | "issue",
@@ -175,56 +189,20 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
 
     const salesRows = (saleRes.data ?? []) as any[];
 
-    // Convert stock_issues (raw_material) → "out" entries in kg.
-    const stockIssueRows = ((issueRes.data ?? []) as any[])
-      .filter((r) => {
-        const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
-        return t === "raw_material" && r.raw_material_id;
-      });
-    // eslint-disable-next-line no-console
-    console.log("Raw material stock_issues rows", stockIssueRows.length, stockIssueRows);
-    const issueOutEntries: StockEntry[] = stockIssueRows.map((r) => {
-      const unit = r.issue_unit ?? r.unit ?? "kg";
-      const qty = Number(r.issue_quantity ?? r.quantity ?? 0);
-      const gsm = r.gsm != null ? Number(r.gsm) : null;
-      let kg = 0;
-      if (r.issue_quantity_kg != null) kg = Number(r.issue_quantity_kg);
-      else if (unit === "kg") kg = qty;
-      else if (unit === "sqm" && gsm && gsm > 0) kg = (qty * gsm) / 1000;
-      else kg = qty; // best-effort fallback
-      return {
-        id: `si-${r.id}`,
-        raw_material_id: r.raw_material_id,
-        quantity: kg,
-        date: r.date ?? r.created_at,
-        lot_number: r.lot_number ?? null,
-        supplier: null,
-        pallets: null,
-        thickness_mm: r.thickness_mm,
-        gsm,
-        notes: r.notes ?? null,
-        added_by: r.issued_by,
-        created_at: r.created_at,
-        entry_type: "issue",
-        issue_unit: unit,
-        issue_quantity: qty,
-        issued_to_user_id: r.issued_to_user_id ?? r.recipient_user_id ?? null,
-        kind: "issue",
-        source: "stock_issue",
-        source_id: r.id,
-      };
+    // Diagnostic only — see comment above.
+    const stockIssueRawRows = ((issueRes.data ?? []) as any[]).filter((r) => {
+      const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
+      return t === "raw_material" && r.raw_material_id;
     });
-
-    // De-duplicate: if a raw_material_stock_entries row already exists for the same issue
-    // (legacy double-write), avoid double-counting. Match by issued_to_user_id + date + qty.
-    const dedupKey = (e: StockEntry) => `${e.raw_material_id}|${e.date}|${e.issued_to_user_id ?? ""}|${Number(e.quantity).toFixed(2)}`;
-    const inwardOutKeys = new Set(
-      inwardEntries.filter((e) => e.kind === "issue").map(dedupKey),
+    // eslint-disable-next-line no-console
+    console.log(
+      "[Inventory] raw_material_stock_entries fetched:",
+      rawEntries.length,
+      "| stock_issues(raw_material) fetched:",
+      stockIssueRawRows.length,
     );
 
-    const issueOutDeduped = issueOutEntries.filter((e) => !inwardOutKeys.has(dedupKey(e)));
-
-    // Resolve client names for sales (some sales reference company_clients by id)
+    // Resolve client names for sales
     const clientIds = [...new Set(salesRows.map((s) => s.client_id).filter(Boolean))];
     let clientMap = new Map<string, string>();
     if (clientIds.length > 0) {
@@ -252,18 +230,34 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
         source_id: s.id,
       }));
 
-    const allEntries = [...inwardEntries, ...issueOutDeduped, ...outwardEntries]
+    const allEntries = [...inwardEntries, ...outwardEntries]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    // Debug: per-material Out totals (kg)
+    // Debug: per-material in/out totals + per-lot balance (matches user spec
+    // grouping: raw_material_id + lot_number + thickness_mm + gsm).
+    const inTotals = new Map<string, number>();
     const outTotals = new Map<string, number>();
+    const lotBalances = new Map<string, { in: number; out: number }>();
     for (const e of allEntries) {
-      if (e.kind === "out" || e.kind === "issue") {
-        outTotals.set(e.raw_material_id, (outTotals.get(e.raw_material_id) ?? 0) + Number(e.quantity || 0));
-      }
+      const qty = Number(e.quantity || 0);
+      if (e.kind === "in") inTotals.set(e.raw_material_id, (inTotals.get(e.raw_material_id) ?? 0) + qty);
+      else outTotals.set(e.raw_material_id, (outTotals.get(e.raw_material_id) ?? 0) + qty);
+      const key = `${e.raw_material_id}|${e.lot_number ?? "-"}|${e.thickness_mm ?? "-"}|${e.gsm ?? "-"}`;
+      const lb = lotBalances.get(key) ?? { in: 0, out: 0 };
+      if (e.kind === "in") lb.in += qty; else lb.out += qty;
+      lotBalances.set(key, lb);
     }
     // eslint-disable-next-line no-console
-    console.log("Out for raw materials", Object.fromEntries(outTotals));
+    console.log("[Inventory] per-material In (kg):", Object.fromEntries(inTotals));
+    // eslint-disable-next-line no-console
+    console.log("[Inventory] per-material Out (kg):", Object.fromEntries(outTotals));
+    // eslint-disable-next-line no-console
+    console.log(
+      "[Inventory] per-lot balance:",
+      Object.fromEntries(
+        Array.from(lotBalances.entries()).map(([k, v]) => [k, { in: v.in, out: v.out, balance: v.in - v.out }]),
+      ),
+    );
 
     // Resolve names
     const materialMap = new Map((matRes.data ?? []).map((m: RawMaterial) => [m.id, m]));
@@ -281,7 +275,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       material_name: materialMap.get(e.raw_material_id)?.name ?? "Unknown",
       material_unit: materialMap.get(e.raw_material_id)?.unit ?? "",
       person_name: profileMap.get(e.added_by) ?? "Unknown",
-      // For "issue" rows, prefer showing recipient as the supplier/from column
       supplier: (e.kind === "issue" || e.kind === "out") && e.issued_to_user_id
         ? `→ ${profileMap.get(e.issued_to_user_id) ?? "Recipient"}`
         : e.supplier,
@@ -1050,11 +1043,11 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     thickness: t, gsm: g, lot, packType: null, packCount: 0, in: 0, out: 0,
                   };
                   grp.in += Number(e.quantity) || 0;
-                  const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
-                  const rc = e.roll_count != null ? Number(e.roll_count) : null;
-                  if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
-                  else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
-                  else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  // Live schema has only `pallets` (no pallet_count/roll_count).
+                  if (e.pallets != null && Number(e.pallets) > 0) {
+                    grp.packCount += Number(e.pallets);
+                    grp.packType = grp.packType ?? "pallet";
+                  }
                   groupMap.set(key, grp);
                 });
                 // Second pass: attribute outs. Exact lot match preferred; else if exactly one

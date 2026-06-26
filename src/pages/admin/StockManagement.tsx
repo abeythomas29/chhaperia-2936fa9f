@@ -110,6 +110,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
   const fetchData = async () => {
     setLoading(true);
+    // Clear any stale finished-stock caches so display always reflects DB.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /inventory|stock|issued|finished/i.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
 
     // Fetch production entries (IN) — include gsm for unit conversion
     const { data: prodData, error: prodErr } = await supabase
@@ -118,6 +126,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       .order("date", { ascending: false })
       .limit(2000);
     if (prodErr) console.error("production_entries fetch error", prodErr);
+
+    // Slitting + Head36 also produce finished stock under their own product_code_id.
+    const [{ data: slitProd, error: slitErr }, { data: head36Prod, error: head36Err }] = await Promise.all([
+      (supabase as any)
+        .from("slitting_entries")
+        .select("id, date, product_code_id, cut_quantity_produced, unit, thickness_mm, gsm")
+        .order("date", { ascending: false })
+        .limit(2000),
+      (supabase as any)
+        .from("head36_entries")
+        .select("id, date, product_code_id, total_quantity, rolls_produced, length_per_tape_mtr, unit, thickness_mm, gsm")
+        .order("date", { ascending: false })
+        .limit(2000),
+    ]);
+    if (slitErr) console.warn("slitting_entries fetch error", slitErr);
+    if (head36Err) console.warn("head36_entries fetch error", head36Err);
 
     // Fetch stock issues (OUT) from the same source used by Issued History.
     // Keep this flat: embedded relationship joins can fail independently and make
@@ -309,8 +333,60 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const tMap = thicknessMap.get(pcId)!;
       tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
     }
+
+    // Add slitting produced (cut_quantity_produced) and head36 produced.
+    const addProduced = (pcId: string, qty: number, unitRaw: any, gsm: number | null, thickness: number | null, code: string | null) => {
+      if (!pcId || !isFinite(qty) || qty <= 0) return;
+      const u = normUnit(unitRaw) ?? "meters";
+      let entry = pcTotals.get(pcId);
+      if (!entry) {
+        entry = { code: code ?? "—", unit: String(unitRaw ?? "meters"), produced: 0, buckets: {} };
+        pcTotals.set(pcId, entry);
+      }
+      entry.produced += qty;
+      addBucket(entry.buckets, u, qty);
+      if (gsm && gsm > 0) {
+        if (u === "sqm") addBucket(entry.buckets, "kg", (qty * gsm) / 1000);
+        else if (u === "kg") addBucket(entry.buckets, "sqm", (qty * 1000) / gsm);
+        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
+        const key = `${pcId}__${thickness ?? ""}`;
+        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
+      }
+      if (!thicknessMap.has(pcId)) thicknessMap.set(pcId, new Map());
+      const tMap = thicknessMap.get(pcId)!;
+      tMap.set(thickness, (tMap.get(thickness) ?? 0) + qty);
+    };
+    for (const s of (slitProd ?? []) as any[]) {
+      addProduced(
+        s.product_code_id,
+        Number(s.cut_quantity_produced ?? 0),
+        s.unit,
+        s.gsm != null ? Number(s.gsm) : null,
+        s.thickness_mm != null ? Number(s.thickness_mm) : null,
+        null,
+      );
+    }
+    for (const h of (head36Prod ?? []) as any[]) {
+      const qty = Number(h.total_quantity ?? (Number(h.rolls_produced ?? 0) * Number(h.length_per_tape_mtr ?? 0)));
+      addProduced(
+        h.product_code_id,
+        qty,
+        h.unit,
+        h.gsm != null ? Number(h.gsm) : null,
+        h.thickness_mm != null ? Number(h.thickness_mm) : null,
+        null,
+      );
+    }
+
     setProductGsmByCode(gsmByCode);
     setProductGsmByCodeThickness(gsmByCodeThickness);
+    // eslint-disable-next-line no-console
+    console.log("[Inventory] produced sources counts:", {
+      production_entries: (prodData ?? []).length,
+      slitting_entries: (slitProd ?? []).length,
+      head36_entries: (head36Prod ?? []).length,
+      stock_issues: stockIssueRows.length,
+    });
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
