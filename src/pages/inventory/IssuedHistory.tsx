@@ -544,6 +544,7 @@ export default function IssuedHistory() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{r.item}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.lot}</TableCell>
                     <TableCell>{r.recipient}</TableCell>
                     <TableCell className="capitalize">
                       {r.recipientType.replace("_", " ")}
