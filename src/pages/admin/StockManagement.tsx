@@ -18,11 +18,37 @@ import { toast } from "@/hooks/use-toast";
 type UnitKey = "meters" | "sqm" | "kg";
 type Buckets = Partial<Record<UnitKey, number>>;
 
+interface ConversionInfo {
+  widthMm: number | null;
+  widthSource: string | null;
+  gsm: number | null;
+  gsmSource: string | null;
+  missingData: string;
+}
+
+const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
+  if (unit === "meters") return null;
+  if (unit === "sqm") return conversion.widthMm ? null : "Missing width";
+  const missing = [!conversion.widthMm ? "width" : null, !conversion.gsm ? "GSM" : null].filter(Boolean);
+  return missing.length ? `Missing ${missing.join(" + ")}` : null;
+};
+
+const formatConversionData = (conversion: ConversionInfo) => {
+  const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
+  const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
+  if (width || gsm) {
+    const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
+    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.`;
+  }
+  return "Conversion data missing: width/GSM not found.";
+};
+
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
   producedBuckets: Buckets;
   issuedBuckets: Buckets;
+  conversion: ConversionInfo;
 }
 
 interface StockSummary {
@@ -34,6 +60,7 @@ interface StockSummary {
   available: number;
   producedBuckets: Buckets;
   issuedBuckets: Buckets;
+  conversion: ConversionInfo;
   thicknessBreakdown: ThicknessBreakdown[];
   debugMatchedStockIssues: any[];
 }
@@ -124,7 +151,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     // Fetch production entries (IN) — include gsm for unit conversion
     const { data: prodData, error: prodErr } = await supabase
       .from("production_entries")
-      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, gsm, product_codes(code), profiles:worker_id(name)")
+      .select("id, date, product_code_id, total_quantity, quantity_per_roll, rolls_count, unit, thickness_mm, gsm, notes, product_codes(code), profiles:worker_id(name)")
       .order("date", { ascending: false })
       .limit(2000);
     if (prodErr) console.error("production_entries fetch error", prodErr);
@@ -133,12 +160,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const [{ data: slitProd, error: slitErr }, { data: head36Prod, error: head36Err }] = await Promise.all([
       (supabase as any)
         .from("slitting_entries")
-        .select("id, date, product_code_id, cut_quantity_produced, unit, thickness_mm, gsm")
+        .select("id, date, product_code_id, cut_quantity_produced, cut_width_mm, unit, thickness_mm, gsm")
         .order("date", { ascending: false })
         .limit(2000),
       (supabase as any)
         .from("head36_entries")
-        .select("id, date, product_code_id, total_quantity, rolls_produced, length_per_tape_mtr, unit, thickness_mm, gsm")
+        .select("id, date, product_code_id, total_quantity, rolls_produced, roll_width_mm, length_per_tape_mtr, unit, thickness_mm, gsm")
         .order("date", { ascending: false })
         .limit(2000),
     ]);
@@ -263,12 +290,27 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       return out;
     };
     const parseNotesMeta = (notes: string | null | undefined) => {
-      const value = (key: string) => {
-        const match = String(notes ?? "").match(new RegExp(`${key}=([\\d.]+)`, "i"));
-        return match ? Number(match[1]) : null;
+      const text = String(notes ?? "");
+      const firstNumber = (patterns: RegExp[]) => {
+        for (const pattern of patterns) {
+          const match = text.match(pattern);
+          if (match) {
+            const value = Number(match[1]);
+            if (isFinite(value) && value > 0) return value;
+          }
+        }
+        return null;
       };
-      const widthM = String(notes ?? "").match(/width[_ ]?mm[=: ]\s*([\d.]+)/i);
-      return { sqm: value("sqm"), kg: value("kg"), gsm: value("gsm"), width_mm: widthM ? Number(widthM[1]) : null };
+      return {
+        sqm: firstNumber([/\bsqm\s*[=:]\s*([\d.]+)/i, /square\s*meters?\s*[=:]\s*([\d.]+)/i]),
+        kg: firstNumber([/\bkg\s*[=:]\s*([\d.]+)/i, /kilograms?\s*[=:]\s*([\d.]+)/i]),
+        gsm: firstNumber([/\bgsm\s*[=:]\s*([\d.]+)/i, /\bGSM:\s*([\d.]+)/]),
+        width_mm: firstNumber([
+          /width[_\s-]?mm\s*[=:]\s*([\d.]+)/i,
+          /width[_\s-]?per[_\s-]?roll\s*[=:]\s*([\d.]+)/i,
+          /\bwidth\s*[=:]\s*([\d.]+)/i,
+        ]),
+      };
     };
     const isFinishedStockIssue = (i: any) => {
       const issueType = i.issue_type ?? null;
@@ -312,15 +354,50 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const issueMap = new Map<string, number>();
     const issuedBucketsMap = new Map<string, Buckets>();
     // Fallback width/gsm dictionaries used to backfill rows missing per-entry data.
-    const widthByCode: Record<string, number> = {};
-    const widthByCodeThickness: Record<string, number> = {};
-    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined) => {
+    type ConversionFact = { value: number; source: string; priority: number };
+    const widthByCode: Record<string, ConversionFact> = {};
+    const widthByCodeThickness: Record<string, ConversionFact> = {};
+    const gsmByCode: Record<string, ConversionFact> = {};
+    const gsmByCodeThickness: Record<string, ConversionFact> = {};
+    const setFact = (target: Record<string, ConversionFact>, key: string, fact: ConversionFact) => {
+      const existing = target[key];
+      if (!existing || fact.priority < existing.priority) target[key] = fact;
+    };
+    const recordWidth = (pcId: string, thickness: number | null, w: number | null | undefined, source: string, priority: number) => {
       if (!pcId || w == null) return;
       const wn = Number(w);
       if (!isFinite(wn) || wn <= 0) return;
-      if (widthByCode[pcId] == null) widthByCode[pcId] = wn;
+      const fact = { value: wn, source, priority };
+      setFact(widthByCode, pcId, fact);
+      setFact(widthByCodeThickness, `${pcId}__${thickness ?? ""}`, fact);
+    };
+    const recordGsm = (pcId: string, thickness: number | null, g: number | null | undefined, source: string, priority: number) => {
+      if (!pcId || g == null) return;
+      const gn = Number(g);
+      if (!isFinite(gn) || gn <= 0) return;
+      const fact = { value: gn, source, priority };
+      setFact(gsmByCode, pcId, fact);
+      setFact(gsmByCodeThickness, `${pcId}__${thickness ?? ""}`, fact);
+    };
+    const missingDataLabel = (widthFact: ConversionFact | null, gsmFact: ConversionFact | null) => {
+      const missing = [!widthFact ? "width" : null, !gsmFact ? "GSM" : null].filter(Boolean);
+      return missing.length ? `Missing ${missing.join(" + ")}` : "Complete";
+    };
+    const getConversionInfo = (pcId: string, thickness: number | null, productLevel = false): ConversionInfo => {
       const key = `${pcId}__${thickness ?? ""}`;
-      if (widthByCodeThickness[key] == null) widthByCodeThickness[key] = wn;
+      const rowWidth = productLevel ? null : (widthByCodeThickness[key] ?? null);
+      const rowGsm = productLevel ? null : (gsmByCodeThickness[key] ?? null);
+      const productWidth = widthByCode[pcId] ?? null;
+      const productGsm = gsmByCode[pcId] ?? null;
+      const widthFact = rowWidth ?? productWidth;
+      const gsmFact = rowGsm ?? productGsm;
+      return {
+        widthMm: widthFact?.value ?? null,
+        widthSource: rowWidth?.source ?? (productWidth ? (productLevel ? productWidth.source : `product-level ${productWidth.source}`) : null),
+        gsm: gsmFact?.value ?? null,
+        gsmSource: rowGsm?.source ?? (productGsm ? (productLevel ? productGsm.source : `product-level ${productGsm.source}`) : null),
+        missingData: missingDataLabel(widthFact, gsmFact),
+      };
     };
     const ensureIssued = (pcId: string) => {
       let b = issuedBucketsMap.get(pcId);
@@ -337,22 +414,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
       return row;
     };
-
-    const gsmByCode: Record<string, number> = {};
-    const gsmByCodeThickness: Record<string, number> = {};
     for (const p of (prodData ?? []) as any[]) {
       const pcId = p.product_code_id;
       const thickness = p.thickness_mm != null ? Number(p.thickness_mm) : null;
       const qty = Number(p.total_quantity ?? (p.rolls_count * p.quantity_per_roll));
-      const gsm = p.gsm != null ? Number(p.gsm) : null;
-      // production_entries has no width column
-      const widthMm: number | null = null;
-
-      if (gsm && gsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-      }
+      const meta = parseNotesMeta(p.notes);
+      const gsm = p.gsm != null ? Number(p.gsm) : meta.gsm;
+      const widthMm = meta.width_mm;
+      recordWidth(pcId, thickness, widthMm, "production entry notes width_mm", 3);
+      recordGsm(pcId, thickness, gsm, p.gsm != null ? "production_entries.gsm" : "production entry notes GSM", 2);
 
       let entry = pcTotals.get(pcId);
       if (!entry) {
@@ -387,11 +457,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       entry.produced += qty;
       const eb = computeAllUnits(qty, unitRaw, widthMm, gsm);
       mergeBuckets(entry.buckets, eb);
-      if (gsm && gsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = gsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = gsm;
-      }
       const trow = ensureThickness(pcId, thickness);
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, eb);
@@ -399,12 +464,14 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
-      recordWidth(s.product_code_id, thickness, widthMm);
+      const gsm = s.gsm != null ? Number(s.gsm) : null;
+      recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 1);
+      recordGsm(s.product_code_id, thickness, gsm, "slitting_entries.gsm", 1);
       addProduced(
         s.product_code_id,
         Number(s.cut_quantity_produced ?? 0),
         s.unit,
-        s.gsm != null ? Number(s.gsm) : null,
+        gsm,
         thickness,
         widthMm,
         null,
@@ -414,20 +481,19 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const qty = Number(h.total_quantity ?? (Number(h.rolls_produced ?? 0) * Number(h.length_per_tape_mtr ?? 0)));
       const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
       const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
-      recordWidth(h.product_code_id, thickness, widthMm);
+      const gsm = h.gsm != null ? Number(h.gsm) : null;
+      recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 1);
+      recordGsm(h.product_code_id, thickness, gsm, "head36_entries.gsm", 1);
       addProduced(
         h.product_code_id,
         qty,
         h.unit,
-        h.gsm != null ? Number(h.gsm) : null,
+        gsm,
         thickness,
         widthMm,
         null,
       );
     }
-
-    setProductGsmByCode(gsmByCode);
-    setProductGsmByCodeThickness(gsmByCodeThickness);
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
@@ -436,12 +502,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       // Capture fallbacks from issue rows.
       const meta = parseNotesMeta(i.notes);
       const issueGsm = i.gsm != null ? Number(i.gsm) : meta.gsm;
-      if (issueGsm && issueGsm > 0) {
-        if (gsmByCode[pcId] == null) gsmByCode[pcId] = issueGsm;
-        const key = `${pcId}__${thickness ?? ""}`;
-        if (gsmByCodeThickness[key] == null) gsmByCodeThickness[key] = issueGsm;
-      }
-      recordWidth(pcId, thickness, i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm);
+      const issueWidth = i.width_mm ?? i.roll_width_mm ?? i.product_width_mm ?? meta.width_mm;
+      const issueWidthSource = i.width_mm != null ? "stock_issues.width_mm" : i.roll_width_mm != null ? "stock_issues.roll_width_mm" : i.product_width_mm != null ? "stock_issues.product_width_mm" : "stock issue notes width_mm";
+      recordGsm(pcId, thickness, issueGsm, i.gsm != null ? "stock_issues.gsm" : "stock issue notes GSM", 3);
+      recordWidth(pcId, thickness, issueWidth, issueWidthSource, 4);
 
       const b = ensureIssued(pcId);
       const rowBuckets = getIssueBuckets(i);
@@ -453,6 +517,9 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       mergeBuckets(trow.issuedBuckets, rowBuckets);
     }
 
+    setProductGsmByCode(Object.fromEntries(Object.entries(gsmByCode).map(([key, fact]) => [key, fact.value])));
+    setProductGsmByCodeThickness(Object.fromEntries(Object.entries(gsmByCodeThickness).map(([key, fact]) => [key, fact.value])));
+
     // Include finished-product sales in issued totals (they reduce finished stock)
     for (const s of (salesData ?? []) as any[]) {
       if (s.item_type === "finished_product" && s.product_code_id) {
@@ -460,10 +527,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         const q = Number(s.quantity);
         issueMap.set(pcId, (issueMap.get(pcId) ?? 0) + q);
         const b = ensureIssued(pcId);
-        const gsm = gsmByCode[pcId] ?? null;
-        const saleBuckets = computeAllUnits(q, s.unit, null, gsm);
-        mergeBuckets(b, saleBuckets);
         const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
+        const conversion = getConversionInfo(pcId, thickness);
+        const saleBuckets = computeAllUnits(q, s.unit, conversion.widthMm, conversion.gsm);
+        mergeBuckets(b, saleBuckets);
         const trow = ensureThickness(pcId, thickness);
         mergeBuckets(trow.issuedBuckets, saleBuckets);
       }
@@ -488,27 +555,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
     };
     for (const [pcId, tMap] of thicknessMap.entries()) {
-      const codeForLog = pcTotals.get(pcId)?.code ?? "—";
       for (const [t, row] of tMap.entries()) {
-        const key = `${pcId}__${t ?? ""}`;
-        const widthSource = widthByCodeThickness[key] != null ? "thickness" : widthByCode[pcId] != null ? "product" : "none";
-        const width = widthByCodeThickness[key] ?? widthByCode[pcId] ?? null;
-        const gsmSource = gsmByCodeThickness[key] != null ? "thickness" : gsmByCode[pcId] != null ? "product" : "none";
-        const gsm = gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
-        backfillBuckets(row.producedBuckets, width, gsm);
-        backfillBuckets(row.issuedBuckets, width, gsm);
-        // eslint-disable-next-line no-console
-        console.log("conversion debug", {
-          productCode: codeForLog,
-          thickness: t,
-          meters: row.producedBuckets.meters,
-          widthSource,
-          widthMm: width,
-          gsmSource,
-          gsm,
-          sqm: row.producedBuckets.sqm,
-          kg: row.producedBuckets.kg,
-        });
+        const conversion = getConversionInfo(pcId, t);
+        backfillBuckets(row.producedBuckets, conversion.widthMm, conversion.gsm);
+        backfillBuckets(row.issuedBuckets, conversion.widthMm, conversion.gsm);
       }
       // Recompute top-card produced + issued buckets as sum of thickness rows.
       const pcEntry = pcTotals.get(pcId);
@@ -542,6 +592,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
             produced: row.produced,
             producedBuckets: row.producedBuckets,
             issuedBuckets: row.issuedBuckets,
+            conversion: getConversionInfo(pcId, t),
           });
         }
       }
@@ -555,6 +606,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         available: produced - issued,
         producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
+        conversion: getConversionInfo(pcId, null, true),
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
@@ -794,10 +846,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                     const prodRaw = s.producedBuckets[u];
                     const issRaw = s.issuedBuckets[u];
                     const prod = prodRaw != null && isFinite(prodRaw) ? Number(prodRaw) : null;
-                    const iss = issRaw != null && isFinite(issRaw) ? Number(issRaw) : null;
-                    const avail = prod != null ? (prod - (iss ?? 0)) : null;
-                    return { unit: u, prod, iss, avail };
+                    const iss = issRaw != null && isFinite(issRaw) ? Number(issRaw) : (prod != null ? 0 : null);
+                    const avail = prod != null && iss != null ? (prod - iss) : null;
+                    const missing = getMissingUnitReason(u, s.conversion);
+                    return { unit: u, prod, iss, avail, missing };
                   });
+                  const renderValue = (value: number | null, missing: string | null, emphasisClass: string) => {
+                    if (value != null) return <span className={emphasisClass}>{fmt(value)}</span>;
+                    return <span className="text-[11px] leading-tight text-muted-foreground">{missing ?? "—"}</span>;
+                  };
                   return (
                     <div className="space-y-2 mb-3">
                       <div className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
@@ -809,19 +866,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       {rows.map((r) => (
                         <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
                           <span className="font-medium text-xs">{label[r.unit]}</span>
-                          <span className="text-right text-green-600 font-semibold">{r.prod != null ? fmt(r.prod) : "—"}</span>
-                          <span className="text-right text-red-500 font-semibold">{r.iss != null ? fmt(r.iss) : "—"}</span>
+                          <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
+                          <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
                           <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
-                            {r.avail == null ? "—" : fmt(r.avail)}
+                            {r.avail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(r.avail)}
                           </span>
                         </div>
                       ))}
+                      <p className="px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
+                        {formatConversionData(s.conversion)}
+                      </p>
                     </div>
                   );
                 })()}
 
-                {/* Thickness Breakdown — Meters | SQM | KG */}
-                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (() => {
+                {/* Thickness Breakdown — Meters | SQM | KG | Missing Data */}
+                {s.thicknessBreakdown.length > 0 && (() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
                   return (
                     <div className="mt-2 border rounded-md overflow-hidden">
@@ -829,22 +889,26 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                         Thickness Breakdown
                       </div>
                       <div className="divide-y">
-                        <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                        <div className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
                           <span>Thickness</span>
                           <span className="text-right">Meters</span>
                           <span className="text-right">SQM</span>
                           <span className="text-right">KG</span>
+                          <span>Missing Data</span>
                         </div>
                         {s.thicknessBreakdown.map((t) => {
                           const m = t.producedBuckets.meters;
                           const sq = t.producedBuckets.sqm;
                           const kg = t.producedBuckets.kg;
+                          const missingSqm = getMissingUnitReason("sqm", t.conversion);
+                          const missingKg = getMissingUnitReason("kg", t.conversion);
                           return (
-                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                            <div key={String(t.thickness_mm)} className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-sm items-center">
                               <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
                               <span className="text-right font-semibold">{m != null && isFinite(m) ? fmt(m) : "—"}</span>
-                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : "—"}</span>
-                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : "—"}</span>
+                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : <span className="text-[11px] font-normal text-muted-foreground">{missingSqm ?? "—"}</span>}</span>
+                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : <span className="text-[11px] font-normal text-muted-foreground">{missingKg ?? "—"}</span>}</span>
+                              <span className="text-[11px] leading-tight text-muted-foreground">{t.conversion.missingData}</span>
                             </div>
                           );
                         })}
