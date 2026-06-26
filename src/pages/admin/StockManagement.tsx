@@ -15,13 +15,15 @@ import { Search, PackagePlus, ArrowDownCircle, ArrowUpCircle, Package, ChevronLe
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
+type UnitKey = "meters" | "sqm" | "kg";
+type Buckets = Partial<Record<UnitKey, number>>;
+
 interface ThicknessBreakdown {
   thickness_mm: number | null;
   produced: number;
+  producedBuckets: Buckets;
+  issuedBuckets: Buckets;
 }
-
-type UnitKey = "meters" | "sqm" | "kg";
-type Buckets = Partial<Record<UnitKey, number>>;
 
 interface StockSummary {
   product_code_id: string;
