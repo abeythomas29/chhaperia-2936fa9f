@@ -522,13 +522,13 @@ export default function IssuedHistory() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 13 : 12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canManage ? 14 : 13} className="text-center py-8 text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 13 : 12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canManage ? 14 : 13} className="text-center py-8 text-muted-foreground">
                     No issued records found
                   </TableCell>
                 </TableRow>
