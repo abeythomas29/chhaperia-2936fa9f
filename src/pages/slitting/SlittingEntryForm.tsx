@@ -24,6 +24,7 @@ interface IssuedMaterial {
   thickness_mm: number | null;
   gsm: number | null;
   raw_material_id: string | null;
+  lot_number: string | null;
   unit: string | null;
   notes: string | null;
   issued_quantity: number;
@@ -65,14 +66,18 @@ export default function SlittingEntryForm() {
   const reloadIssued = async () => {
     if (!user) return;
 
-    // Read ALL issues to this user (finished + raw) directly from stock_issues.
-    // Avoid the RPC because backend versions can throw
-    // "column reference stock_issue_id is ambiguous".
-    const { data: siRows, error: siErr } = await supabase
+    console.log("slitting current user", user.id, user.email);
+
+    // Only show raw_material issues assigned to this slitting manager.
+    const { data: siRows, error: siErr } = await (supabase as any)
       .from("stock_issues")
       .select("*")
+      .eq("issue_type", "raw_material")
+      .not("raw_material_id", "is", null)
       .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
       .order("date", { ascending: false });
+
+    console.log("slitting assigned stock_issues", siRows, siErr);
 
     if (siErr) {
       toast({ title: "Could not load issued materials", description: siErr.message, variant: "destructive" });
@@ -138,6 +143,7 @@ export default function SlittingEntryForm() {
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
         gsm: r.gsm != null ? Number(r.gsm) : null,
         raw_material_id: r.raw_material_id ?? null,
+        lot_number: r.lot_number ?? null,
         unit,
         notes: r.notes,
         issued_quantity: issued,
@@ -146,6 +152,7 @@ export default function SlittingEntryForm() {
       };
     }).filter((x) => x.remaining_quantity > 0);
 
+    console.log("slitting pending materials", list);
     setIssuedMaterials(list);
   };
 
@@ -242,6 +249,7 @@ export default function SlittingEntryForm() {
     }
 
     setSubmitting(true);
+    console.log("slitting save selected stock_issue_id", form.issue_id, "selectedIssue", selectedIssue);
 
     const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
@@ -348,7 +356,7 @@ export default function SlittingEntryForm() {
               placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
               options={issuedMaterials.map((i) => ({
                 value: i.issue_id,
-                label: `${i.product_code ?? "—"} · ${i.thickness_mm ?? "—"} mm · GSM ${i.gsm ?? "—"} · Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+                label: `${i.product_code ?? "—"} | Lot ${i.lot_number ?? "—"} | ${i.thickness_mm ?? "—"} mm | GSM ${i.gsm ?? "—"} | Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
               }))}
             />
             {selectedIssue && (
