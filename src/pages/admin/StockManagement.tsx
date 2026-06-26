@@ -397,25 +397,31 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       mergeBuckets(trow.producedBuckets, eb);
     };
     for (const s of (slitProd ?? []) as any[]) {
+      const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
+      const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
+      recordWidth(s.product_code_id, thickness, widthMm);
       addProduced(
         s.product_code_id,
         Number(s.cut_quantity_produced ?? 0),
         s.unit,
         s.gsm != null ? Number(s.gsm) : null,
-        s.thickness_mm != null ? Number(s.thickness_mm) : null,
-        s.cut_width_mm != null ? Number(s.cut_width_mm) : null,
+        thickness,
+        widthMm,
         null,
       );
     }
     for (const h of (head36Prod ?? []) as any[]) {
       const qty = Number(h.total_quantity ?? (Number(h.rolls_produced ?? 0) * Number(h.length_per_tape_mtr ?? 0)));
+      const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
+      const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
+      recordWidth(h.product_code_id, thickness, widthMm);
       addProduced(
         h.product_code_id,
         qty,
         h.unit,
         h.gsm != null ? Number(h.gsm) : null,
-        h.thickness_mm != null ? Number(h.thickness_mm) : null,
-        h.roll_width_mm != null ? Number(h.roll_width_mm) : null,
+        thickness,
+        widthMm,
         null,
       );
     }
