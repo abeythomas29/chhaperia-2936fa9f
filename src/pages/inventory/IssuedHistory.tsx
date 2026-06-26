@@ -81,6 +81,46 @@ function clearInventoryCaches() {
   }
 }
 
+// Locate the matching raw_material_stock_entries 'issue' row that mirrors a
+// given stock_issues row. Uses the full key from spec §3:
+//   raw_material_id, lot_number, issued_to_user_id, date,
+//   issue_quantity, issue_unit, thickness_mm, gsm, notes.
+// Always constrained to entry_type='issue' so inward rows are never touched.
+async function findMirrorRmseId(rawIssue: any): Promise<string | null> {
+  const rmId = rawIssue?.raw_material_id;
+  if (!rmId) return null;
+  const issuedTo = rawIssue.issued_to_user_id ?? rawIssue.recipient_user_id ?? null;
+  const lot = rawIssue.lot_number ?? null;
+  const date = rawIssue.date ?? null;
+  const oldQty = rawIssue.issue_quantity ?? rawIssue.quantity ?? null;
+  const oldUnit = rawIssue.issue_unit ?? rawIssue.unit ?? null;
+  const thickness = rawIssue.thickness_mm ?? null;
+  const gsm = rawIssue.gsm ?? null;
+  const notes = rawIssue.notes ?? null;
+
+  let q: any = (supabase as any)
+    .from("raw_material_stock_entries")
+    .select("id")
+    .eq("raw_material_id", rmId)
+    .eq("entry_type", "issue");
+  if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+  if (lot != null) q = q.eq("lot_number", lot);
+  if (date) q = q.eq("date", date);
+  if (oldUnit) q = q.eq("issue_unit", oldUnit);
+  if (oldQty != null) q = q.eq("issue_quantity", oldQty);
+  if (thickness != null) q = q.eq("thickness_mm", thickness);
+  if (gsm != null) q = q.eq("gsm", gsm);
+  if (notes != null) q = q.eq("notes", notes);
+
+  const { data, error } = await q.limit(1);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn("findMirrorRmseId lookup failed", error);
+    return null;
+  }
+  return data && data.length ? (data[0] as any).id : null;
+}
+
 export default function IssuedHistory() {
   const { isAdmin, hasRole } = useAuth();
   const canView = isAdmin || hasRole("inventory_manager");
