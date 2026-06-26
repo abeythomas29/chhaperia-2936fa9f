@@ -160,12 +160,12 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     const [{ data: slitProd, error: slitErr }, { data: head36Prod, error: head36Err }] = await Promise.all([
       (supabase as any)
         .from("slitting_entries")
-        .select("id, date, product_code_id, cut_quantity_produced, unit, thickness_mm, gsm")
+        .select("id, date, product_code_id, cut_quantity_produced, cut_width_mm, unit, thickness_mm, gsm")
         .order("date", { ascending: false })
         .limit(2000),
       (supabase as any)
         .from("head36_entries")
-        .select("id, date, product_code_id, total_quantity, rolls_produced, length_per_tape_mtr, unit, thickness_mm, gsm")
+        .select("id, date, product_code_id, total_quantity, rolls_produced, roll_width_mm, length_per_tape_mtr, unit, thickness_mm, gsm")
         .order("date", { ascending: false })
         .limit(2000),
     ]);
