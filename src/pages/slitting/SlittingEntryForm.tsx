@@ -66,14 +66,18 @@ export default function SlittingEntryForm() {
   const reloadIssued = async () => {
     if (!user) return;
 
-    // Read ALL issues to this user (finished + raw) directly from stock_issues.
-    // Avoid the RPC because backend versions can throw
-    // "column reference stock_issue_id is ambiguous".
+    console.log("slitting current user", user.id, user.email);
+
+    // Only show raw_material issues assigned to this slitting manager.
     const { data: siRows, error: siErr } = await supabase
       .from("stock_issues")
       .select("*")
+      .eq("issue_type", "raw_material" as any)
+      .not("raw_material_id", "is", null)
       .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
       .order("date", { ascending: false });
+
+    console.log("slitting assigned stock_issues", siRows, siErr);
 
     if (siErr) {
       toast({ title: "Could not load issued materials", description: siErr.message, variant: "destructive" });
