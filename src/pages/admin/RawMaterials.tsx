@@ -1043,11 +1043,11 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                     thickness: t, gsm: g, lot, packType: null, packCount: 0, in: 0, out: 0,
                   };
                   grp.in += Number(e.quantity) || 0;
-                  const pc = e.pallet_count != null ? Number(e.pallet_count) : null;
-                  const rc = e.roll_count != null ? Number(e.roll_count) : null;
-                  if (pc != null && pc > 0) { grp.packCount += pc; grp.packType = grp.packType ?? "pallet"; }
-                  else if (rc != null && rc > 0) { grp.packCount += rc; grp.packType = grp.packType ?? "roll"; }
-                  else if (e.pallets != null && Number(e.pallets) > 0) { grp.packCount += Number(e.pallets); grp.packType = grp.packType ?? "pallet"; }
+                  // Live schema has only `pallets` (no pallet_count/roll_count).
+                  if (e.pallets != null && Number(e.pallets) > 0) {
+                    grp.packCount += Number(e.pallets);
+                    grp.packType = grp.packType ?? "pallet";
+                  }
                   groupMap.set(key, grp);
                 });
                 // Second pass: attribute outs. Exact lot match preferred; else if exactly one
