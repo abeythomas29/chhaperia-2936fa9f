@@ -506,6 +506,7 @@ export default function IssuedHistory() {
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Product / Material</TableHead>
+                <TableHead>Lot No</TableHead>
                 <TableHead>Issued To</TableHead>
                 <TableHead>Recipient Type</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
