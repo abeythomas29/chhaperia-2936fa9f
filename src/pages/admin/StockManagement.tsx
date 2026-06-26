@@ -156,22 +156,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       toast({ title: "Could not load stock issues", description: issueErr.message, variant: "destructive" });
     }
     const stockIssueRows = (issueData ?? []) as any[];
-    // eslint-disable-next-line no-console
-    console.log("Inventory stock_issues rows", stockIssueRows.length, stockIssueRows);
-    stockIssueRows.forEach((row) => {
-      // eslint-disable-next-line no-console
-      console.log("Inventory stock_issues row", {
-        id: row.id,
-        product_code_id: row.product_code_id,
-        issue_type: row.issue_type,
-        issue_quantity: row.issue_quantity,
-        issue_unit: row.issue_unit,
-        issue_quantity_sqm: row.issue_quantity_sqm,
-        issue_quantity_kg: row.issue_quantity_kg,
-        quantity: row.quantity,
-        unit: row.unit,
-      });
-    });
 
 
 
@@ -380,13 +364,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     setProductGsmByCode(gsmByCode);
     setProductGsmByCodeThickness(gsmByCodeThickness);
-    // eslint-disable-next-line no-console
-    console.log("[Inventory] produced sources counts:", {
-      production_entries: (prodData ?? []).length,
-      slitting_entries: (slitProd ?? []).length,
-      head36_entries: (head36Prod ?? []).length,
-      stock_issues: stockIssueRows.length,
-    });
 
     const finishedStockIssues = stockIssueRows.filter(isFinishedStockIssue);
     for (const i of finishedStockIssues) {
@@ -440,18 +417,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         issuedBuckets,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
-      });
-      const computedIssuedTotals = issuedBuckets;
-      // eslint-disable-next-line no-console
-      console.log("Issued for product", pcId, prod?.code ?? issueProductCodeMap.get(pcId) ?? "—", {
-        product_id: pcId,
-        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
-        produced_quantity: produced,
-        matched_stock_issues_rows: matchedStockIssues,
-        computed_issued_totals: computedIssuedTotals,
-        rendered_issued_value: computedIssuedTotals,
-        producedBuckets: prod?.buckets ?? {},
-        issuedBuckets,
       });
     }
     summaryList.sort((a, b) => a.code.localeCompare(b.code));
@@ -691,15 +656,6 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       return { unit: u, prod, iss, avail: prod > 0 ? prod - iss : null };
                     })
                     .filter(Boolean) as Array<{ unit: UnitKey; prod: number; iss: number; avail: number | null }>;
-                  // eslint-disable-next-line no-console
-                  console.log("Rendered stock card", {
-                    product_id: s.product_code_id,
-                    product_code: s.code,
-                    produced_quantity: s.produced,
-                    matched_stock_issues_rows: s.debugMatchedStockIssues,
-                    computed_issued_totals: s.issuedBuckets,
-                    rendered_issued_value: rows.map((r) => ({ unit: r.unit, issued: r.iss, available: r.avail })),
-                  });
                   if (rows.length === 0) {
                     return (
                       <div className="grid grid-cols-3 gap-2 text-center mb-3">

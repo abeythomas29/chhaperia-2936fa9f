@@ -194,13 +194,7 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       const t = r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock");
       return t === "raw_material" && r.raw_material_id;
     });
-    // eslint-disable-next-line no-console
-    console.log(
-      "[Inventory] raw_material_stock_entries fetched:",
-      rawEntries.length,
-      "| stock_issues(raw_material) fetched:",
-      stockIssueRawRows.length,
-    );
+    void stockIssueRawRows;
 
     // Resolve client names for sales
     const clientIds = [...new Set(salesRows.map((s) => s.client_id).filter(Boolean))];
@@ -233,31 +227,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const allEntries = [...inwardEntries, ...outwardEntries]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    // Debug: per-material in/out totals + per-lot balance (matches user spec
-    // grouping: raw_material_id + lot_number + thickness_mm + gsm).
-    const inTotals = new Map<string, number>();
-    const outTotals = new Map<string, number>();
-    const lotBalances = new Map<string, { in: number; out: number }>();
-    for (const e of allEntries) {
-      const qty = Number(e.quantity || 0);
-      if (e.kind === "in") inTotals.set(e.raw_material_id, (inTotals.get(e.raw_material_id) ?? 0) + qty);
-      else outTotals.set(e.raw_material_id, (outTotals.get(e.raw_material_id) ?? 0) + qty);
-      const key = `${e.raw_material_id}|${e.lot_number ?? "-"}|${e.thickness_mm ?? "-"}|${e.gsm ?? "-"}`;
-      const lb = lotBalances.get(key) ?? { in: 0, out: 0 };
-      if (e.kind === "in") lb.in += qty; else lb.out += qty;
-      lotBalances.set(key, lb);
-    }
-    // eslint-disable-next-line no-console
-    console.log("[Inventory] per-material In (kg):", Object.fromEntries(inTotals));
-    // eslint-disable-next-line no-console
-    console.log("[Inventory] per-material Out (kg):", Object.fromEntries(outTotals));
-    // eslint-disable-next-line no-console
-    console.log(
-      "[Inventory] per-lot balance:",
-      Object.fromEntries(
-        Array.from(lotBalances.entries()).map(([k, v]) => [k, { in: v.in, out: v.out, balance: v.in - v.out }]),
-      ),
-    );
 
     // Resolve names
     const materialMap = new Map((matRes.data ?? []).map((m: RawMaterial) => [m.id, m]));
@@ -522,11 +491,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
     const sqmValue = issueUnit === "sqm" ? qty : (gsmToSave && gsmToSave > 0 ? (qtyKg * 1000) / gsmToSave : null);
     const recipientUserId = issueRecipientId || null;
     const recipientType = recipientUserId ? getRawMaterialRecipientType(recipientUserId) : "production_manager";
-    console.log("raw material issue recipient", {
-      recipient_user_id: recipientUserId,
-      issued_to_user_id: recipientUserId,
-      recipient_type: recipientType,
-    });
 
     const { error } = await supabase.from("raw_material_stock_entries").insert({
       raw_material_id: issueMaterialId,
@@ -1210,20 +1174,6 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
                   : `${Number(e.quantity).toLocaleString()} ${e.material_unit}`;
                 // Allow edit/delete for inward + issue rows. Hide only for Sale rows (handled in Sales tab).
                 const canEditRow = !readOnly && canManageEntries && !isSale;
-                if (!canEditRow) {
-                  console.log("raw material row action check", {
-                    currentUserRole,
-                    isAdmin,
-                    isInventoryManager,
-                    isSuperAdmin,
-                    rowEntryType: (e as any).entry_type,
-                    rowEntryKind: (e as any).entry_kind,
-                    rowSource: e.source,
-                    rowAddedBy: e.added_by,
-                    currentUserId: user?.id,
-                    canEditDelete: canEditRow,
-                  });
-                }
                 return (
                 <TableRow key={e.id}>
                   <TableCell>{format(new Date(e.date), "dd/MM/yy")}</TableCell>

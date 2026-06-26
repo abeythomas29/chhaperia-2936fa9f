@@ -65,9 +65,6 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-
-    console.log("slitting current user", user.id, user.email);
-
     // Only show raw_material issues assigned to this slitting manager.
     const { data: siRows, error: siErr } = await (supabase as any)
       .from("stock_issues")
@@ -77,7 +74,6 @@ export default function SlittingEntryForm() {
       .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
       .order("date", { ascending: false });
 
-    console.log("slitting assigned stock_issues", siRows, siErr);
 
     if (siErr) {
       toast({ title: "Could not load issued materials", description: siErr.message, variant: "destructive" });
@@ -151,8 +147,6 @@ export default function SlittingEntryForm() {
         remaining_quantity: issued - consumed,
       };
     }).filter((x) => x.remaining_quantity > 0);
-
-    console.log("slitting pending materials", list);
     setIssuedMaterials(list);
   };
 
@@ -249,7 +243,7 @@ export default function SlittingEntryForm() {
     }
 
     setSubmitting(true);
-    console.log("slitting save selected stock_issue_id", form.issue_id, "selectedIssue", selectedIssue);
+
 
     const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
