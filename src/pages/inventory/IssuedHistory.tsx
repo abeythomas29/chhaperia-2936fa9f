@@ -373,61 +373,31 @@ export default function IssuedHistory() {
       return;
     }
 
-    // Mirror update to raw_material_stock_entries for raw material issues
+    // Mirror update to raw_material_stock_entries for raw material issues.
+    // Match strictly on entry_type='issue' so inward rows are never touched.
     if (editRow.kind === "Raw Material" && editRow.raw?.raw_material_id) {
-      const rmId = editRow.raw.raw_material_id;
-      const issuedTo = editRow.raw.issued_to_user_id ?? editRow.raw.recipient_user_id ?? null;
-      const oldDate = editRow.raw.date ?? null;
-      const oldQty = Number(editRow.raw.issue_quantity ?? editRow.raw.quantity ?? 0);
-      const oldUnit = editRow.raw.issue_unit ?? editRow.raw.unit ?? null;
-
-      let q = supabase
-        .from("raw_material_stock_entries")
-        .select("id")
-        .eq("raw_material_id", rmId)
-        .eq("entry_type", "issue");
-      if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
-      if (oldDate) q = q.eq("date", oldDate);
-      if (oldUnit) q = q.eq("issue_unit", oldUnit);
-      const { data: matches, error: findErr } = await q.limit(5);
-      if (findErr) {
-        // eslint-disable-next-line no-console
-        console.warn("lookup raw_material_stock_entries failed", findErr);
-      }
-      let matchId: string | null = null;
-      if (matches && matches.length) {
-        // Prefer exact qty match if multiple
-        const exact = (matches as any[]).find(async () => false);
-        matchId = (exact ?? matches[0]).id;
-        // try qty narrowing
-        const { data: exactRows } = await supabase
-          .from("raw_material_stock_entries")
-          .select("id")
-          .eq("raw_material_id", rmId)
-          .eq("entry_type", "issue")
-          .eq("issue_quantity", oldQty)
-          .limit(1);
-        if (exactRows && exactRows.length) matchId = exactRows[0].id;
-      }
-
+      const matchId = await findMirrorRmseId(editRow.raw);
       if (matchId) {
         const rmUpdate: any = {
           date: f.date || null,
-          quantity,
+          quantity: qtyKg ?? quantity,
           issue_quantity: quantity,
           issue_unit: unit,
           issue_quantity_kg: qtyKg,
-          issue_quantity_sqm: qtySqm,
+          // raw_material_stock_entries has no issue_quantity_sqm column in live
+          // schema; sqm lives only on stock_issues. Keep core fields only.
+          lot_number: editRow.raw.lot_number ?? null,
           thickness_mm: thickness,
           gsm: gsm,
           notes: f.notes || null,
           entry_type: "issue",
           entry_kind: "out",
         };
-        const { error: rmErr } = await supabase
+        const { error: rmErr } = await (supabase as any)
           .from("raw_material_stock_entries")
           .update(rmUpdate)
-          .eq("id", matchId);
+          .eq("id", matchId)
+          .eq("entry_type", "issue");
         if (rmErr) {
           // eslint-disable-next-line no-console
           console.error("update raw_material_stock_entries failed", rmErr);
@@ -442,6 +412,7 @@ export default function IssuedHistory() {
         console.warn("No matching raw_material_stock_entries row found for issue", editRow.id);
       }
     }
+
 
     setSaving(false);
     clearInventoryCaches();
