@@ -30,6 +30,8 @@ interface SlittingRow {
   cut_quantity_produced: number;
   cut_width_mm?: number | null;
   thickness_mm: number | null;
+  gsm: number | null;
+  stock_issue_id: string | null;
   notes: string | null;
   unit: string;
   product_codes: { code: string } | null;
@@ -46,9 +48,13 @@ interface Batch {
   date: string;
   productCode: string;
   thicknessMm: number | null;
+  gsm: number | null;
+  stockIssueId: string | null;
   sourceQuantity: number;
   producedQuantity: number;
   producedSqm: number;
+  alreadyReturned: number;
+  wastage: number;
   unit: string;
   cutCount: number;
   breakdown: { width: number | null; thickness: number | null; produced: number; sqm: number }[];
