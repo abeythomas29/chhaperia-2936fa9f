@@ -217,6 +217,7 @@ export default function IssuedHistory() {
           date: date ?? new Date().toISOString(),
           kind: inferredType === "raw_material" ? "Raw Material" : "Finished",
           item,
+          lot: r.lot_number ?? "-",
           recipient: recipientName,
           recipientType,
           quantity,
