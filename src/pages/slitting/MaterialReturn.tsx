@@ -169,78 +169,39 @@ export default function MaterialReturn() {
   }, [load]);
 
   const batches = useMemo<Batch[]>(() => {
-    // Pass 1: group by stable key (date + product + unit + thickness + source-note when present)
+    // Group rows. Primary key: stock_issue_id if present. Fallback: date + product + source-note + thickness + gsm.
     const groups = new Map<string, SlittingRow[]>();
     const ungrouped: SlittingRow[] = [];
 
     rows.forEach((row) => {
-      const sourceNote = extractSourceNote(row.notes);
       const productCode = row.product_codes?.code ?? null;
-      // Need at minimum: date + productCode to be groupable
+      if (row.stock_issue_id) {
+        const key = `SI||${row.stock_issue_id}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(row);
+        return;
+      }
       if (!row.date || !productCode) {
         ungrouped.push(row);
         return;
       }
+      const sourceNote = extractSourceNote(row.notes);
       const key = [
+        "FB",
         row.date,
         productCode,
         row.unit ?? "—",
         row.thickness_mm ?? "—",
+        row.gsm ?? "—",
         sourceNote || "__NO_SOURCE__",
       ].join("||");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(row);
     });
 
-    // Pass 2: for groups whose source-note marker was "__NO_SOURCE__",
-    // try to merge zero-source rows into a sibling group (same date/product/thickness) that has source>0.
-    const noSourceGroups: string[] = [];
-    const withSourceByTriple = new Map<string, string>(); // triple -> key
-    groups.forEach((rows, key) => {
-      const triple = key.split("||").slice(0, 4).join("||"); // date|product|unit|thickness
-      const hasSource = rows.some((r) => Number(r.source_quantity || 0) > 0);
-      if (key.endsWith("||__NO_SOURCE__")) {
-        noSourceGroups.push(key);
-      } else if (hasSource) {
-        withSourceByTriple.set(triple, key);
-      }
-    });
-
-    noSourceGroups.forEach((key) => {
-      const triple = key.split("||").slice(0, 4).join("||");
-      const target = withSourceByTriple.get(triple);
-      const rowsInGroup = groups.get(key)!;
-      if (target && target !== key) {
-        groups.get(target)!.push(...rowsInGroup);
-        groups.delete(key);
-      } else {
-        // Otherwise keep as its own group (still shows in dropdown)
-        const allHaveZero = rowsInGroup.every((r) => Number(r.source_quantity || 0) === 0);
-        if (allHaveZero) {
-          // Fallback: nearest same-date+product+thickness row with source>0 across all groups (even differing unit)
-          const looseTriple = [rowsInGroup[0].date, rowsInGroup[0].product_codes?.code ?? "—", rowsInGroup[0].thickness_mm ?? "—"].join("||");
-          let merged = false;
-          for (const [otherKey, otherRows] of groups.entries()) {
-            if (otherKey === key) continue;
-            const first = otherRows[0];
-            const otherLoose = [first.date, first.product_codes?.code ?? "—", first.thickness_mm ?? "—"].join("||");
-            if (otherLoose === looseTriple && otherRows.some((r) => Number(r.source_quantity || 0) > 0)) {
-              groups.get(otherKey)!.push(...rowsInGroup);
-              groups.delete(key);
-              merged = true;
-              break;
-            }
-          }
-          if (!merged) {
-            // leave as-is (its own dropdown option)
-          }
-        }
-      }
-    });
-
     const result: Batch[] = [];
 
-    groups.forEach((group, key) => {
+    const buildBatch = (key: string, group: SlittingRow[]): Batch => {
       const firstRow = group[0];
       const breakdown: Batch["breakdown"] = [];
       group.forEach((row) => {
@@ -252,46 +213,41 @@ export default function MaterialReturn() {
         if (existing) { existing.produced += produced; existing.sqm += sqm; }
         else breakdown.push({ width, thickness, produced, sqm });
       });
-
-      result.push({
+      const rowIds = group.map((r) => r.id);
+      const alreadyReturned = rowIds.reduce((s, id) => s + (returnsByRow[id] ?? 0), 0);
+      const sourceQuantity = group.reduce((s, r) => s + Number(r.source_quantity || 0), 0);
+      const producedSqm = breakdown.reduce((s, b) => s + b.sqm, 0);
+      return {
         key,
         anchorId: firstRow.id,
-        rowIds: group.map((r) => r.id),
+        rowIds,
         date: firstRow.date,
         productCode: firstRow.product_codes?.code ?? "—",
         thicknessMm: firstRow.thickness_mm,
-        sourceQuantity: group.reduce((s, r) => s + Number(r.source_quantity || 0), 0),
+        gsm: firstRow.gsm,
+        stockIssueId: firstRow.stock_issue_id,
+        sourceQuantity,
         producedQuantity: group.reduce((s, r) => s + Number(r.cut_quantity_produced || 0), 0),
-        producedSqm: breakdown.reduce((s, b) => s + b.sqm, 0),
+        producedSqm,
+        alreadyReturned,
+        wastage: Math.max(0, sourceQuantity - producedSqm - alreadyReturned),
         unit: firstRow.unit,
         cutCount: group.length,
         breakdown,
-      });
-    });
+      };
+    };
 
-    // Add ungroupable rows as standalone batches (never drop them)
-    ungrouped.forEach((row) => {
-      const width = row.cut_width_mm ?? null;
-      const produced = Number(row.cut_quantity_produced || 0);
-      const sqm = width != null ? (Number(width) / 1000) * produced : 0;
-      result.push({
-        key: `__SOLO__||${row.id}`,
-        anchorId: row.id,
-        rowIds: [row.id],
-        date: row.date,
-        productCode: row.product_codes?.code ?? "—",
-        thicknessMm: row.thickness_mm,
-        sourceQuantity: Number(row.source_quantity || 0),
-        producedQuantity: produced,
-        producedSqm: sqm,
-        unit: row.unit,
-        cutCount: 1,
-        breakdown: [{ width, thickness: row.thickness_mm, produced, sqm }],
-      });
-    });
+    groups.forEach((group, key) => result.push(buildBatch(key, group)));
+    ungrouped.forEach((row) => result.push(buildBatch(`__SOLO__||${row.id}`, [row])));
 
-    return result.sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [rows]);
+    // Spec §1: do not show 0 quantity rows separately — drop groups with no source, no produced, nothing returned.
+    const filtered = result.filter(
+      (b) => b.sourceQuantity > 0 || b.producedQuantity > 0 || b.alreadyReturned > 0,
+    );
+
+    return filtered.sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [rows, returnsByRow]);
+
 
   const selected = batches.find((batch) => batch.key === form.batch_key);
   const alreadyReturned = selected ? selected.rowIds.reduce((sum, id) => sum + (returnsByRow[id] ?? 0), 0) : 0;
