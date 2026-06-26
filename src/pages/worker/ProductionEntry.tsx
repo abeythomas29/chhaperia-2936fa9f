@@ -441,7 +441,7 @@ export default function ProductionEntry() {
 
     // Lab fields don't exist as columns in this DB — fold them into notes
     const labParts: string[] = [];
-    if (form.width_per_roll) labParts.push(`Width: ${form.width_per_roll}`);
+    if (form.width_per_roll) labParts.push(`width_mm=${form.width_per_roll}`);
     if (form.gsm) labParts.push(`GSM: ${form.gsm}`);
     if (form.swelling_speed) labParts.push(`Swelling Speed: ${form.swelling_speed}`);
     if (form.swelling_height) labParts.push(`Swelling Height: ${form.swelling_height}`);
@@ -475,6 +475,8 @@ export default function ProductionEntry() {
           quantity_per_roll: Number(r.length_per_roll) * (Number(r.width_per_roll) / 1000),
           unit: form.unit,
           thickness_mm: Number(r.thickness_mm),
+          ...(form.gsm ? { gsm: Number(form.gsm) } : {}),
+          notes: [baseExtras.notes, `width_mm=${r.width_per_roll}`].filter(Boolean).join(" || "),
           ...baseExtras,
         }))
       : [{
@@ -485,6 +487,7 @@ export default function ProductionEntry() {
           quantity_per_roll: Number(form.length_per_roll) * (Number(form.width_per_roll) / 1000),
           unit: form.unit,
           ...(form.thickness_mm ? { thickness_mm: Number(form.thickness_mm) } : {}),
+          ...(form.gsm ? { gsm: Number(form.gsm) } : {}),
           ...baseExtras,
         }];
 
