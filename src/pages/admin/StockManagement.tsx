@@ -843,10 +843,15 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                     const prodRaw = s.producedBuckets[u];
                     const issRaw = s.issuedBuckets[u];
                     const prod = prodRaw != null && isFinite(prodRaw) ? Number(prodRaw) : null;
-                    const iss = issRaw != null && isFinite(issRaw) ? Number(issRaw) : null;
-                    const avail = prod != null ? (prod - (iss ?? 0)) : null;
-                    return { unit: u, prod, iss, avail };
+                    const iss = issRaw != null && isFinite(issRaw) ? Number(issRaw) : (prod != null ? 0 : null);
+                    const avail = prod != null && iss != null ? (prod - iss) : null;
+                    const missing = getMissingUnitReason(u, s.conversion);
+                    return { unit: u, prod, iss, avail, missing };
                   });
+                  const renderValue = (value: number | null, missing: string | null, emphasisClass: string) => {
+                    if (value != null) return <span className={emphasisClass}>{fmt(value)}</span>;
+                    return <span className="text-[11px] leading-tight text-muted-foreground">{missing ?? "—"}</span>;
+                  };
                   return (
                     <div className="space-y-2 mb-3">
                       <div className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 text-xs text-muted-foreground px-1">
@@ -858,19 +863,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                       {rows.map((r) => (
                         <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
                           <span className="font-medium text-xs">{label[r.unit]}</span>
-                          <span className="text-right text-green-600 font-semibold">{r.prod != null ? fmt(r.prod) : "—"}</span>
-                          <span className="text-right text-red-500 font-semibold">{r.iss != null ? fmt(r.iss) : "—"}</span>
+                          <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
+                          <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
                           <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
-                            {r.avail == null ? "—" : fmt(r.avail)}
+                            {r.avail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(r.avail)}
                           </span>
                         </div>
                       ))}
+                      <p className="px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
+                        {formatConversionData(s.conversion)}
+                      </p>
                     </div>
                   );
                 })()}
 
-                {/* Thickness Breakdown — Meters | SQM | KG */}
-                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (() => {
+                {/* Thickness Breakdown — Meters | SQM | KG | Missing Data */}
+                {s.thicknessBreakdown.length > 0 && (() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
                   return (
                     <div className="mt-2 border rounded-md overflow-hidden">
@@ -878,22 +886,26 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                         Thickness Breakdown
                       </div>
                       <div className="divide-y">
-                        <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                        <div className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
                           <span>Thickness</span>
                           <span className="text-right">Meters</span>
                           <span className="text-right">SQM</span>
                           <span className="text-right">KG</span>
+                          <span>Missing Data</span>
                         </div>
                         {s.thicknessBreakdown.map((t) => {
                           const m = t.producedBuckets.meters;
                           const sq = t.producedBuckets.sqm;
                           const kg = t.producedBuckets.kg;
+                          const missingSqm = getMissingUnitReason("sqm", t.conversion);
+                          const missingKg = getMissingUnitReason("kg", t.conversion);
                           return (
-                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                            <div key={String(t.thickness_mm)} className="grid grid-cols-[0.9fr_1fr_1fr_1fr_1.2fr] gap-2 px-3 py-1.5 text-sm items-center">
                               <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
                               <span className="text-right font-semibold">{m != null && isFinite(m) ? fmt(m) : "—"}</span>
-                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : "—"}</span>
-                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : "—"}</span>
+                              <span className="text-right font-semibold">{sq != null && isFinite(sq) ? fmt(sq) : <span className="text-[11px] font-normal text-muted-foreground">{missingSqm ?? "—"}</span>}</span>
+                              <span className="text-right font-semibold">{kg != null && isFinite(kg) ? fmt(kg) : <span className="text-[11px] font-normal text-muted-foreground">{missingKg ?? "—"}</span>}</span>
+                              <span className="text-[11px] leading-tight text-muted-foreground">{t.conversion.missingData}</span>
                             </div>
                           );
                         })}
