@@ -69,10 +69,10 @@ export default function SlittingEntryForm() {
     console.log("slitting current user", user.id, user.email);
 
     // Only show raw_material issues assigned to this slitting manager.
-    const { data: siRows, error: siErr } = await supabase
+    const { data: siRows, error: siErr } = await (supabase as any)
       .from("stock_issues")
       .select("*")
-      .eq("issue_type", "raw_material" as any)
+      .eq("issue_type", "raw_material")
       .not("raw_material_id", "is", null)
       .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
       .order("date", { ascending: false });
