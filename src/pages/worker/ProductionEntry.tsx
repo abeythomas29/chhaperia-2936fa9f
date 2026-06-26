@@ -477,7 +477,7 @@ export default function ProductionEntry() {
           thickness_mm: Number(r.thickness_mm),
           ...(form.gsm ? { gsm: Number(form.gsm) } : {}),
           ...baseExtras,
-          notes: [baseExtras.notes, `width_mm=${r.width_per_roll}`].filter(Boolean).join(" || "),
+          notes: [`width_mm=${r.width_per_roll}`, baseExtras.notes].filter(Boolean).join(" || "),
         }))
       : [{
           product_code_id: form.product_code_id,
