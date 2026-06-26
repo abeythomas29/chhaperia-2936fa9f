@@ -143,6 +143,7 @@ export default function SlittingEntryForm() {
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
         gsm: r.gsm != null ? Number(r.gsm) : null,
         raw_material_id: r.raw_material_id ?? null,
+        lot_number: r.lot_number ?? null,
         unit,
         notes: r.notes,
         issued_quantity: issued,
@@ -151,6 +152,7 @@ export default function SlittingEntryForm() {
       };
     }).filter((x) => x.remaining_quantity > 0);
 
+    console.log("slitting pending materials", list);
     setIssuedMaterials(list);
   };
 
