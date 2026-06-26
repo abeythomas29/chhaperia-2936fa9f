@@ -359,7 +359,7 @@ export default function MaterialReturn() {
                 <SelectContent>
                   {batches.map((batch) => (
                     <SelectItem key={batch.key} value={batch.key}>
-                      {format(new Date(batch.date), "dd/MM/yy")} — {batch.productCode} — {batch.thicknessMm ?? "—"} mm — {formatNumber(batch.sourceQuantity)} {batch.unit}{batch.cutCount > 1 ? ` — ${batch.cutCount} cuts merged` : ""}
+                      {batch.productCode} | {format(new Date(batch.date), "dd/MM/yy")} | {batch.thicknessMm ?? "—"} mm | GSM {batch.gsm ?? "—"} | Src {formatNumber(batch.sourceQuantity)} | Prod {formatNumber(batch.producedSqm)} | Ret {formatNumber(batch.alreadyReturned)} | Waste {formatNumber(batch.wastage)} {batch.unit}
                     </SelectItem>
                   ))}
                 </SelectContent>
