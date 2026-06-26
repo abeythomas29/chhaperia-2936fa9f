@@ -647,7 +647,8 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
               <CardContent>
                 {(() => {
                   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-                  const units: UnitKey[] = ["meters", "sqm", "kg"];
+                  // Per spec: Finished Stock cards show only SQM and KG (not meters).
+                  const units: UnitKey[] = ["sqm", "kg"];
                   const rows = units
                     .map((u) => {
                       const prod = Number(s.producedBuckets[u] ?? 0);
@@ -685,24 +686,50 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                   );
                 })()}
 
-                {/* Thickness Breakdown */}
-                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (
-                  <div className="mt-2 border rounded-md overflow-hidden">
-                    <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                      Thickness Breakdown
-                    </div>
-                    <div className="divide-y">
-                      {s.thicknessBreakdown.map((t) => (
-                        <div key={String(t.thickness_mm)} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                          <span className="font-medium">
-                            {t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}
-                          </span>
-                          <span className="font-semibold">{t.produced.toLocaleString()} {s.unit}</span>
+                {/* Thickness Breakdown — show SQM and KG per thickness */}
+                {s.thicknessBreakdown.length > 0 && s.thicknessBreakdown.some(t => t.thickness_mm != null) && (() => {
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const primary = (() => {
+                    const u = String(s.unit ?? "").toLowerCase();
+                    if (u === "sqm" || u === "sqmtr" || u === "sq m" || u === "m2") return "sqm";
+                    if (u === "kg" || u === "kgs" || u === "kilogram") return "kg";
+                    return "meters";
+                  })();
+                  return (
+                    <div className="mt-2 border rounded-md overflow-hidden">
+                      <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                        Thickness Breakdown
+                      </div>
+                      <div className="divide-y">
+                        <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                          <span>Thickness</span>
+                          <span className="text-right">SQM</span>
+                          <span className="text-right">KG</span>
                         </div>
-                      ))}
+                        {s.thicknessBreakdown.map((t) => {
+                          const gsmKey = `${s.product_code_id}__${t.thickness_mm ?? ""}`;
+                          const gsm = productGsmByCodeThickness[gsmKey] ?? productGsmByCode[s.product_code_id] ?? null;
+                          let sqm: number | null = null;
+                          let kg: number | null = null;
+                          if (primary === "sqm") {
+                            sqm = t.produced;
+                            if (gsm && gsm > 0) kg = (t.produced * gsm) / 1000;
+                          } else if (primary === "kg") {
+                            kg = t.produced;
+                            if (gsm && gsm > 0) sqm = (t.produced * 1000) / gsm;
+                          }
+                          return (
+                            <div key={String(t.thickness_mm)} className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-3 py-1.5 text-sm items-center">
+                              <span className="font-medium">{t.thickness_mm != null ? `${t.thickness_mm} mm` : "No thickness"}</span>
+                              <span className="text-right font-semibold">{sqm != null ? fmt(sqm) : "—"}</span>
+                              <span className="text-right font-semibold">{kg != null ? fmt(kg) : "—"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Per-card Issue button removed — use top-level Issue Stock button */}
               </CardContent>
