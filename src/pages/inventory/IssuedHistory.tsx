@@ -41,6 +41,7 @@ interface Row {
   date: string;
   kind: "Finished" | "Raw Material";
   item: string;
+  lot: string;
   recipient: string;
   recipientType: string;
   quantity: number;
@@ -78,6 +79,46 @@ function clearInventoryCaches() {
   } catch {
     // ignore
   }
+}
+
+// Locate the matching raw_material_stock_entries 'issue' row that mirrors a
+// given stock_issues row. Uses the full key from spec §3:
+//   raw_material_id, lot_number, issued_to_user_id, date,
+//   issue_quantity, issue_unit, thickness_mm, gsm, notes.
+// Always constrained to entry_type='issue' so inward rows are never touched.
+async function findMirrorRmseId(rawIssue: any): Promise<string | null> {
+  const rmId = rawIssue?.raw_material_id;
+  if (!rmId) return null;
+  const issuedTo = rawIssue.issued_to_user_id ?? rawIssue.recipient_user_id ?? null;
+  const lot = rawIssue.lot_number ?? null;
+  const date = rawIssue.date ?? null;
+  const oldQty = rawIssue.issue_quantity ?? rawIssue.quantity ?? null;
+  const oldUnit = rawIssue.issue_unit ?? rawIssue.unit ?? null;
+  const thickness = rawIssue.thickness_mm ?? null;
+  const gsm = rawIssue.gsm ?? null;
+  const notes = rawIssue.notes ?? null;
+
+  let q: any = (supabase as any)
+    .from("raw_material_stock_entries")
+    .select("id")
+    .eq("raw_material_id", rmId)
+    .eq("entry_type", "issue");
+  if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
+  if (lot != null) q = q.eq("lot_number", lot);
+  if (date) q = q.eq("date", date);
+  if (oldUnit) q = q.eq("issue_unit", oldUnit);
+  if (oldQty != null) q = q.eq("issue_quantity", oldQty);
+  if (thickness != null) q = q.eq("thickness_mm", thickness);
+  if (gsm != null) q = q.eq("gsm", gsm);
+  if (notes != null) q = q.eq("notes", notes);
+
+  const { data, error } = await q.limit(1);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn("findMirrorRmseId lookup failed", error);
+    return null;
+  }
+  return data && data.length ? (data[0] as any).id : null;
 }
 
 export default function IssuedHistory() {
@@ -216,6 +257,7 @@ export default function IssuedHistory() {
           date: date ?? new Date().toISOString(),
           kind: inferredType === "raw_material" ? "Raw Material" : "Finished",
           item,
+          lot: r.lot_number ?? "-",
           recipient: recipientName,
           recipientType,
           quantity,
@@ -331,61 +373,31 @@ export default function IssuedHistory() {
       return;
     }
 
-    // Mirror update to raw_material_stock_entries for raw material issues
+    // Mirror update to raw_material_stock_entries for raw material issues.
+    // Match strictly on entry_type='issue' so inward rows are never touched.
     if (editRow.kind === "Raw Material" && editRow.raw?.raw_material_id) {
-      const rmId = editRow.raw.raw_material_id;
-      const issuedTo = editRow.raw.issued_to_user_id ?? editRow.raw.recipient_user_id ?? null;
-      const oldDate = editRow.raw.date ?? null;
-      const oldQty = Number(editRow.raw.issue_quantity ?? editRow.raw.quantity ?? 0);
-      const oldUnit = editRow.raw.issue_unit ?? editRow.raw.unit ?? null;
-
-      let q = supabase
-        .from("raw_material_stock_entries")
-        .select("id")
-        .eq("raw_material_id", rmId)
-        .eq("entry_type", "issue");
-      if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
-      if (oldDate) q = q.eq("date", oldDate);
-      if (oldUnit) q = q.eq("issue_unit", oldUnit);
-      const { data: matches, error: findErr } = await q.limit(5);
-      if (findErr) {
-        // eslint-disable-next-line no-console
-        console.warn("lookup raw_material_stock_entries failed", findErr);
-      }
-      let matchId: string | null = null;
-      if (matches && matches.length) {
-        // Prefer exact qty match if multiple
-        const exact = (matches as any[]).find(async () => false);
-        matchId = (exact ?? matches[0]).id;
-        // try qty narrowing
-        const { data: exactRows } = await supabase
-          .from("raw_material_stock_entries")
-          .select("id")
-          .eq("raw_material_id", rmId)
-          .eq("entry_type", "issue")
-          .eq("issue_quantity", oldQty)
-          .limit(1);
-        if (exactRows && exactRows.length) matchId = exactRows[0].id;
-      }
-
+      const matchId = await findMirrorRmseId(editRow.raw);
       if (matchId) {
         const rmUpdate: any = {
           date: f.date || null,
-          quantity,
+          quantity: qtyKg ?? quantity,
           issue_quantity: quantity,
           issue_unit: unit,
           issue_quantity_kg: qtyKg,
-          issue_quantity_sqm: qtySqm,
+          // raw_material_stock_entries has no issue_quantity_sqm column in live
+          // schema; sqm lives only on stock_issues. Keep core fields only.
+          lot_number: editRow.raw.lot_number ?? null,
           thickness_mm: thickness,
           gsm: gsm,
           notes: f.notes || null,
           entry_type: "issue",
           entry_kind: "out",
         };
-        const { error: rmErr } = await supabase
+        const { error: rmErr } = await (supabase as any)
           .from("raw_material_stock_entries")
           .update(rmUpdate)
-          .eq("id", matchId);
+          .eq("id", matchId)
+          .eq("entry_type", "issue");
         if (rmErr) {
           // eslint-disable-next-line no-console
           console.error("update raw_material_stock_entries failed", rmErr);
@@ -400,6 +412,7 @@ export default function IssuedHistory() {
         console.warn("No matching raw_material_stock_entries row found for issue", editRow.id);
       }
     }
+
 
     setSaving(false);
     clearInventoryCaches();
@@ -427,37 +440,12 @@ export default function IssuedHistory() {
       return;
     }
 
-    // Mirror delete on raw_material_stock_entries (entry_type='issue' only)
+    // Mirror delete on raw_material_stock_entries (entry_type='issue' only).
+    // Spec §3: never delete inward rows.
     if (deleteRow.kind === "Raw Material" && deleteRow.raw?.raw_material_id) {
-      const rmId = deleteRow.raw.raw_material_id;
-      const issuedTo = deleteRow.raw.issued_to_user_id ?? deleteRow.raw.recipient_user_id ?? null;
-      const oldDate = deleteRow.raw.date ?? null;
-      const oldQty = Number(deleteRow.raw.issue_quantity ?? deleteRow.raw.quantity ?? 0);
-      const oldUnit = deleteRow.raw.issue_unit ?? deleteRow.raw.unit ?? null;
-
-      let q = supabase
-        .from("raw_material_stock_entries")
-        .select("id")
-        .eq("raw_material_id", rmId)
-        .eq("entry_type", "issue");
-      if (issuedTo) q = q.eq("issued_to_user_id", issuedTo);
-      if (oldDate) q = q.eq("date", oldDate);
-      if (oldUnit) q = q.eq("issue_unit", oldUnit);
-      const { data: matches } = await q.limit(5);
-      let matchId: string | null = null;
-      if (matches && matches.length) {
-        matchId = matches[0].id;
-        const { data: exactRows } = await supabase
-          .from("raw_material_stock_entries")
-          .select("id")
-          .eq("raw_material_id", rmId)
-          .eq("entry_type", "issue")
-          .eq("issue_quantity", oldQty)
-          .limit(1);
-        if (exactRows && exactRows.length) matchId = exactRows[0].id;
-      }
+      const matchId = await findMirrorRmseId(deleteRow.raw);
       if (matchId) {
-        const { error: rmErr } = await supabase
+        const { error: rmErr } = await (supabase as any)
           .from("raw_material_stock_entries")
           .delete()
           .eq("id", matchId)
@@ -476,6 +464,7 @@ export default function IssuedHistory() {
         console.warn("No matching raw_material_stock_entries row found for delete", deleteRow.id);
       }
     }
+
 
     setDeleting(false);
     clearInventoryCaches();
@@ -517,6 +506,7 @@ export default function IssuedHistory() {
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Product / Material</TableHead>
+                <TableHead>Lot No</TableHead>
                 <TableHead>Issued To</TableHead>
                 <TableHead>Recipient Type</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
@@ -532,13 +522,13 @@ export default function IssuedHistory() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 13 : 12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canManage ? 14 : 13} className="text-center py-8 text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 13 : 12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canManage ? 14 : 13} className="text-center py-8 text-muted-foreground">
                     No issued records found
                   </TableCell>
                 </TableRow>
@@ -554,6 +544,7 @@ export default function IssuedHistory() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{r.item}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.lot}</TableCell>
                     <TableCell>{r.recipient}</TableCell>
                     <TableCell className="capitalize">
                       {r.recipientType.replace("_", " ")}
