@@ -36,7 +36,10 @@ const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
 const formatConversionData = (conversion: ConversionInfo) => {
   const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
   const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
-  if (width || gsm) return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}.`;
+  if (width || gsm) {
+    const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
+    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.`;
+  }
   return "Conversion data missing: width/GSM not found.";
 };
 
