@@ -1,1 +1,4 @@
+# NOTE: The live application backend is https://eezbgxbbgaqifgcxxbun.supabase.co
+# This config.toml belongs to the Lovable Cloud workspace project (orkfpujabjltzsgxlzor)
+# and is not the runtime backend for the app. See src/integrations/supabase/client.ts.
 project_id = "orkfpujabjltzsgxlzor"
