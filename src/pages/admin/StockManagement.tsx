@@ -469,6 +469,62 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       }
     }
 
+    // ── Backfill pass: fill missing sqm/kg in every thickness row using
+    // the best known width/gsm for the (product, thickness) group, then
+    // recompute pcTotals/issued buckets from the resulting thickness rows.
+    const backfillBuckets = (b: Buckets, width: number | null, gsm: number | null) => {
+      if (b.sqm == null && b.meters != null && width && width > 0) {
+        b.sqm = b.meters * (width / 1000);
+      }
+      if (b.meters == null && b.sqm != null && width && width > 0) {
+        b.meters = b.sqm / (width / 1000);
+      }
+      if (b.kg == null && b.sqm != null && gsm && gsm > 0) {
+        b.kg = (b.sqm * gsm) / 1000;
+      }
+      if (b.sqm == null && b.kg != null && gsm && gsm > 0) {
+        b.sqm = (b.kg * 1000) / gsm;
+        if (b.meters == null && width && width > 0) b.meters = b.sqm / (width / 1000);
+      }
+    };
+    for (const [pcId, tMap] of thicknessMap.entries()) {
+      const codeForLog = pcTotals.get(pcId)?.code ?? "—";
+      for (const [t, row] of tMap.entries()) {
+        const key = `${pcId}__${t ?? ""}`;
+        const widthSource = widthByCodeThickness[key] != null ? "thickness" : widthByCode[pcId] != null ? "product" : "none";
+        const width = widthByCodeThickness[key] ?? widthByCode[pcId] ?? null;
+        const gsmSource = gsmByCodeThickness[key] != null ? "thickness" : gsmByCode[pcId] != null ? "product" : "none";
+        const gsm = gsmByCodeThickness[key] ?? gsmByCode[pcId] ?? null;
+        backfillBuckets(row.producedBuckets, width, gsm);
+        backfillBuckets(row.issuedBuckets, width, gsm);
+        // eslint-disable-next-line no-console
+        console.log("conversion debug", {
+          productCode: codeForLog,
+          thickness: t,
+          meters: row.producedBuckets.meters,
+          widthSource,
+          widthMm: width,
+          gsmSource,
+          gsm,
+          sqm: row.producedBuckets.sqm,
+          kg: row.producedBuckets.kg,
+        });
+      }
+      // Recompute top-card produced + issued buckets as sum of thickness rows.
+      const pcEntry = pcTotals.get(pcId);
+      const summedProduced: Buckets = {};
+      const summedIssued: Buckets = {};
+      for (const row of tMap.values()) {
+        (["meters", "sqm", "kg"] as UnitKey[]).forEach((u) => {
+          if (row.producedBuckets[u] != null) summedProduced[u] = (summedProduced[u] ?? 0) + (row.producedBuckets[u] as number);
+          if (row.issuedBuckets[u] != null) summedIssued[u] = (summedIssued[u] ?? 0) + (row.issuedBuckets[u] as number);
+        });
+      }
+      if (pcEntry) pcEntry.buckets = summedProduced;
+      else pcTotals.set(pcId, { code: "—", unit: "meters", produced: 0, buckets: summedProduced });
+      if (Object.keys(summedIssued).length) issuedBucketsMap.set(pcId, summedIssued);
+    }
+
     const allPcIds = new Set([...pcTotals.keys(), ...issuedBucketsMap.keys(), ...issueMap.keys()]);
     const summaryList: StockSummary[] = [];
     for (const pcId of allPcIds) {
