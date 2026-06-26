@@ -120,10 +120,10 @@ export default function MaterialReturn() {
     if (cachedRows.length) setRows(cachedRows);
 
     // Minimal safe field set - only columns guaranteed to exist
-    const selectFields = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, unit, notes, thickness_mm, product_codes(code)";
+    const selectFields = "id, date, source_quantity, cut_quantity_produced, cut_width_mm, unit, notes, thickness_mm, gsm, stock_issue_id, product_codes(code)";
     const { data, error } = await supabase
       .from("slitting_entries")
-      .select(selectFields)
+      .select(selectFields as any)
       .order("date", { ascending: false })
       .limit(500);
 
