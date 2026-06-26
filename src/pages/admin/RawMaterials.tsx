@@ -426,11 +426,11 @@ export default function RawMaterials({ embedded = false, readOnly = false }: Raw
       const k = keyOf(lot, t, g);
       const v = map.get(k) ?? { key: k, lot, thickness: t, gsm: g, inKg: 0, outKg: 0, balanceKg: 0, packCount: 0, packType: null };
       v.inKg += Number(e.quantity) || 0;
-      const pc = (e as any).pallet_count != null ? Number((e as any).pallet_count) : null;
-      const rc = (e as any).roll_count != null ? Number((e as any).roll_count) : null;
-      if (pc != null && pc > 0) { v.packCount += pc; v.packType = v.packType ?? "pallet"; }
-      else if (rc != null && rc > 0) { v.packCount += rc; v.packType = v.packType ?? "roll"; }
-      else if (e.pallets != null && Number(e.pallets) > 0) { v.packCount += Number(e.pallets); v.packType = v.packType ?? "pallet"; }
+      // Live schema has only `pallets`; treat as pack count, type unknown.
+      if (e.pallets != null && Number(e.pallets) > 0) {
+        v.packCount += Number(e.pallets);
+        v.packType = v.packType ?? "pallet";
+      }
       map.set(k, v);
     });
     // Attribute outs
