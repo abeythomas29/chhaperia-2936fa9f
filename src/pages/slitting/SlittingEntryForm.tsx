@@ -65,88 +65,81 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-    // Only show raw_material issues assigned to this slitting manager.
-    const { data: siRows, error: siErr } = await (supabase as any)
-      .from("stock_issues")
-      .select("*")
-      .eq("issue_type", "raw_material")
-      .not("raw_material_id", "is", null)
-      .or(`recipient_user_id.eq.${user.id},issued_to_user_id.eq.${user.id}`)
-      .order("date", { ascending: false });
-
-
-    if (siErr) {
-      toast({ title: "Could not load issued materials", description: siErr.message, variant: "destructive" });
-      console.error("stock_issues fetch error", siErr);
+    // Primary source: RPC list_slitting_issued_materials() — returns BOTH raw_material
+    // and finished_stock issues assigned to the calling slitting manager.
+    const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc(
+      "list_slitting_issued_materials"
+    );
+    if (rpcErr) {
+      console.error("list_slitting_issued_materials RPC error", rpcErr);
+      toast({
+        title: "Could not load issued materials",
+        description: rpcErr.message,
+        variant: "destructive",
+      });
       setIssuedMaterials([]);
       return;
     }
 
-    const issues = ((siRows ?? []) as any[]).map((r) => ({
-      ...r,
-      _type: (r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock")) as
-        | "raw_material"
-        | "finished_stock",
-    }));
+    const rpcList = (rpcRows ?? []) as any[];
+    const issueIds = rpcList.map((r) => r.issue_id as string).filter(Boolean);
 
-    // Lookups
-    const rmIds = Array.from(new Set(issues.filter((r) => r._type === "raw_material").map((r) => r.raw_material_id).filter(Boolean)));
-    const pcIds = Array.from(new Set(issues.filter((r) => r._type === "finished_stock").map((r) => r.product_code_id).filter(Boolean)));
-    const [rmRes, pcRes] = await Promise.all([
-      rmIds.length ? supabase.from("raw_materials").select("id, name").in("id", rmIds) : Promise.resolve({ data: [] as any[] }),
-      pcIds.length ? supabase.from("product_codes").select("id, code").in("id", pcIds) : Promise.resolve({ data: [] as any[] }),
-    ]);
-    const rmMap = new Map<string, string>((rmRes.data ?? []).map((r: any) => [r.id, r.name]));
-    const pcMap = new Map<string, string>((pcRes.data ?? []).map((r: any) => [r.id, r.code]));
-
-    // Consumed quantity per stock_issue_id from slitting_entries (single-table query — no ambiguity).
-    const issueIds = issues.map((r) => r.id as string);
-    const consumedMap = new Map<string, number>();
+    // Enrich with raw_material_id / lot_number / gsm from stock_issues
+    let siMap = new Map<string, any>();
+    let rmMap = new Map<string, string>();
     if (issueIds.length) {
-      const { data: consumedRows, error: cErr } = await supabase
-        .from("slitting_entries")
-        .select("stock_issue_id, source_quantity")
-        .in("stock_issue_id", issueIds);
-      if (cErr) {
-        console.error("slitting_entries consumed lookup error", cErr);
-      }
-      for (const c of (consumedRows ?? []) as any[]) {
-        const k = c.stock_issue_id as string;
-        if (!k) continue;
-        consumedMap.set(k, (consumedMap.get(k) ?? 0) + Number(c.source_quantity ?? 0));
+      const { data: siRows, error: siErr } = await (supabase as any)
+        .from("stock_issues")
+        .select("*")
+        .in("id", issueIds);
+      if (siErr) console.error("stock_issues enrichment error", siErr);
+      siMap = new Map<string, any>(((siRows ?? []) as any[]).map((r) => [r.id, r]));
+      const rmIds = Array.from(
+        new Set(
+          ((siRows ?? []) as any[])
+            .map((r) => r.raw_material_id)
+            .filter(Boolean)
+        )
+      );
+      if (rmIds.length) {
+        const { data: rmRows } = await supabase
+          .from("raw_materials")
+          .select("id, name")
+          .in("id", rmIds);
+        rmMap = new Map<string, string>(
+          ((rmRows ?? []) as any[]).map((r) => [r.id, r.name])
+        );
       }
     }
 
-    const list: IssuedMaterial[] = issues.map((r) => {
-      const unit = r.issue_unit ?? r.unit ?? (r._type === "raw_material" ? "kg" : "sqm");
-      const issuedKg = r.issue_quantity_kg != null ? Number(r.issue_quantity_kg) : null;
-      const issuedSqm = r.issue_quantity_sqm != null ? Number(r.issue_quantity_sqm) : null;
-      const issuedRaw = Number(r.issue_quantity ?? r.quantity ?? 0);
-      const issued = unit === "kg"
-        ? (issuedKg ?? issuedRaw)
-        : unit === "sqm"
-          ? (issuedSqm ?? issuedRaw)
-          : issuedRaw;
-      const consumed = consumedMap.get(r.id) ?? 0;
-      const label = r._type === "raw_material"
-        ? (rmMap.get(r.raw_material_id) ?? "Raw Material")
-        : (pcMap.get(r.product_code_id) ?? "—");
+    const list: IssuedMaterial[] = rpcList.map((r) => {
+      const si = siMap.get(r.issue_id) ?? {};
+      const isRaw = !!si.raw_material_id;
+      const label = isRaw
+        ? (rmMap.get(si.raw_material_id) ?? "Raw Material")
+        : (r.product_code ?? "—");
+      const gsm =
+        si.gsm != null ? Number(si.gsm) : null;
       return {
-        issue_id: r.id,
-        issue_date: r.date ?? r.created_at,
-        product_code_id: r._type === "finished_stock" ? (r.product_code_id ?? "") : "",
+        issue_id: r.issue_id,
+        issue_date: r.issue_date,
+        product_code_id: r.product_code_id ?? "",
         product_code: label,
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
-        gsm: r.gsm != null ? Number(r.gsm) : null,
-        raw_material_id: r.raw_material_id ?? null,
-        lot_number: r.lot_number ?? null,
-        unit,
+        gsm,
+        raw_material_id: si.raw_material_id ?? null,
+        lot_number: si.lot_number ?? null,
+        unit: r.unit ?? si.issue_unit ?? si.unit ?? null,
         notes: r.notes,
-        issued_quantity: issued,
-        consumed_quantity: consumed,
-        remaining_quantity: issued - consumed,
+        issued_quantity: Number(r.issued_quantity ?? 0),
+        consumed_quantity: Number(r.consumed_quantity ?? 0),
+        remaining_quantity: Number(r.remaining_quantity ?? 0),
       };
-    }).filter((x) => x.remaining_quantity > 0);
+    });
+
+    if (list.length === 0) {
+      console.info("list_slitting_issued_materials returned no rows for user", user.id);
+    }
     setIssuedMaterials(list);
   };
 
