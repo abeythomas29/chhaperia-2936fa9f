@@ -18,12 +18,14 @@ interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; 
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 interface IssuedMaterial {
   issue_id: string;
-  issue_date: string;
-  product_code_id: string;
+  issue_type: "raw_material" | "finished_stock" | string;
+  product_code_id: string | null;
+  raw_material_id: string | null;
+  display_name: string;
   product_code: string | null;
+  raw_material_name: string | null;
   thickness_mm: number | null;
   gsm: number | null;
-  raw_material_id: string | null;
   lot_number: string | null;
   unit: string | null;
   notes: string | null;
