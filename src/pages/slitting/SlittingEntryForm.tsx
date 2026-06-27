@@ -18,12 +18,14 @@ interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; 
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 interface IssuedMaterial {
   issue_id: string;
-  issue_date: string;
-  product_code_id: string;
+  issue_type: "raw_material" | "finished_stock" | string;
+  product_code_id: string | null;
+  raw_material_id: string | null;
+  display_name: string;
   product_code: string | null;
+  raw_material_name: string | null;
   thickness_mm: number | null;
   gsm: number | null;
-  raw_material_id: string | null;
   lot_number: string | null;
   unit: string | null;
   notes: string | null;
@@ -65,8 +67,8 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-    // Primary source: RPC list_slitting_issued_materials() — returns BOTH raw_material
-    // and finished_stock issues assigned to the calling slitting manager.
+    // ONLY source: list_slitting_issued_materials() RPC.
+    // Returns both raw_material and finished_stock issues with display_name, lot_no, gsm, etc.
     const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc(
       "list_slitting_issued_materials"
     );
@@ -82,55 +84,25 @@ export default function SlittingEntryForm() {
     }
 
     const rpcList = (rpcRows ?? []) as any[];
-    const issueIds = rpcList.map((r) => r.issue_id as string).filter(Boolean);
-
-    // Enrich with raw_material_id / lot_number / gsm from stock_issues
-    let siMap = new Map<string, any>();
-    let rmMap = new Map<string, string>();
-    if (issueIds.length) {
-      const { data: siRows, error: siErr } = await (supabase as any)
-        .from("stock_issues")
-        .select("*")
-        .in("id", issueIds);
-      if (siErr) console.error("stock_issues enrichment error", siErr);
-      siMap = new Map<string, any>(((siRows ?? []) as any[]).map((r) => [r.id, r]));
-      const rmIds = Array.from(
-        new Set(
-          ((siRows ?? []) as any[])
-            .map((r) => r.raw_material_id)
-            .filter(Boolean)
-        )
-      );
-      if (rmIds.length) {
-        const { data: rmRows } = await supabase
-          .from("raw_materials")
-          .select("id, name")
-          .in("id", rmIds);
-        rmMap = new Map<string, string>(
-          ((rmRows ?? []) as any[]).map((r) => [r.id, r.name])
-        );
-      }
-    }
-
     const list: IssuedMaterial[] = rpcList.map((r) => {
-      const si = siMap.get(r.issue_id) ?? {};
-      const isRaw = !!si.raw_material_id;
-      const label = isRaw
-        ? (rmMap.get(si.raw_material_id) ?? "Raw Material")
-        : (r.product_code ?? "—");
-      const gsm =
-        si.gsm != null ? Number(si.gsm) : null;
+      const displayName: string =
+        r.display_name ||
+        r.product_code ||
+        r.raw_material_name ||
+        "Unnamed material";
       return {
-        issue_id: r.issue_id,
-        issue_date: r.issue_date,
-        product_code_id: r.product_code_id ?? "",
-        product_code: label,
+        issue_id: r.stock_issue_id ?? r.issue_id,
+        issue_type: r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock"),
+        product_code_id: r.product_code_id ?? null,
+        raw_material_id: r.raw_material_id ?? null,
+        display_name: displayName,
+        product_code: r.product_code ?? null,
+        raw_material_name: r.raw_material_name ?? null,
         thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
-        gsm,
-        raw_material_id: si.raw_material_id ?? null,
-        lot_number: si.lot_number ?? null,
-        unit: r.unit ?? si.issue_unit ?? si.unit ?? null,
-        notes: r.notes,
+        gsm: r.gsm != null ? Number(r.gsm) : null,
+        lot_number: r.lot_no ?? r.lot_number ?? null,
+        unit: r.unit ?? null,
+        notes: r.notes ?? null,
         issued_quantity: Number(r.issued_quantity ?? 0),
         consumed_quantity: Number(r.consumed_quantity ?? 0),
         remaining_quantity: Number(r.remaining_quantity ?? 0),
@@ -331,9 +303,21 @@ export default function SlittingEntryForm() {
               value={form.issue_id}
               onValueChange={async (v) => {
                 const iss = issuedMaterials.find((i) => i.issue_id === v);
-                let gsmFromIssue: number | null = iss?.gsm ?? null;
-                // Fallback: try to find a matching raw_material_stock_entries row
-                if ((!gsmFromIssue || gsmFromIssue <= 0) && iss?.raw_material_id) {
+                if (!iss) {
+                  setForm({ ...form, issue_id: v });
+                  return;
+                }
+                if (iss.issue_type === "finished_stock" && !iss.product_code_id) {
+                  toast({
+                    title: "Cannot select this issue",
+                    description: "Finished stock issue is missing its product code. Ask inventory to re-issue.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                let gsmFromIssue: number | null = iss.gsm;
+                // Fallback only for raw_material: try matching raw_material_stock_entries
+                if ((!gsmFromIssue || gsmFromIssue <= 0) && iss.raw_material_id) {
                   const { data: rmse } = await supabase
                     .from("raw_material_stock_entries")
                     .select("gsm")
@@ -349,15 +333,16 @@ export default function SlittingEntryForm() {
                 setForm({
                   ...form,
                   issue_id: v,
-                  product_code_id: (iss?.product_code_id && iss.product_code_id.length > 0) ? iss.product_code_id : form.product_code_id,
-                  source_thickness_mm: iss?.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
-                  source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : "",
+                  product_code_id: iss.product_code_id || form.product_code_id,
+                  source_thickness_mm: iss.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
+                  source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : form.source_gsm,
                 });
               }}
               placeholder={issuedMaterials.length ? "Select issued material to slit" : "No pending issued material"}
               options={issuedMaterials.map((i) => ({
                 value: i.issue_id,
-                label: `${i.product_code ?? "—"} | Lot ${i.lot_number ?? "—"} | ${i.thickness_mm ?? "—"} mm | GSM ${i.gsm ?? "—"} | Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+                label: `${i.display_name} | Lot ${i.lot_number ?? "—"} | ${i.thickness_mm ?? "—"} mm | GSM ${i.gsm ?? "—"} | Pending ${Number(i.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${i.unit ?? ""}`,
+                keywords: `${i.display_name} ${i.product_code ?? ""} ${i.raw_material_name ?? ""} ${i.lot_number ?? ""}`,
               }))}
             />
             {selectedIssue && (
