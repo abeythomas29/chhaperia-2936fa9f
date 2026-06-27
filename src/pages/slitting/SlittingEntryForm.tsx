@@ -363,9 +363,17 @@ export default function SlittingEntryForm() {
             {selectedIssue && (
               <div className="grid grid-cols-3 gap-2 text-xs pt-1">
                 <div>Issued: <b>{Number(selectedIssue.issued_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
-                <div>Consumed: <b>{Number(selectedIssue.consumed_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
-                <div>Pending: <b className={exceedsPending ? "text-destructive" : "text-secondary"}>{Number(selectedIssue.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
+                <div>
+                  Consumed: <b>{displayedConsumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b>
+                  {liveConsumed > 0 && (
+                    <span className="text-muted-foreground"> ({Number(selectedIssue.consumed_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} saved + {liveConsumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} live)</span>
+                  )}
+                </div>
+                <div>Pending: <b className={exceedsPending ? "text-destructive" : "text-secondary"}>{displayedPending.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
               </div>
+            )}
+            {!loading && issuedMaterials.length === 0 && (
+              <div className="text-xs text-muted-foreground">No pending issued material found for your account.</div>
             )}
           </div>
 
