@@ -203,9 +203,23 @@ export default function SlittingEntryForm() {
   // because narrower cuts produce multiple parallel tapes. So validate by area.
   const exceedsSource = sourceSqm > 0 && totalSqm > sourceSqm + 1e-6;
 
-  // Pending validation when a stock issue is selected
+  // Live consumed value from the current form, based on the unit of the selected issue.
+  const liveConsumed = (() => {
+    if (!selectedIssue) return 0;
+    const u = (selectedIssue.unit ?? "").toLowerCase();
+    if (u === "kg" || u === "kilograms" || u === "kgs") return totalKg;
+    if (u === "sqm" || u === "sqmtr" || u === "square meters" || u === "sq meters") return totalSqm;
+    if (u === "meters" || u === "mtr" || u === "m") return sourceMeters;
+    // Fallback: assume same unit family as source
+    return sourceQty;
+  })();
+
+  const displayedConsumed = (selectedIssue?.consumed_quantity ?? 0) + liveConsumed;
+  const displayedPending = (selectedIssue?.issued_quantity ?? 0) - displayedConsumed;
+
+  // Pending validation when a stock issue is selected — based on live consumed vs remaining.
   const exceedsPending =
-    selectedIssue != null && sourceQty > selectedIssue.remaining_quantity + 1e-6;
+    selectedIssue != null && liveConsumed > selectedIssue.remaining_quantity + 1e-6;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
