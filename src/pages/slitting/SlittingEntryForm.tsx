@@ -601,7 +601,7 @@ export default function SlittingEntryForm() {
             <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM in Source Product to calculate total kg.</p>
           )}
 
-          {exceedsSource && (
+          {!isIssued && exceedsSource && (
             <p className="text-xs text-destructive text-center">
               Produced area ({totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) exceeds source area ({sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm). Total cut area cannot exceed source area.
             </p>
