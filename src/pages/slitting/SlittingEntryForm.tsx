@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Scissors, Plus, Trash2, ChevronDown, Layers, Package } from "lucide-react";
 import { UNIT_OPTIONS } from "@/lib/units";
+import { listManagerIssuedMaterials } from "@/lib/issuedMaterials";
 
 interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
