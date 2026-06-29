@@ -68,50 +68,38 @@ export default function SlittingEntryForm() {
 
   const reloadIssued = async () => {
     if (!user) return;
-    // ONLY source: list_slitting_issued_materials() RPC.
-    // Returns both raw_material and finished_stock issues with display_name, lot_no, gsm, etc.
-    const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc(
-      "list_slitting_issued_materials"
-    );
-    if (rpcErr) {
-      console.error("list_slitting_issued_materials RPC error", rpcErr);
+    // Unified frontend helper — pulls both raw_material and finished_stock
+    // issues for the calling user with consumed/returned/wastage/pending.
+    const { data: rows, errors } = await listManagerIssuedMaterials(user.id);
+    if (errors.length) {
+      console.error("[SlittingEntryForm] issued materials errors", errors);
       toast({
-        title: "Could not load issued materials",
-        description: rpcErr.message,
+        title: "Could not load some issued materials",
+        description: errors.map((e) => `${e.source}: ${e.message}`).join(" · "),
         variant: "destructive",
       });
-      setIssuedMaterials([]);
-      return;
     }
-
-    const rpcList = (rpcRows ?? []) as any[];
-    const list: IssuedMaterial[] = rpcList.map((r) => {
-      const displayName: string =
-        r.display_name ||
-        r.product_code ||
-        r.raw_material_name ||
-        "Unnamed material";
-      return {
-        issue_id: r.stock_issue_id ?? r.issue_id,
-        issue_type: r.issue_type ?? (r.raw_material_id ? "raw_material" : "finished_stock"),
-        product_code_id: r.product_code_id ?? null,
-        raw_material_id: r.raw_material_id ?? null,
-        display_name: displayName,
-        product_code: r.product_code ?? null,
-        raw_material_name: r.raw_material_name ?? null,
-        thickness_mm: r.thickness_mm != null ? Number(r.thickness_mm) : null,
-        gsm: r.gsm != null ? Number(r.gsm) : null,
-        lot_number: r.lot_no ?? r.lot_number ?? null,
-        unit: r.unit ?? null,
-        notes: r.notes ?? null,
-        issued_quantity: Number(r.issued_quantity ?? 0),
-        consumed_quantity: Number(r.consumed_quantity ?? 0),
-        remaining_quantity: Number(r.remaining_quantity ?? 0),
-      };
-    });
-
+    const list: IssuedMaterial[] = rows
+      .filter((r) => r.pending_quantity > 0.0001)
+      .map((r) => ({
+        issue_id: r.issue_id,
+        issue_type: r.issue_type,
+        product_code_id: r.product_code_id,
+        raw_material_id: r.raw_material_id,
+        display_name: r.display_name,
+        product_code: r.product_code,
+        raw_material_name: r.raw_material_name,
+        thickness_mm: r.thickness_mm,
+        gsm: r.gsm,
+        lot_number: r.lot_number,
+        unit: r.unit,
+        notes: r.notes,
+        issued_quantity: r.issued_quantity,
+        consumed_quantity: r.consumed_quantity,
+        remaining_quantity: r.pending_quantity,
+      }));
     if (list.length === 0) {
-      console.info("list_slitting_issued_materials returned no rows for user", user.id);
+      console.info("[SlittingEntryForm] no pending issued materials for user", user.id);
     }
     setIssuedMaterials(list);
   };
