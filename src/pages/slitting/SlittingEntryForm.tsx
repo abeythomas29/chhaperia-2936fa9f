@@ -193,40 +193,56 @@ export default function SlittingEntryForm() {
   const exceedsPending =
     selectedIssue != null && liveConsumed > selectedIssue.remaining_quantity + 1e-6;
 
+  const isIssued = !!selectedIssue;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.product_code_id || !sourceQty) {
-      toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
-      return;
-    }
-    if (validRollRows.length === 0) {
-      toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
-      return;
-    }
-    if (exceedsSource) {
-      toast({
-        title: "Produced area exceeds source",
-        description: `Produced area (${totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) cannot exceed source area (${sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm).`,
-        variant: "destructive",
-      });
-      return;
-    }
-    if (exceedsPending && selectedIssue) {
-      toast({
-        title: "Exceeds pending issued quantity",
-        description: `Only ${selectedIssue.remaining_quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedIssue.unit ?? ""} remaining on this issue.`,
-        variant: "destructive",
-      });
-      return;
+    if (isIssued) {
+      if (!form.product_code_id) {
+        toast({ title: "Missing product code", description: "Select a product code for the produced rolls.", variant: "destructive" });
+        return;
+      }
+      if (validRollRows.length === 0) {
+        toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
+        return;
+      }
+      if (exceedsPending && selectedIssue) {
+        toast({
+          title: "Exceeds pending issued quantity",
+          description: `Only ${selectedIssue.remaining_quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedIssue.unit ?? ""} remaining on this issue.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!form.product_code_id || !sourceQty) {
+        toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
+        return;
+      }
+      if (validRollRows.length === 0) {
+        toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
+        return;
+      }
+      if (exceedsSource) {
+        toast({
+          title: "Produced area exceeds source",
+          description: `Produced area (${totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) cannot exceed source area (${sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm).`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setSubmitting(true);
 
 
-    const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
+    const sourceNote = isIssued && selectedIssue
+      ? `Source: issued lot ${selectedIssue.lot_number ?? "—"} (${liveConsumed.toFixed(2)} ${selectedIssue.unit ?? ""} of ${selectedIssue.issued_quantity} pending ${selectedIssue.remaining_quantity})`
+      : `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
     const batchId = (globalThis.crypto && "randomUUID" in globalThis.crypto) ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const sourceQtyForInsert = isIssued ? (totalSqm || liveConsumed) : sourceSqm;
     const rowsToInsert = validRollRows.map((r, idx) => {
       const tc = parseFloat(r.times_cut) || 0;
       const rpc = parseFloat(r.rolls_per_cut) || 0;
@@ -236,7 +252,7 @@ export default function SlittingEntryForm() {
         client_id: form.client_id || null,
         stock_issue_id: form.issue_id || null,
         date: isoDate,
-        source_quantity: idx === 0 ? sourceSqm : 0,
+        source_quantity: idx === 0 ? sourceQtyForInsert : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
         cut_width_mm: parseFloat(r.width_mm),
         remaining_returned: 0,
@@ -402,45 +418,64 @@ export default function SlittingEntryForm() {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Add one row per source roll. Use multiple rows if rolls have different dimensions.
-              </p>
-              {sourceRows.map((s, idx) => {
-                const w = parseFloat(s.width_mm) || 0;
-                const l = parseFloat(s.length_mtr) || 0;
-                const n = parseFloat(s.rolls) || 0;
-                const rowSqm = (w / 1000) * l * n;
-                return (
-                  <div key={idx} className="space-y-2 border-l-2 pl-3">
-                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
-                        <Input type="number" step="any" value={s.width_mm}
-                          onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Source Length (mtr)</Label>
-                        <Input type="number" step="any" value={s.length_mtr}
-                          onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">No. of Rolls</Label>
-                        <Input type="number" step="any" value={s.rolls}
-                          onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {rowSqm > 0 && (
-                      <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
-                    )}
+              {isIssued && selectedIssue ? (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+                  <div className="font-medium">Source from issued material</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                    <div>Material: <b>{selectedIssue.display_name}</b></div>
+                    <div>Lot: <b>{selectedIssue.lot_number ?? "—"}</b></div>
+                    <div>Thickness: <b>{selectedIssue.thickness_mm ?? "—"} mm</b></div>
+                    <div>GSM: <b>{selectedIssue.gsm ?? "—"}</b></div>
+                    <div>Unit: <b>{selectedIssue.unit ?? "—"}</b></div>
+                    <div>Pending: <b>{Number(selectedIssue.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
                   </div>
-                );
-              })}
-              <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
-                <Plus className="h-4 w-4 mr-1" /> Add Roll
-              </Button>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Source quantity is taken from this issued material — you do not need to enter source width/length/rolls.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Add one row per source roll. Use multiple rows if rolls have different dimensions.
+                  </p>
+                  {sourceRows.map((s, idx) => {
+                    const w = parseFloat(s.width_mm) || 0;
+                    const l = parseFloat(s.length_mtr) || 0;
+                    const n = parseFloat(s.rolls) || 0;
+                    const rowSqm = (w / 1000) * l * n;
+                    return (
+                      <div key={idx} className="space-y-2 border-l-2 pl-3">
+                        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
+                            <Input type="number" step="any" value={s.width_mm}
+                              onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Source Length (mtr)</Label>
+                            <Input type="number" step="any" value={s.length_mtr}
+                              onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">No. of Rolls</Label>
+                            <Input type="number" step="any" value={s.rolls}
+                              onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {rowSqm > 0 && (
+                          <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
+                    <Plus className="h-4 w-4 mr-1" /> Add Roll
+                  </Button>
+                </>
+              )}
 
               <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
@@ -566,7 +601,7 @@ export default function SlittingEntryForm() {
             <p className="text-xs text-muted-foreground -mt-2 text-center">Enter GSM in Source Product to calculate total kg.</p>
           )}
 
-          {exceedsSource && (
+          {!isIssued && exceedsSource && (
             <p className="text-xs text-destructive text-center">
               Produced area ({totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) exceeds source area ({sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm). Total cut area cannot exceed source area.
             </p>
@@ -577,7 +612,7 @@ export default function SlittingEntryForm() {
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
 
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource || exceedsPending}>
+          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || (!isIssued && exceedsSource) || exceedsPending}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Slitting Entry
           </Button>
