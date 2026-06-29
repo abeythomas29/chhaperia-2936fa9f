@@ -421,42 +421,64 @@ export default function SlittingEntryForm() {
               <p className="text-xs text-muted-foreground">
                 Add one row per source roll. Use multiple rows if rolls have different dimensions.
               </p>
-              {sourceRows.map((s, idx) => {
-                const w = parseFloat(s.width_mm) || 0;
-                const l = parseFloat(s.length_mtr) || 0;
-                const n = parseFloat(s.rolls) || 0;
-                const rowSqm = (w / 1000) * l * n;
-                return (
-                  <div key={idx} className="space-y-2 border-l-2 pl-3">
-                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
-                        <Input type="number" step="any" value={s.width_mm}
-                          onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Source Length (mtr)</Label>
-                        <Input type="number" step="any" value={s.length_mtr}
-                          onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">No. of Rolls</Label>
-                        <Input type="number" step="any" value={s.rolls}
-                          onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {rowSqm > 0 && (
-                      <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
-                    )}
+              {isIssued && selectedIssue ? (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+                  <div className="font-medium">Source from issued material</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                    <div>Material: <b>{selectedIssue.display_name}</b></div>
+                    <div>Lot: <b>{selectedIssue.lot_number ?? "—"}</b></div>
+                    <div>Thickness: <b>{selectedIssue.thickness_mm ?? "—"} mm</b></div>
+                    <div>GSM: <b>{selectedIssue.gsm ?? "—"}</b></div>
+                    <div>Unit: <b>{selectedIssue.unit ?? "—"}</b></div>
+                    <div>Pending: <b>{Number(selectedIssue.remaining_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} {selectedIssue.unit ?? ""}</b></div>
                   </div>
-                );
-              })}
-              <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
-                <Plus className="h-4 w-4 mr-1" /> Add Roll
-              </Button>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Source quantity is taken from this issued material — you do not need to enter source width/length/rolls.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Add one row per source roll. Use multiple rows if rolls have different dimensions.
+                  </p>
+                  {sourceRows.map((s, idx) => {
+                    const w = parseFloat(s.width_mm) || 0;
+                    const l = parseFloat(s.length_mtr) || 0;
+                    const n = parseFloat(s.rolls) || 0;
+                    const rowSqm = (w / 1000) * l * n;
+                    return (
+                      <div key={idx} className="space-y-2 border-l-2 pl-3">
+                        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Source Width (mm) — Roll {idx + 1}</Label>
+                            <Input type="number" step="any" value={s.width_mm}
+                              onChange={(e) => updateSourceRow(idx, { width_mm: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Source Length (mtr)</Label>
+                            <Input type="number" step="any" value={s.length_mtr}
+                              onChange={(e) => updateSourceRow(idx, { length_mtr: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">No. of Rolls</Label>
+                            <Input type="number" step="any" value={s.rolls}
+                              onChange={(e) => updateSourceRow(idx, { rolls: e.target.value })} />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceRow(idx)} disabled={sourceRows.length === 1}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {rowSqm > 0 && (
+                          <p className="text-xs text-muted-foreground">Area: <span className="font-semibold text-foreground">{rowSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <Button type="button" variant="outline" size="sm" onClick={addSourceRow}>
+                    <Plus className="h-4 w-4 mr-1" /> Add Roll
+                  </Button>
+                </>
+              )}
 
               <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="space-y-1">
