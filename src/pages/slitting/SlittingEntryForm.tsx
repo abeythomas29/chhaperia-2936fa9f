@@ -193,40 +193,56 @@ export default function SlittingEntryForm() {
   const exceedsPending =
     selectedIssue != null && liveConsumed > selectedIssue.remaining_quantity + 1e-6;
 
+  const isIssued = !!selectedIssue;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.product_code_id || !sourceQty) {
-      toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
-      return;
-    }
-    if (validRollRows.length === 0) {
-      toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
-      return;
-    }
-    if (exceedsSource) {
-      toast({
-        title: "Produced area exceeds source",
-        description: `Produced area (${totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) cannot exceed source area (${sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm).`,
-        variant: "destructive",
-      });
-      return;
-    }
-    if (exceedsPending && selectedIssue) {
-      toast({
-        title: "Exceeds pending issued quantity",
-        description: `Only ${selectedIssue.remaining_quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedIssue.unit ?? ""} remaining on this issue.`,
-        variant: "destructive",
-      });
-      return;
+    if (isIssued) {
+      if (!form.product_code_id) {
+        toast({ title: "Missing product code", description: "Select a product code for the produced rolls.", variant: "destructive" });
+        return;
+      }
+      if (validRollRows.length === 0) {
+        toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
+        return;
+      }
+      if (exceedsPending && selectedIssue) {
+        toast({
+          title: "Exceeds pending issued quantity",
+          description: `Only ${selectedIssue.remaining_quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedIssue.unit ?? ""} remaining on this issue.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!form.product_code_id || !sourceQty) {
+        toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
+        return;
+      }
+      if (validRollRows.length === 0) {
+        toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
+        return;
+      }
+      if (exceedsSource) {
+        toast({
+          title: "Produced area exceeds source",
+          description: `Produced area (${totalSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm) cannot exceed source area (${sourceSqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm).`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setSubmitting(true);
 
 
-    const sourceNote = `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
+    const sourceNote = isIssued && selectedIssue
+      ? `Source: issued lot ${selectedIssue.lot_number ?? "—"} (${liveConsumed.toFixed(2)} ${selectedIssue.unit ?? ""} of ${selectedIssue.issued_quantity} pending ${selectedIssue.remaining_quantity})`
+      : `Source: ${validSourceRows.map((s, i) => `[R${i + 1} ${s.width_mm}mm × ${s.length_mtr}m × ${s.rolls}]`).join(" ")} (${sourceQty.toFixed(2)} ${form.source_unit})`;
     const isoDate = form.entry_date || new Date().toISOString().slice(0, 10);
     const batchId = (globalThis.crypto && "randomUUID" in globalThis.crypto) ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const sourceQtyForInsert = isIssued ? (totalSqm || liveConsumed) : sourceSqm;
     const rowsToInsert = validRollRows.map((r, idx) => {
       const tc = parseFloat(r.times_cut) || 0;
       const rpc = parseFloat(r.rolls_per_cut) || 0;
@@ -236,7 +252,7 @@ export default function SlittingEntryForm() {
         client_id: form.client_id || null,
         stock_issue_id: form.issue_id || null,
         date: isoDate,
-        source_quantity: idx === 0 ? sourceSqm : 0,
+        source_quantity: idx === 0 ? sourceQtyForInsert : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
         cut_width_mm: parseFloat(r.width_mm),
         remaining_returned: 0,
