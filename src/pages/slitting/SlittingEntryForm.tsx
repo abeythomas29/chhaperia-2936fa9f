@@ -418,9 +418,6 @@ export default function SlittingEntryForm() {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Add one row per source roll. Use multiple rows if rolls have different dimensions.
-              </p>
               {isIssued && selectedIssue ? (
                 <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
                   <div className="font-medium">Source from issued material</div>
