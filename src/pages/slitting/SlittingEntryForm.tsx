@@ -612,7 +612,7 @@ export default function SlittingEntryForm() {
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
 
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || exceedsSource || exceedsPending}>
+          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" disabled={submitting || (!isIssued && exceedsSource) || exceedsPending}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Slitting Entry
           </Button>
