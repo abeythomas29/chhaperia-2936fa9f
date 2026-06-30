@@ -618,6 +618,19 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         }
       }
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
+      const productConversion = getConversionInfo(pcId, null, true);
+      // Debug: surface the width source actually chosen for this product.
+      console.log("[stock] finished stock conversion", {
+        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
+        product_code_id: pcId,
+        meters: prod?.buckets?.meters ?? null,
+        width_mm: productConversion.widthMm,
+        width_source: productConversion.widthSource,
+        gsm: productConversion.gsm,
+        gsm_source: productConversion.gsmSource,
+        sqm: prod?.buckets?.sqm ?? null,
+        warn_narrow_width: productConversion.widthMm != null && productConversion.widthMm < 100,
+      });
       summaryList.push({
         product_code_id: pcId,
         code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
@@ -627,7 +640,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         available: produced - issued,
         producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
-        conversion: getConversionInfo(pcId, null, true),
+        conversion: productConversion,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
