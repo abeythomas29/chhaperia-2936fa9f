@@ -400,10 +400,32 @@ export default function SlittingEntryForm() {
                     gsmFromIssue = Number(rmse[0].gsm);
                   }
                 }
+                let nextProductCodeId = form.product_code_id;
+                if (iss.product_code_id) {
+                  // A. finished stock or raw issue with an explicit product code
+                  nextProductCodeId = iss.product_code_id;
+                } else if (iss.issue_type === "raw_material") {
+                  // B. raw material — match by normalized code
+                  const matches = matchProductCodesForRawMaterial(
+                    iss.raw_material_name ?? iss.display_name,
+                    productCodes,
+                  );
+                  console.log("issued raw material product mapping", {
+                    rawMaterialId: iss.raw_material_id,
+                    rawMaterialName: iss.raw_material_name ?? iss.display_name,
+                    stockIssueProductCodeId: iss.product_code_id,
+                    candidateProductCodes: matches.map((m) => m.code),
+                    selectedProductCodeId: matches.length === 1 ? matches[0].id : null,
+                  });
+                  // C/D/E: only auto-select when exactly one match is found
+                  nextProductCodeId = matches.length === 1 ? matches[0].id : "";
+                }
+
                 setForm({
                   ...form,
                   issue_id: v,
-                  product_code_id: iss.product_code_id || form.product_code_id,
+                  product_code_id: nextProductCodeId,
+
                   source_thickness_mm: iss.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
                   source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : form.source_gsm,
                 });
