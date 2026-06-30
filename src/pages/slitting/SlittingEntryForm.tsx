@@ -19,6 +19,7 @@ interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; 
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 interface IssuedMaterial {
   issue_id: string;
+  source_table: "stock_issues" | "raw_material_stock_entries";
   issue_type: "raw_material" | "finished_stock" | string;
   product_code_id: string | null;
   raw_material_id: string | null;
@@ -83,6 +84,7 @@ export default function SlittingEntryForm() {
       .filter((r) => r.pending_quantity > 0.0001)
       .map((r) => ({
         issue_id: r.issue_id,
+        source_table: r.source_table,
         issue_type: r.issue_type,
         product_code_id: r.product_code_id,
         raw_material_id: r.raw_material_id,
@@ -225,6 +227,37 @@ export default function SlittingEntryForm() {
 
     setSubmitting(true);
 
+    // Only stock_issues.id values are valid FKs for slitting_entries.stock_issue_id.
+    // Raw-material issues that originate from raw_material_stock_entries do NOT
+    // have a matching stock_issues row and must be saved with null.
+    const selectedStockIssueId =
+      selectedIssue && selectedIssue.source_table === "stock_issues"
+        ? selectedIssue.issue_id
+        : null;
+
+    console.log("saving slitting entry stock issue", {
+      selectedStockIssueId,
+      selectedIssuedMaterial: selectedIssue,
+      existsInStockIssues: issuedMaterials.some(
+        (x) => x.issue_id === selectedStockIssueId && x.source_table === "stock_issues",
+      ),
+    });
+
+    if (
+      selectedIssue &&
+      selectedIssue.source_table === "stock_issues" &&
+      !issuedMaterials.some(
+        (x) => x.issue_id === selectedStockIssueId && x.source_table === "stock_issues",
+      )
+    ) {
+      toast({
+        title: "Invalid issued material",
+        description: "Selected issued material is invalid. Please refresh and select again.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+      return;
+    }
 
     const sourceNote = isIssued && selectedIssue
       ? `Source: issued lot ${selectedIssue.lot_number ?? "—"} (${liveConsumed.toFixed(2)} ${selectedIssue.unit ?? ""} of ${selectedIssue.issued_quantity} pending ${selectedIssue.remaining_quantity})`
@@ -239,7 +272,7 @@ export default function SlittingEntryForm() {
       return {
         product_code_id: form.product_code_id,
         client_id: form.client_id || null,
-        stock_issue_id: form.issue_id || null,
+        stock_issue_id: selectedStockIssueId,
         date: isoDate,
         source_quantity: idx === 0 ? sourceQtyForInsert : 0,
         cut_quantity_produced: rollLength ? rollLength * rolls : rolls,
