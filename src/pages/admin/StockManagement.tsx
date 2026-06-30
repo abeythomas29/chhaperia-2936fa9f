@@ -26,6 +26,10 @@ interface ConversionInfo {
   missingData: string;
 }
 
+// Anything narrower than this is treated as a slit/tape cut width and is
+// NOT used as the source-roll width for finished stock conversion.
+const MIN_FULL_ROLL_WIDTH_MM = 500;
+
 const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
   if (unit === "meters") return null;
   if (unit === "sqm") return conversion.widthMm ? null : "Missing width";
@@ -36,8 +40,8 @@ const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
 const formatConversionData = (conversion: ConversionInfo) => {
   const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
   const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
-  const warn = conversion.widthMm != null && conversion.widthMm < 100
-    ? " ⚠ Possible wrong width source: using cut width instead of source width."
+  const warn = conversion.widthMm != null && conversion.widthMm < MIN_FULL_ROLL_WIDTH_MM
+    ? ` ⚠ Possible wrong width source: ${conversion.widthMm}mm looks like a slit/cut width, not the source roll width.`
     : "";
   if (width || gsm) {
     const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
@@ -262,30 +266,35 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       });
     };
     // Compute meters/sqm/kg for a single entry given its raw qty, unit, width, gsm.
+    // Width is only used when it is plausibly a full-width source roll. Narrow
+    // slit cut widths must NOT be used to cross-convert meters↔sqm or we end up
+    // with values like "2000 sqm = 5000 meters" using a 400mm cut width.
     const computeAllUnits = (rawQty: number, unitRaw: any, widthMm: number | null, gsm: number | null): Buckets => {
       const out: Buckets = {};
       if (!isFinite(rawQty) || rawQty === 0) return out;
       const u = normUnit(unitRaw);
+      const safeWidth = widthMm != null && isFinite(widthMm) && widthMm >= MIN_FULL_ROLL_WIDTH_MM ? widthMm : null;
+      const safeGsm = gsm != null && isFinite(gsm) && gsm > 0 ? gsm : null;
       let meters: number | null = null;
       let sqm: number | null = null;
       let kg: number | null = null;
       if (u === "meters") {
         meters = rawQty;
-        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
-        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+        if (safeWidth) sqm = (safeWidth / 1000) * rawQty;
+        if (sqm != null && safeGsm) kg = (sqm * safeGsm) / 1000;
       } else if (u === "sqm") {
         sqm = rawQty;
-        if (gsm && gsm > 0) kg = (rawQty * gsm) / 1000;
-        if (widthMm && widthMm > 0) meters = rawQty / (widthMm / 1000);
+        if (safeGsm) kg = (rawQty * safeGsm) / 1000;
+        if (safeWidth) meters = rawQty / (safeWidth / 1000);
       } else if (u === "kg") {
         kg = rawQty;
-        if (gsm && gsm > 0) sqm = (rawQty * 1000) / gsm;
-        if (sqm != null && widthMm && widthMm > 0) meters = sqm / (widthMm / 1000);
+        if (safeGsm) sqm = (rawQty * 1000) / safeGsm;
+        if (sqm != null && safeWidth) meters = sqm / (safeWidth / 1000);
       } else {
         // unknown unit — assume meters as best-effort default
         meters = rawQty;
-        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
-        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+        if (safeWidth) sqm = (safeWidth / 1000) * rawQty;
+        if (sqm != null && safeGsm) kg = (sqm * safeGsm) / 1000;
       }
       if (meters != null) out.meters = meters;
       if (sqm != null) out.sqm = sqm;
@@ -439,6 +448,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const trow = ensureThickness(pcId, thickness);
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, entryBuckets);
+
+      console.log("finished stock conversion audit", {
+        productCode: p.product_codes?.code ?? "—",
+        thickness,
+        sourceRowId: p.id,
+        source: "production_entries",
+        originalQuantity: qty,
+        originalUnit: p.unit,
+        widthMm: widthMm ?? null,
+        widthSource: widthMm != null ? "production entry notes width_mm" : null,
+        gsm: gsm ?? null,
+        gsmSource: gsm != null ? (p.gsm != null ? "production_entries.gsm" : "notes") : null,
+        normalizedMeters: entryBuckets.meters ?? null,
+        normalizedSqm: entryBuckets.sqm ?? null,
+        normalizedKg: entryBuckets.kg ?? null,
+      });
     }
 
     // Add slitting + head36 produced (these carry their own width).
@@ -466,10 +491,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     };
     // Narrow cut widths from slitting must NOT be used as the source-roll width
     // when converting production_entries meters → sqm. Slit cut widths often
-    // describe a narrow tape (e.g. 24mm) and would dramatically under-report sqm
-    // for a full-width finished stock roll (~1000mm). Only register slitting
-    // cut_width_mm as a fallback when it is plausibly a full-width roll.
-    const MIN_FULL_ROLL_WIDTH_MM = 100;
+    // describe a narrow tape (e.g. 24mm, 175mm, 250mm) and would dramatically
+    // under-report sqm for a full-width finished stock roll (~1000mm). Only
+    // register slitting cut_width_mm as a fallback when it is plausibly a
+    // full-width roll (>= MIN_FULL_ROLL_WIDTH_MM).
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
@@ -897,16 +922,24 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                         <span className="text-right">Issued</span>
                         <span className="text-right">Available</span>
                       </div>
-                      {rows.map((r) => (
-                        <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
-                          <span className="font-medium text-xs">{label[r.unit]}</span>
-                          <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
-                          <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
-                          <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
-                            {r.avail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(r.avail)}
-                          </span>
-                        </div>
-                      ))}
+                      {rows.map((r) => {
+                        const negative = r.avail != null && r.avail < 0;
+                        if (negative) {
+                          console.warn("[stock] negative available clamped to 0", { code: s.code, unit: r.unit, produced: r.prod, issued: r.iss, raw: r.avail });
+                        }
+                        const displayAvail = negative ? 0 : r.avail;
+                        return (
+                          <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
+                            <span className="font-medium text-xs">{label[r.unit]}</span>
+                            <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
+                            <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
+                            <span className={`text-right font-bold ${displayAvail == null ? "" : displayAvail > 0 ? "text-primary" : "text-muted-foreground"}`} title={negative ? "Issued exceeds produced for this unit — likely a unit conversion mismatch. Showing 0; see console for details." : undefined}>
+                              {displayAvail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(displayAvail)}
+                              {negative && <span className="ml-1 text-[10px] text-amber-600 font-normal">⚠</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
                       <p className="px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
                         {formatConversionData(s.conversion)}
                       </p>
@@ -967,16 +1000,21 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                                 <span className="text-right">Issued</span>
                                 <span className="text-right">Available</span>
                               </div>
-                              {rows.map((r) => (
-                                <div key={r.unit} className="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center text-xs">
-                                  <span className="font-medium">{label[r.unit]}</span>
-                                  <span className="text-right">{renderVal(r.prod, r.missing, "text-green-600 font-medium")}</span>
-                                  <span className="text-right">{renderVal(r.iss, r.missing, "text-red-500 font-medium")}</span>
-                                  <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
-                                    {r.avail == null ? <span className="text-[10px] font-normal text-muted-foreground">{r.missing ?? "—"}</span> : fmt(r.avail)}
-                                  </span>
-                                </div>
-                              ))}
+                              {rows.map((r) => {
+                                const negative = r.avail != null && r.avail < 0;
+                                const displayAvail = negative ? 0 : r.avail;
+                                return (
+                                  <div key={r.unit} className="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center text-xs">
+                                    <span className="font-medium">{label[r.unit]}</span>
+                                    <span className="text-right">{renderVal(r.prod, r.missing, "text-green-600 font-medium")}</span>
+                                    <span className="text-right">{renderVal(r.iss, r.missing, "text-red-500 font-medium")}</span>
+                                    <span className={`text-right font-bold ${displayAvail == null ? "" : displayAvail > 0 ? "text-primary" : "text-muted-foreground"}`} title={negative ? "Issued exceeds produced for this unit — unit conversion mismatch. Showing 0." : undefined}>
+                                      {displayAvail == null ? <span className="text-[10px] font-normal text-muted-foreground">{r.missing ?? "—"}</span> : fmt(displayAvail)}
+                                      {negative && <span className="ml-1 text-[10px] text-amber-600 font-normal">⚠</span>}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         })}
