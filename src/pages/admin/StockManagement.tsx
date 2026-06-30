@@ -266,30 +266,35 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       });
     };
     // Compute meters/sqm/kg for a single entry given its raw qty, unit, width, gsm.
+    // Width is only used when it is plausibly a full-width source roll. Narrow
+    // slit cut widths must NOT be used to cross-convert meters↔sqm or we end up
+    // with values like "2000 sqm = 5000 meters" using a 400mm cut width.
     const computeAllUnits = (rawQty: number, unitRaw: any, widthMm: number | null, gsm: number | null): Buckets => {
       const out: Buckets = {};
       if (!isFinite(rawQty) || rawQty === 0) return out;
       const u = normUnit(unitRaw);
+      const safeWidth = widthMm != null && isFinite(widthMm) && widthMm >= MIN_FULL_ROLL_WIDTH_MM ? widthMm : null;
+      const safeGsm = gsm != null && isFinite(gsm) && gsm > 0 ? gsm : null;
       let meters: number | null = null;
       let sqm: number | null = null;
       let kg: number | null = null;
       if (u === "meters") {
         meters = rawQty;
-        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
-        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+        if (safeWidth) sqm = (safeWidth / 1000) * rawQty;
+        if (sqm != null && safeGsm) kg = (sqm * safeGsm) / 1000;
       } else if (u === "sqm") {
         sqm = rawQty;
-        if (gsm && gsm > 0) kg = (rawQty * gsm) / 1000;
-        if (widthMm && widthMm > 0) meters = rawQty / (widthMm / 1000);
+        if (safeGsm) kg = (rawQty * safeGsm) / 1000;
+        if (safeWidth) meters = rawQty / (safeWidth / 1000);
       } else if (u === "kg") {
         kg = rawQty;
-        if (gsm && gsm > 0) sqm = (rawQty * 1000) / gsm;
-        if (sqm != null && widthMm && widthMm > 0) meters = sqm / (widthMm / 1000);
+        if (safeGsm) sqm = (rawQty * 1000) / safeGsm;
+        if (sqm != null && safeWidth) meters = sqm / (safeWidth / 1000);
       } else {
         // unknown unit — assume meters as best-effort default
         meters = rawQty;
-        if (widthMm && widthMm > 0) sqm = (widthMm / 1000) * rawQty;
-        if (sqm != null && gsm && gsm > 0) kg = (sqm * gsm) / 1000;
+        if (safeWidth) sqm = (safeWidth / 1000) * rawQty;
+        if (sqm != null && safeGsm) kg = (sqm * safeGsm) / 1000;
       }
       if (meters != null) out.meters = meters;
       if (sqm != null) out.sqm = sqm;
