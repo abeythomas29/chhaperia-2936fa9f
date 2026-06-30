@@ -26,6 +26,10 @@ interface ConversionInfo {
   missingData: string;
 }
 
+// Anything narrower than this is treated as a slit/tape cut width and is
+// NOT used as the source-roll width for finished stock conversion.
+const MIN_FULL_ROLL_WIDTH_MM = 500;
+
 const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
   if (unit === "meters") return null;
   if (unit === "sqm") return conversion.widthMm ? null : "Missing width";
@@ -36,8 +40,8 @@ const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
 const formatConversionData = (conversion: ConversionInfo) => {
   const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
   const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
-  const warn = conversion.widthMm != null && conversion.widthMm < 100
-    ? " ⚠ Possible wrong width source: using cut width instead of source width."
+  const warn = conversion.widthMm != null && conversion.widthMm < MIN_FULL_ROLL_WIDTH_MM
+    ? ` ⚠ Possible wrong width source: ${conversion.widthMm}mm looks like a slit/cut width, not the source roll width.`
     : "";
   if (width || gsm) {
     const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
