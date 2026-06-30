@@ -36,11 +36,14 @@ const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
 const formatConversionData = (conversion: ConversionInfo) => {
   const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
   const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
+  const warn = conversion.widthMm != null && conversion.widthMm < 100
+    ? " ⚠ Possible wrong width source: using cut width instead of source width."
+    : "";
   if (width || gsm) {
     const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
-    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.`;
+    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.${warn}`;
   }
-  return "Conversion data missing: width/GSM not found.";
+  return "Conversion data missing: source width / GSM not found.";
 };
 
 interface ThicknessBreakdown {
