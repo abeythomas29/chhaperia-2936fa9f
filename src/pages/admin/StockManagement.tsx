@@ -757,14 +757,37 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       toast({ title: "Select a production manager", variant: "destructive" });
       return;
     }
+    if (!issueThickness) {
+      toast({ title: "Select a thickness variant", variant: "destructive" });
+      return;
+    }
 
-    // Block over-issue: validate against computed available stock
     const stock = summaries.find((s) => s.product_code_id === issueProductCodeId);
+    const variant = stock?.thicknessBreakdown.find(v => String(v.thickness_mm ?? "") === issueThickness);
+    if (!variant) {
+      toast({ title: "Selected variant not found", variant: "destructive" });
+      return;
+    }
+
     const qtyNum = Number(issueQuantity);
-    if (stock && qtyNum > stock.available) {
+    const gsmNum = issueGsm ? Number(issueGsm) : null;
+    const widthMm = variant.conversion.widthMm;
+
+    if ((issueUnit === "sqm" || issueUnit === "kg") && (!gsmNum || gsmNum <= 0)) {
+      toast({ title: "Missing GSM", description: "Selected thickness has no GSM. Cannot issue in sqm/kg.", variant: "destructive" });
+      return;
+    }
+    if (issueUnit === "meters" && !widthMm) {
+      toast({ title: "Missing width", description: "Selected variant has no source width. Cannot issue in meters.", variant: "destructive" });
+      return;
+    }
+
+    // Validate against variant available
+    const variantAvail = (variant.producedBuckets[issueUnit] ?? 0) - (variant.issuedBuckets[issueUnit] ?? 0);
+    if (qtyNum > variantAvail + 1e-6) {
       toast({
-        title: "Insufficient stock",
-        description: `Only ${stock.available.toLocaleString()} ${stock.unit} available`,
+        title: "Insufficient stock for this thickness",
+        description: `Only ${variantAvail.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${issueUnit} available for ${variant.thickness_mm ?? "—"} mm`,
         variant: "destructive",
       });
       return;
@@ -772,17 +795,17 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
 
     setIssuing(true);
 
-    // Compute sqm/kg conversions for record-keeping (stored in notes since DB has no dedicated columns).
-    const qty = Number(issueQuantity);
-    const gsmNum = issueGsm ? Number(issueGsm) : null;
     let sqm: number | null = null;
     let kg: number | null = null;
     if (issueUnit === "sqm") {
-      sqm = qty;
-      if (gsmNum && gsmNum > 0) kg = (qty * gsmNum) / 1000;
+      sqm = qtyNum;
+      if (gsmNum) kg = (qtyNum * gsmNum) / 1000;
+    } else if (issueUnit === "kg") {
+      kg = qtyNum;
+      if (gsmNum) sqm = (qtyNum * 1000) / gsmNum;
     } else {
-      kg = qty;
-      if (gsmNum && gsmNum > 0) sqm = (qty * 1000) / gsmNum;
+      if (widthMm) sqm = (qtyNum * widthMm) / 1000;
+      if (sqm != null && gsmNum) kg = (sqm * gsmNum) / 1000;
     }
 
     const metaParts: string[] = [];
@@ -798,10 +821,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       client_id: issueRecipientType === "client" ? issueClientId : null,
       recipient_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
       issued_to_user_id: issueRecipientType === "production_manager" ? issueRecipientUserId : null,
-      quantity: qty,
+      quantity: qtyNum,
       unit: issueUnit,
       issue_type: "finished_stock",
-      issue_quantity: qty,
+      issue_quantity: qtyNum,
       issue_unit: issueUnit,
       issue_quantity_kg: kg,
       issue_quantity_sqm: sqm,
@@ -811,6 +834,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       issued_by: user.id,
       date: issueDate,
     } as any);
+
 
     setIssuing(false);
     if (error) {
