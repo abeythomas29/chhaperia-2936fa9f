@@ -922,16 +922,24 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                         <span className="text-right">Issued</span>
                         <span className="text-right">Available</span>
                       </div>
-                      {rows.map((r) => (
-                        <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
-                          <span className="font-medium text-xs">{label[r.unit]}</span>
-                          <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
-                          <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
-                          <span className={`text-right font-bold ${r.avail == null ? "" : r.avail > 0 ? "text-primary" : "text-destructive"}`}>
-                            {r.avail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(r.avail)}
-                          </span>
-                        </div>
-                      ))}
+                      {rows.map((r) => {
+                        const negative = r.avail != null && r.avail < 0;
+                        if (negative) {
+                          console.warn("[stock] negative available clamped to 0", { code: s.code, unit: r.unit, produced: r.prod, issued: r.iss, raw: r.avail });
+                        }
+                        const displayAvail = negative ? 0 : r.avail;
+                        return (
+                          <div key={r.unit} className="grid grid-cols-[64px_1fr_1fr_1fr] gap-2 items-center px-1 text-sm">
+                            <span className="font-medium text-xs">{label[r.unit]}</span>
+                            <span className="text-right">{renderValue(r.prod, r.missing, "text-green-600 font-semibold")}</span>
+                            <span className="text-right">{renderValue(r.iss, r.missing, "text-red-500 font-semibold")}</span>
+                            <span className={`text-right font-bold ${displayAvail == null ? "" : displayAvail > 0 ? "text-primary" : "text-muted-foreground"}`} title={negative ? "Issued exceeds produced for this unit — likely a unit conversion mismatch. Showing 0; see console for details." : undefined}>
+                              {displayAvail == null ? <span className="text-[11px] leading-tight text-muted-foreground font-normal">{r.missing ?? "—"}</span> : fmt(displayAvail)}
+                              {negative && <span className="ml-1 text-[10px] text-amber-600 font-normal">⚠</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
                       <p className="px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
                         {formatConversionData(s.conversion)}
                       </p>
