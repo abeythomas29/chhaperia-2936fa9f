@@ -123,6 +123,38 @@ export default function SlittingEntryForm() {
 
   const selectedIssue = issuedMaterials.find((i) => i.issue_id === form.issue_id) ?? null;
 
+  // ---- Raw-material → product code matching (frontend only) ----
+  const normalizeCode = (v: string | null | undefined) =>
+    (v ?? "").toUpperCase().replace(/[\s\-_:./]+/g, "");
+
+  const matchProductCodesForRawMaterial = (
+    rawName: string | null | undefined,
+    codes: ProductCode[],
+  ): ProductCode[] => {
+    const rmCode = normalizeCode(rawName);
+    if (!rmCode) return [];
+    const exact = codes.filter((p) => normalizeCode(p.code) === rmCode);
+    if (exact.length) return exact;
+    const prefix = codes.filter((p) => normalizeCode(p.code).startsWith(rmCode));
+    if (prefix.length) return prefix;
+    return codes.filter((p) => normalizeCode(p.code).includes(rmCode));
+  };
+
+  const candidateProductCodes =
+    selectedIssue && selectedIssue.issue_type === "raw_material"
+      ? matchProductCodesForRawMaterial(
+          selectedIssue.raw_material_name ?? selectedIssue.display_name,
+          productCodes,
+        )
+      : [];
+
+  const productCodeOptions =
+    selectedIssue?.issue_type === "raw_material" && candidateProductCodes.length > 0
+      ? candidateProductCodes
+      : productCodes;
+
+
+
 
   // Source calculations (summed across all source rows)
   const srcGsm = parseFloat(form.source_gsm) || 0;
