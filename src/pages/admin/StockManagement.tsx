@@ -1224,14 +1224,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 value={issueProductCodeId}
                 onValueChange={(v) => {
                   setIssueProductCodeId(v);
-                  const key = `${v}__${issueThickness ? Number(issueThickness) : ""}`;
-                  const g = productGsmByCodeThickness[key] ?? productGsmByCode[v];
-                  if (g && g > 0) {
-                    setIssueGsm(String(g));
-                    setIssueGsmAuto(true);
-                  } else {
-                    setIssueGsmAuto(false);
-                  }
+                  // Reset thickness/GSM — they must come from the selected variant only.
+                  setIssueThickness("");
+                  setIssueGsm("");
+                  setIssueGsmAuto(false);
                 }}
                 placeholder="Select product"
                 options={productCodes.map((p) => {
@@ -1278,62 +1274,112 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
                 />
               </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Thickness variant selector */}
+            {issueProductCodeId && (() => {
+              const stock = summaries.find(s => s.product_code_id === issueProductCodeId);
+              const variants = (stock?.thicknessBreakdown ?? []).filter(v => {
+                const availableSqm = (v.producedBuckets.sqm ?? 0) - (v.issuedBuckets.sqm ?? 0);
+                const availableKg = (v.producedBuckets.kg ?? 0) - (v.issuedBuckets.kg ?? 0);
+                const availableM = (v.producedBuckets.meters ?? 0) - (v.issuedBuckets.meters ?? 0);
+                return v.produced > 0 || availableSqm > 0 || availableKg > 0 || availableM > 0;
+              });
+              return (
+                <div className="space-y-2">
+                  <Label>Thickness Variant</Label>
+                  <SearchableSelect
+                    value={issueThickness}
+                    onValueChange={(v) => {
+                      setIssueThickness(v);
+                      const variant = variants.find(x => String(x.thickness_mm ?? "") === v);
+                      const g = variant?.conversion.gsm ?? null;
+                      if (g && g > 0) {
+                        setIssueGsm(String(g));
+                        setIssueGsmAuto(true);
+                      } else {
+                        setIssueGsm("");
+                        setIssueGsmAuto(false);
+                      }
+                    }}
+                    placeholder={variants.length ? "Select thickness / GSM variant" : "No variants available for this product"}
+                    options={variants.map(v => {
+                      const sqm = (v.producedBuckets.sqm ?? 0) - (v.issuedBuckets.sqm ?? 0);
+                      const kg = (v.producedBuckets.kg ?? 0) - (v.issuedBuckets.kg ?? 0);
+                      const m = (v.producedBuckets.meters ?? 0) - (v.issuedBuckets.meters ?? 0);
+                      const t = v.thickness_mm != null ? `${v.thickness_mm} mm` : "— mm";
+                      const g = v.conversion.gsm ? `GSM ${v.conversion.gsm}` : "Missing GSM";
+                      const parts = [
+                        sqm ? `${sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm` : null,
+                        kg ? `${kg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg` : null,
+                        m ? `${m.toLocaleString(undefined, { maximumFractionDigits: 2 })} m` : null,
+                      ].filter(Boolean);
+                      return {
+                        value: String(v.thickness_mm ?? ""),
+                        label: `${t} | ${g} | Available ${parts.length ? parts.join(" / ") : "0"}`,
+                      };
+                    })}
+                  />
+                </div>
+              );
+            })()}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Quantity ({issueUnit})</Label>
                 <Input type="number" min="0" step="0.01" value={issueQuantity} onChange={(e) => setIssueQuantity(e.target.value)} placeholder="0" />
               </div>
               <div className="space-y-2">
                 <Label>Unit</Label>
-                <Select value={issueUnit} onValueChange={(v) => setIssueUnit(v as "sqm" | "kg")}>
+                <Select value={issueUnit} onValueChange={(v) => setIssueUnit(v as "sqm" | "kg" | "meters")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sqm">Square Meters (sqm)</SelectItem>
                     <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                    <SelectItem value="meters">Meters (m)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Thickness (mm)</Label>
-                <Input type="number" min="0" step="0.01" value={issueThickness} onChange={(e) => {
-                  const t = e.target.value;
-                  setIssueThickness(t);
-                  if (issueProductCodeId) {
-                    const key = `${issueProductCodeId}__${t ? Number(t) : ""}`;
-                    const g = productGsmByCodeThickness[key] ?? productGsmByCode[issueProductCodeId];
-                    if (g && g > 0) { setIssueGsm(String(g)); setIssueGsmAuto(true); }
-                  }
-                }} placeholder="Optional" />
-              </div>
-              <div className="space-y-2">
-                <Label>GSM{issueGsmAuto ? " (auto from product)" : ""}</Label>
+                <Label>GSM{issueGsmAuto ? " (auto from variant)" : ""}</Label>
                 <Input
                   type="number"
-                  min="0"
-                  step="1"
                   value={issueGsm}
-                  readOnly={issueGsmAuto}
-                  className={issueGsmAuto ? "bg-muted cursor-not-allowed" : ""}
-                  onChange={(e) => setIssueGsm(e.target.value)}
-                  placeholder="for conversion"
+                  readOnly
+                  className="bg-muted cursor-not-allowed"
+                  placeholder={issueThickness ? "Missing GSM" : "Select thickness"}
                 />
               </div>
             </div>
             {issueQuantity && (() => {
               const qty = Number(issueQuantity);
+              if (!qty) return null;
+              const stock = summaries.find(s => s.product_code_id === issueProductCodeId);
+              const variant = stock?.thicknessBreakdown.find(v => String(v.thickness_mm ?? "") === issueThickness);
               const gsmNum = issueGsm ? Number(issueGsm) : 0;
-              if (!qty || !gsmNum) return (
-                <p className="text-xs text-muted-foreground">Enter GSM to auto-convert between sqm and kg.</p>
-              );
-              const sqm = issueUnit === "sqm" ? qty : (qty * 1000) / gsmNum;
-              const kg = issueUnit === "kg" ? qty : (qty * gsmNum) / 1000;
+              const widthMm = variant?.conversion.widthMm ?? null;
+              let sqm: number | null = null;
+              let kg: number | null = null;
+              let m: number | null = null;
+              if (issueUnit === "sqm") {
+                sqm = qty;
+                if (gsmNum > 0) kg = (qty * gsmNum) / 1000;
+                if (widthMm) m = qty / (widthMm / 1000);
+              } else if (issueUnit === "kg") {
+                kg = qty;
+                if (gsmNum > 0) sqm = (qty * 1000) / gsmNum;
+                if (sqm != null && widthMm) m = sqm / (widthMm / 1000);
+              } else {
+                m = qty;
+                if (widthMm) sqm = (qty * widthMm) / 1000;
+                if (sqm != null && gsmNum > 0) kg = (sqm * gsmNum) / 1000;
+              }
               return (
-                <div className="flex gap-4 text-sm p-2 rounded bg-muted">
-                  <span>≈ <strong>{sqm.toFixed(2)} sqm</strong></span>
-                  <span>≈ <strong>{kg.toFixed(2)} kg</strong></span>
+                <div className="flex flex-wrap gap-4 text-sm p-2 rounded bg-muted">
+                  <span>≈ <strong>{sqm != null ? `${sqm.toFixed(2)} sqm` : "— sqm (need GSM/width)"}</strong></span>
+                  <span>≈ <strong>{kg != null ? `${kg.toFixed(2)} kg` : "— kg (need GSM)"}</strong></span>
+                  <span>≈ <strong>{m != null ? `${m.toFixed(2)} m` : "— m (need width)"}</strong></span>
                 </div>
               );
             })()}
+
             <div className="space-y-2">
               <Label>Notes (optional)</Label>
               <Textarea rows={2} value={issueNotes} onChange={(e) => setIssueNotes(e.target.value)} placeholder="e.g. Delivery challan #123" />
