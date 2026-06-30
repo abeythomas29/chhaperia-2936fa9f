@@ -36,11 +36,14 @@ const getMissingUnitReason = (unit: UnitKey, conversion: ConversionInfo) => {
 const formatConversionData = (conversion: ConversionInfo) => {
   const width = conversion.widthMm ? `Width = ${conversion.widthMm.toLocaleString(undefined, { maximumFractionDigits: 4 })} mm from ${conversion.widthSource}` : null;
   const gsm = conversion.gsm ? `GSM = ${conversion.gsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} from ${conversion.gsmSource}` : null;
+  const warn = conversion.widthMm != null && conversion.widthMm < 100
+    ? " ⚠ Possible wrong width source: using cut width instead of source width."
+    : "";
   if (width || gsm) {
     const missing = conversion.missingData !== "Complete" ? ` (${conversion.missingData})` : "";
-    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.`;
+    return `Conversion data: ${[width, gsm].filter(Boolean).join(", ")}${missing}.${warn}`;
   }
-  return "Conversion data missing: width/GSM not found.";
+  return "Conversion data missing: source width / GSM not found.";
 };
 
 interface ThicknessBreakdown {
@@ -461,11 +464,23 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, eb);
     };
+    // Narrow cut widths from slitting must NOT be used as the source-roll width
+    // when converting production_entries meters → sqm. Slit cut widths often
+    // describe a narrow tape (e.g. 24mm) and would dramatically under-report sqm
+    // for a full-width finished stock roll (~1000mm). Only register slitting
+    // cut_width_mm as a fallback when it is plausibly a full-width roll.
+    const MIN_FULL_ROLL_WIDTH_MM = 100;
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
       const gsm = s.gsm != null ? Number(s.gsm) : null;
-      recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 1);
+      if (widthMm != null && widthMm >= MIN_FULL_ROLL_WIDTH_MM) {
+        recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 2);
+      } else if (widthMm != null && widthMm > 0) {
+        console.warn("[stock] skipping narrow slit cut_width as source-width fallback", {
+          product_code_id: s.product_code_id, thickness_mm: thickness, cut_width_mm: widthMm,
+        });
+      }
       recordGsm(s.product_code_id, thickness, gsm, "slitting_entries.gsm", 1);
       addProduced(
         s.product_code_id,
@@ -482,7 +497,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
       const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
       const gsm = h.gsm != null ? Number(h.gsm) : null;
-      recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 1);
+      if (widthMm != null && widthMm >= MIN_FULL_ROLL_WIDTH_MM) {
+        recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 2);
+      } else if (widthMm != null && widthMm > 0) {
+        console.warn("[stock] skipping narrow head36 roll_width as source-width fallback", {
+          product_code_id: h.product_code_id, thickness_mm: thickness, roll_width_mm: widthMm,
+        });
+      }
       recordGsm(h.product_code_id, thickness, gsm, "head36_entries.gsm", 1);
       addProduced(
         h.product_code_id,
@@ -597,6 +618,19 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         }
       }
       const matchedStockIssues = finishedStockIssues.filter((i) => String(i.product_code_id) === String(pcId));
+      const productConversion = getConversionInfo(pcId, null, true);
+      // Debug: surface the width source actually chosen for this product.
+      console.log("[stock] finished stock conversion", {
+        product_code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
+        product_code_id: pcId,
+        meters: prod?.buckets?.meters ?? null,
+        width_mm: productConversion.widthMm,
+        width_source: productConversion.widthSource,
+        gsm: productConversion.gsm,
+        gsm_source: productConversion.gsmSource,
+        sqm: prod?.buckets?.sqm ?? null,
+        warn_narrow_width: productConversion.widthMm != null && productConversion.widthMm < 100,
+      });
       summaryList.push({
         product_code_id: pcId,
         code: prod?.code ?? issueProductCodeMap.get(pcId) ?? "—",
@@ -606,7 +640,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
         available: produced - issued,
         producedBuckets: prod?.buckets ?? {},
         issuedBuckets,
-        conversion: getConversionInfo(pcId, null, true),
+        conversion: productConversion,
         thicknessBreakdown: breakdown,
         debugMatchedStockIssues: matchedStockIssues,
       });
