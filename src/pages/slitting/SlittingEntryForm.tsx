@@ -461,8 +461,22 @@ export default function SlittingEntryForm() {
                 value={form.product_code_id}
                 onValueChange={(v) => setForm({ ...form, product_code_id: v })}
                 placeholder="Select product code"
-                options={productCodes.map((pc) => ({ value: pc.id, label: pc.code }))}
+                options={productCodeOptions.map((pc) => ({ value: pc.id, label: pc.code }))}
               />
+              {selectedIssue?.issue_type === "raw_material" && (
+                <>
+                  {candidateProductCodes.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      No product code mapped for issued raw material "{selectedIssue.raw_material_name ?? selectedIssue.display_name}". Pick one manually.
+                    </p>
+                  )}
+                  {candidateProductCodes.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Select matching product code for issued material {selectedIssue.raw_material_name ?? selectedIssue.display_name} ({candidateProductCodes.length} matches).
+                    </p>
+                  )}
+                </>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Date *</Label>
