@@ -461,11 +461,23 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, eb);
     };
+    // Narrow cut widths from slitting must NOT be used as the source-roll width
+    // when converting production_entries meters → sqm. Slit cut widths often
+    // describe a narrow tape (e.g. 24mm) and would dramatically under-report sqm
+    // for a full-width finished stock roll (~1000mm). Only register slitting
+    // cut_width_mm as a fallback when it is plausibly a full-width roll.
+    const MIN_FULL_ROLL_WIDTH_MM = 100;
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
       const gsm = s.gsm != null ? Number(s.gsm) : null;
-      recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 1);
+      if (widthMm != null && widthMm >= MIN_FULL_ROLL_WIDTH_MM) {
+        recordWidth(s.product_code_id, thickness, widthMm, "slitting_entries.cut_width_mm", 2);
+      } else if (widthMm != null && widthMm > 0) {
+        console.warn("[stock] skipping narrow slit cut_width as source-width fallback", {
+          product_code_id: s.product_code_id, thickness_mm: thickness, cut_width_mm: widthMm,
+        });
+      }
       recordGsm(s.product_code_id, thickness, gsm, "slitting_entries.gsm", 1);
       addProduced(
         s.product_code_id,
@@ -482,7 +494,13 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const widthMm = h.roll_width_mm != null ? Number(h.roll_width_mm) : null;
       const thickness = h.thickness_mm != null ? Number(h.thickness_mm) : null;
       const gsm = h.gsm != null ? Number(h.gsm) : null;
-      recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 1);
+      if (widthMm != null && widthMm >= MIN_FULL_ROLL_WIDTH_MM) {
+        recordWidth(h.product_code_id, thickness, widthMm, "head36_entries.roll_width_mm", 2);
+      } else if (widthMm != null && widthMm > 0) {
+        console.warn("[stock] skipping narrow head36 roll_width as source-width fallback", {
+          product_code_id: h.product_code_id, thickness_mm: thickness, roll_width_mm: widthMm,
+        });
+      }
       recordGsm(h.product_code_id, thickness, gsm, "head36_entries.gsm", 1);
       addProduced(
         h.product_code_id,
