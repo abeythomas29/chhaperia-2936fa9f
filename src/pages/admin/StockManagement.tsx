@@ -448,6 +448,22 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const trow = ensureThickness(pcId, thickness);
       trow.produced += qty;
       mergeBuckets(trow.producedBuckets, entryBuckets);
+
+      console.log("finished stock conversion audit", {
+        productCode: p.product_codes?.code ?? "—",
+        thickness,
+        sourceRowId: p.id,
+        source: "production_entries",
+        originalQuantity: qty,
+        originalUnit: p.unit,
+        widthMm: widthMm ?? null,
+        widthSource: widthMm != null ? "production entry notes width_mm" : null,
+        gsm: gsm ?? null,
+        gsmSource: gsm != null ? (p.gsm != null ? "production_entries.gsm" : "notes") : null,
+        normalizedMeters: entryBuckets.meters ?? null,
+        normalizedSqm: entryBuckets.sqm ?? null,
+        normalizedKg: entryBuckets.kg ?? null,
+      });
     }
 
     // Add slitting + head36 produced (these carry their own width).
