@@ -127,7 +127,7 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
   const [issueClientId, setIssueClientId] = useState("");
   const [issueRecipientUserId, setIssueRecipientUserId] = useState("");
   const [issueQuantity, setIssueQuantity] = useState("");
-  const [issueUnit, setIssueUnit] = useState<"sqm" | "kg">("sqm");
+  const [issueUnit, setIssueUnit] = useState<"sqm" | "kg" | "meters">("sqm");
   const [issueNotes, setIssueNotes] = useState("");
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [issueThickness, setIssueThickness] = useState("");
