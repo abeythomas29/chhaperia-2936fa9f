@@ -84,6 +84,7 @@ export default function SlittingEntryForm() {
       .filter((r) => r.pending_quantity > 0.0001)
       .map((r) => ({
         issue_id: r.issue_id,
+        source_table: r.source_table,
         issue_type: r.issue_type,
         product_code_id: r.product_code_id,
         raw_material_id: r.raw_material_id,
