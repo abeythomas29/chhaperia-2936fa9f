@@ -123,6 +123,38 @@ export default function SlittingEntryForm() {
 
   const selectedIssue = issuedMaterials.find((i) => i.issue_id === form.issue_id) ?? null;
 
+  // ---- Raw-material → product code matching (frontend only) ----
+  const normalizeCode = (v: string | null | undefined) =>
+    (v ?? "").toUpperCase().replace(/[\s\-_:./]+/g, "");
+
+  const matchProductCodesForRawMaterial = (
+    rawName: string | null | undefined,
+    codes: ProductCode[],
+  ): ProductCode[] => {
+    const rmCode = normalizeCode(rawName);
+    if (!rmCode) return [];
+    const exact = codes.filter((p) => normalizeCode(p.code) === rmCode);
+    if (exact.length) return exact;
+    const prefix = codes.filter((p) => normalizeCode(p.code).startsWith(rmCode));
+    if (prefix.length) return prefix;
+    return codes.filter((p) => normalizeCode(p.code).includes(rmCode));
+  };
+
+  const candidateProductCodes =
+    selectedIssue && selectedIssue.issue_type === "raw_material"
+      ? matchProductCodesForRawMaterial(
+          selectedIssue.raw_material_name ?? selectedIssue.display_name,
+          productCodes,
+        )
+      : [];
+
+  const productCodeOptions =
+    selectedIssue?.issue_type === "raw_material" && candidateProductCodes.length > 0
+      ? candidateProductCodes
+      : productCodes;
+
+
+
 
   // Source calculations (summed across all source rows)
   const srcGsm = parseFloat(form.source_gsm) || 0;
@@ -368,10 +400,32 @@ export default function SlittingEntryForm() {
                     gsmFromIssue = Number(rmse[0].gsm);
                   }
                 }
+                let nextProductCodeId = form.product_code_id;
+                if (iss.product_code_id) {
+                  // A. finished stock or raw issue with an explicit product code
+                  nextProductCodeId = iss.product_code_id;
+                } else if (iss.issue_type === "raw_material") {
+                  // B. raw material — match by normalized code
+                  const matches = matchProductCodesForRawMaterial(
+                    iss.raw_material_name ?? iss.display_name,
+                    productCodes,
+                  );
+                  console.log("issued raw material product mapping", {
+                    rawMaterialId: iss.raw_material_id,
+                    rawMaterialName: iss.raw_material_name ?? iss.display_name,
+                    stockIssueProductCodeId: iss.product_code_id,
+                    candidateProductCodes: matches.map((m) => m.code),
+                    selectedProductCodeId: matches.length === 1 ? matches[0].id : null,
+                  });
+                  // C/D/E: only auto-select when exactly one match is found
+                  nextProductCodeId = matches.length === 1 ? matches[0].id : "";
+                }
+
                 setForm({
                   ...form,
                   issue_id: v,
-                  product_code_id: iss.product_code_id || form.product_code_id,
+                  product_code_id: nextProductCodeId,
+
                   source_thickness_mm: iss.thickness_mm != null ? String(iss.thickness_mm) : form.source_thickness_mm,
                   source_gsm: gsmFromIssue != null && gsmFromIssue > 0 ? String(gsmFromIssue) : form.source_gsm,
                 });
@@ -407,8 +461,22 @@ export default function SlittingEntryForm() {
                 value={form.product_code_id}
                 onValueChange={(v) => setForm({ ...form, product_code_id: v })}
                 placeholder="Select product code"
-                options={productCodes.map((pc) => ({ value: pc.id, label: pc.code }))}
+                options={productCodeOptions.map((pc) => ({ value: pc.id, label: pc.code }))}
               />
+              {selectedIssue?.issue_type === "raw_material" && (
+                <>
+                  {candidateProductCodes.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      No product code mapped for issued raw material "{selectedIssue.raw_material_name ?? selectedIssue.display_name}". Pick one manually.
+                    </p>
+                  )}
+                  {candidateProductCodes.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Select matching product code for issued material {selectedIssue.raw_material_name ?? selectedIssue.display_name} ({candidateProductCodes.length} matches).
+                    </p>
+                  )}
+                </>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Date *</Label>
