@@ -491,10 +491,10 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
     };
     // Narrow cut widths from slitting must NOT be used as the source-roll width
     // when converting production_entries meters → sqm. Slit cut widths often
-    // describe a narrow tape (e.g. 24mm) and would dramatically under-report sqm
-    // for a full-width finished stock roll (~1000mm). Only register slitting
-    // cut_width_mm as a fallback when it is plausibly a full-width roll.
-    const MIN_FULL_ROLL_WIDTH_MM = 100;
+    // describe a narrow tape (e.g. 24mm, 175mm, 250mm) and would dramatically
+    // under-report sqm for a full-width finished stock roll (~1000mm). Only
+    // register slitting cut_width_mm as a fallback when it is plausibly a
+    // full-width roll (>= MIN_FULL_ROLL_WIDTH_MM).
     for (const s of (slitProd ?? []) as any[]) {
       const widthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : null;
       const thickness = s.thickness_mm != null ? Number(s.thickness_mm) : null;
