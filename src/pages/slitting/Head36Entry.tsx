@@ -113,18 +113,30 @@ export default function Head36Entry() {
       }
     }
 
-    // 4. Sum secondary consumed = sum head36 total_quantity per slitting_entry_id.
-    const secondaryConsumed = new Map<string, number>();
+    // 4. Sum secondary consumed per slitting_entry_id, tracking BOTH meters (reference) and SQM (validation).
+    const secondaryConsumedMtr = new Map<string, number>();
+    const secondaryConsumedSqm = new Map<string, number>();
     if (slitIds.length) {
       const hRes = await (supabase as any)
         .from("head36_entries")
-        .select("slitting_entry_id, total_quantity, rolls_produced, length_per_tape_mtr")
+        .select("slitting_entry_id, total_quantity, rolls_produced, length_per_tape_mtr, roll_width_mm, notes")
         .in("slitting_entry_id", slitIds);
       if (!hRes.error) {
         for (const r of (hRes.data ?? []) as any[]) {
           const k = String(r.slitting_entry_id);
-          const qty = Number(r.total_quantity ?? (Number(r.rolls_produced ?? 0) * Number(r.length_per_tape_mtr ?? 0)));
-          secondaryConsumed.set(k, (secondaryConsumed.get(k) ?? 0) + (Number.isFinite(qty) ? qty : 0));
+          const rolls = Number(r.rolls_produced ?? 0);
+          const lenM = Number(r.length_per_tape_mtr ?? 0);
+          const widthMm = Number(r.roll_width_mm ?? 0);
+          const mtr = Number(r.total_quantity ?? rolls * lenM);
+          // Prefer explicit TotalSqm noted at save time, else derive width×length×rolls.
+          let sqm = 0;
+          if (typeof r.notes === "string") {
+            const m = r.notes.match(/TotalSqm[:\s]+([\d.]+)/i);
+            if (m) sqm = parseFloat(m[1]);
+          }
+          if (!sqm && widthMm > 0 && lenM > 0 && rolls > 0) sqm = (widthMm / 1000) * lenM * rolls;
+          secondaryConsumedMtr.set(k, (secondaryConsumedMtr.get(k) ?? 0) + (Number.isFinite(mtr) ? mtr : 0));
+          secondaryConsumedSqm.set(k, (secondaryConsumedSqm.get(k) ?? 0) + (Number.isFinite(sqm) ? sqm : 0));
         }
       }
     }
@@ -134,9 +146,13 @@ export default function Head36Entry() {
       const primaryIssued = Number(issue?.quantity ?? 0);
       const pConsumed = primaryConsumed.get(String(s.stock_issue_id)) ?? 0;
       const primaryPending = Math.max(0, primaryIssued - pConsumed);
-      const produced = Number(s.cut_quantity_produced ?? 0);
-      const sConsumed = secondaryConsumed.get(String(s.id)) ?? 0;
-      const secondaryPending = Math.max(0, produced - sConsumed);
+      const producedMtr = Number(s.cut_quantity_produced ?? 0);
+      const cutWidthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : 0;
+      // Area-conserved sqm from slitting produced meters × cut width.
+      const producedSqm = cutWidthMm > 0 ? (cutWidthMm / 1000) * producedMtr : 0;
+      const sConsumedMtr = secondaryConsumedMtr.get(String(s.id)) ?? 0;
+      const sConsumedSqm = secondaryConsumedSqm.get(String(s.id)) ?? 0;
+      const secondaryPendingSqm = Math.max(0, producedSqm - sConsumedSqm);
       let gsm = s.gsm != null ? Number(s.gsm) : null;
       if (gsm == null && typeof s.notes === "string") {
         const m = s.notes.match(/GSM\s*[:\-]\s*(\d+(?:\.\d+)?)/i);
@@ -152,17 +168,20 @@ export default function Head36Entry() {
         lot_number: extractLot(s.notes) !== "—" ? extractLot(s.notes) : extractLot(issue?.notes),
         thickness_mm: s.thickness_mm != null ? Number(s.thickness_mm) : (issue?.thickness_mm != null ? Number(issue.thickness_mm) : null),
         gsm,
-        cut_width_mm: s.cut_width_mm != null ? Number(s.cut_width_mm) : null,
+        cut_width_mm: cutWidthMm || null,
         unit: String(s.unit ?? "meters"),
         primary_issued: primaryIssued,
         primary_consumed: pConsumed,
         primary_pending: primaryPending,
         primary_unit: String(issue?.unit ?? s.unit ?? ""),
-        secondary_produced: produced,
-        secondary_consumed: sConsumed,
-        secondary_pending: secondaryPending,
+        secondary_produced_sqm: producedSqm,
+        secondary_consumed_sqm: sConsumedSqm,
+        secondary_pending_sqm: secondaryPendingSqm,
+        secondary_produced_mtr: producedMtr,
+        secondary_consumed_mtr: sConsumedMtr,
       };
     });
+
 
     setSources(list);
     setLoading(false);
