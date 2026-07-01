@@ -15,6 +15,7 @@ import { listManagerIssuedMaterials } from "@/lib/issuedMaterials";
 
 interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
+interface RawMaterial { id: string; name: string; unit: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 interface IssuedMaterial {
