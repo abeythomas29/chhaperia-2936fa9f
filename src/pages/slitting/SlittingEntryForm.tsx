@@ -436,7 +436,7 @@ export default function SlittingEntryForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Issued Material — only materials issued to this slitting manager */}
           <div className="space-y-2 rounded-lg border-2 border-secondary/30 bg-secondary/5 p-3">
-            <Label className="font-semibold">Issued Material (from Inventory Manager)</Label>
+            <Label className="font-semibold">Issued Material (optional — from Inventory Manager)</Label>
             <SearchableSelect
               value={form.issue_id}
               onValueChange={async (v) => {
