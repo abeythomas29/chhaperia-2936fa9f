@@ -91,15 +91,19 @@ export default function MaterialReturn() {
       return;
     }
 
-    // slitting_returns FK requires slitting_entry_id. Find any slitting_entry
-    // already tied to this issue. If none exists, we cannot attach the return
-    // record under the current schema.
-    const anchorRes = await supabase
-      .from("slitting_entries")
-      .select("id")
-      .eq("stock_issue_id", selected.issue_id)
-      .limit(1);
-    const anchorId = (anchorRes.data?.[0]?.id as string | undefined) ?? null;
+    // slitting_returns FK requires slitting_entry_id.
+    // Secondary rows already carry the entry id; primary rows need lookup.
+    let anchorId: string | null = null;
+    if (selected.is_secondary && selected.secondary_slitting_entry_id) {
+      anchorId = selected.secondary_slitting_entry_id;
+    } else {
+      const anchorRes = await supabase
+        .from("slitting_entries")
+        .select("id")
+        .eq("stock_issue_id", selected.issue_id)
+        .limit(1);
+      anchorId = (anchorRes.data?.[0]?.id as string | undefined) ?? null;
+    }
     if (!anchorId) {
       toast({
         title: "No slitting entry yet",
