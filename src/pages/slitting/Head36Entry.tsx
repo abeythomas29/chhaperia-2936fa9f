@@ -219,11 +219,13 @@ export default function Head36Entry() {
     0,
   );
 
-  // For comparing with secondary pending, we use total length (meters) — same unit as cut_quantity_produced.
+  // Validate via AREA (sqm) — area is conserved when slitting. Meters can differ
+  // because narrower cuts produce many parallel tapes.
   const exceedsSecondary = useMemo(() => {
     if (!selected) return false;
-    return totalLength > selected.secondary_pending + 1e-6;
-  }, [selected, totalLength]);
+    return totalSqm > selected.secondary_pending_sqm + 1e-6;
+  }, [selected, totalSqm]);
+
 
   const clientRequired = !!selected && !selected.client_id;
 
