@@ -412,9 +412,10 @@ export default function Head36Entry() {
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-foreground">Secondary Source (from Slitting)</p>
-                <p>Slitting Produced: <span className="font-medium">{selected.secondary_produced.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
-                <p>Consumed in 36 Head: <span className="font-medium">{selected.secondary_consumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
-                <p>Secondary Pending: <span className="font-semibold text-primary">{selected.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
+                <p>Slitting Produced: <span className="font-medium">{selected.secondary_produced_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span> <span className="text-xs text-muted-foreground">({selected.secondary_produced_mtr.toLocaleString(undefined, { maximumFractionDigits: 2 })} m ref)</span></p>
+                <p>Consumed in 36 Head: <span className="font-medium">{selected.secondary_consumed_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span> <span className="text-xs text-muted-foreground">({selected.secondary_consumed_mtr.toLocaleString(undefined, { maximumFractionDigits: 2 })} m ref)</span></p>
+                <p>Secondary Pending: <span className="font-semibold text-primary">{selected.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+
               </div>
             </div>
           )}
