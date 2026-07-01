@@ -29,13 +29,17 @@ interface Head36Source {
   primary_consumed: number; // sum source_quantity across all slitting_entries for this issue
   primary_pending: number;
   primary_unit: string;
-  // Secondary (this slitting entry's produced output vs head36 consumption)
-  secondary_produced: number; // cut_quantity_produced of this slitting entry
-  secondary_consumed: number; // sum head36 total_quantity for this slitting_entry_id
-  secondary_pending: number;
+  // Secondary (this slitting entry's produced output vs head36 consumption) — tracked in SQM (area-conserved)
+  secondary_produced_sqm: number;
+  secondary_consumed_sqm: number;
+  secondary_pending_sqm: number;
+  // Meters — reference only, NOT used for over-consumption validation
+  secondary_produced_mtr: number;
+  secondary_consumed_mtr: number;
 }
 
 interface RollRow { width_mm: string; length_mtr: string; rolls: string; }
+
 
 const extractLot = (notes: string | null | undefined): string => {
   if (!notes) return "—";
@@ -109,18 +113,30 @@ export default function Head36Entry() {
       }
     }
 
-    // 4. Sum secondary consumed = sum head36 total_quantity per slitting_entry_id.
-    const secondaryConsumed = new Map<string, number>();
+    // 4. Sum secondary consumed per slitting_entry_id, tracking BOTH meters (reference) and SQM (validation).
+    const secondaryConsumedMtr = new Map<string, number>();
+    const secondaryConsumedSqm = new Map<string, number>();
     if (slitIds.length) {
       const hRes = await (supabase as any)
         .from("head36_entries")
-        .select("slitting_entry_id, total_quantity, rolls_produced, length_per_tape_mtr")
+        .select("slitting_entry_id, total_quantity, rolls_produced, length_per_tape_mtr, roll_width_mm, notes")
         .in("slitting_entry_id", slitIds);
       if (!hRes.error) {
         for (const r of (hRes.data ?? []) as any[]) {
           const k = String(r.slitting_entry_id);
-          const qty = Number(r.total_quantity ?? (Number(r.rolls_produced ?? 0) * Number(r.length_per_tape_mtr ?? 0)));
-          secondaryConsumed.set(k, (secondaryConsumed.get(k) ?? 0) + (Number.isFinite(qty) ? qty : 0));
+          const rolls = Number(r.rolls_produced ?? 0);
+          const lenM = Number(r.length_per_tape_mtr ?? 0);
+          const widthMm = Number(r.roll_width_mm ?? 0);
+          const mtr = Number(r.total_quantity ?? rolls * lenM);
+          // Prefer explicit TotalSqm noted at save time, else derive width×length×rolls.
+          let sqm = 0;
+          if (typeof r.notes === "string") {
+            const m = r.notes.match(/TotalSqm[:\s]+([\d.]+)/i);
+            if (m) sqm = parseFloat(m[1]);
+          }
+          if (!sqm && widthMm > 0 && lenM > 0 && rolls > 0) sqm = (widthMm / 1000) * lenM * rolls;
+          secondaryConsumedMtr.set(k, (secondaryConsumedMtr.get(k) ?? 0) + (Number.isFinite(mtr) ? mtr : 0));
+          secondaryConsumedSqm.set(k, (secondaryConsumedSqm.get(k) ?? 0) + (Number.isFinite(sqm) ? sqm : 0));
         }
       }
     }
@@ -130,9 +146,13 @@ export default function Head36Entry() {
       const primaryIssued = Number(issue?.quantity ?? 0);
       const pConsumed = primaryConsumed.get(String(s.stock_issue_id)) ?? 0;
       const primaryPending = Math.max(0, primaryIssued - pConsumed);
-      const produced = Number(s.cut_quantity_produced ?? 0);
-      const sConsumed = secondaryConsumed.get(String(s.id)) ?? 0;
-      const secondaryPending = Math.max(0, produced - sConsumed);
+      const producedMtr = Number(s.cut_quantity_produced ?? 0);
+      const cutWidthMm = s.cut_width_mm != null ? Number(s.cut_width_mm) : 0;
+      // Area-conserved sqm from slitting produced meters × cut width.
+      const producedSqm = cutWidthMm > 0 ? (cutWidthMm / 1000) * producedMtr : 0;
+      const sConsumedMtr = secondaryConsumedMtr.get(String(s.id)) ?? 0;
+      const sConsumedSqm = secondaryConsumedSqm.get(String(s.id)) ?? 0;
+      const secondaryPendingSqm = Math.max(0, producedSqm - sConsumedSqm);
       let gsm = s.gsm != null ? Number(s.gsm) : null;
       if (gsm == null && typeof s.notes === "string") {
         const m = s.notes.match(/GSM\s*[:\-]\s*(\d+(?:\.\d+)?)/i);
@@ -148,17 +168,20 @@ export default function Head36Entry() {
         lot_number: extractLot(s.notes) !== "—" ? extractLot(s.notes) : extractLot(issue?.notes),
         thickness_mm: s.thickness_mm != null ? Number(s.thickness_mm) : (issue?.thickness_mm != null ? Number(issue.thickness_mm) : null),
         gsm,
-        cut_width_mm: s.cut_width_mm != null ? Number(s.cut_width_mm) : null,
+        cut_width_mm: cutWidthMm || null,
         unit: String(s.unit ?? "meters"),
         primary_issued: primaryIssued,
         primary_consumed: pConsumed,
         primary_pending: primaryPending,
         primary_unit: String(issue?.unit ?? s.unit ?? ""),
-        secondary_produced: produced,
-        secondary_consumed: sConsumed,
-        secondary_pending: secondaryPending,
+        secondary_produced_sqm: producedSqm,
+        secondary_consumed_sqm: sConsumedSqm,
+        secondary_pending_sqm: secondaryPendingSqm,
+        secondary_produced_mtr: producedMtr,
+        secondary_consumed_mtr: sConsumedMtr,
       };
     });
+
 
     setSources(list);
     setLoading(false);
@@ -196,11 +219,13 @@ export default function Head36Entry() {
     0,
   );
 
-  // For comparing with secondary pending, we use total length (meters) — same unit as cut_quantity_produced.
+  // Validate via AREA (sqm) — area is conserved when slitting. Meters can differ
+  // because narrower cuts produce many parallel tapes.
   const exceedsSecondary = useMemo(() => {
     if (!selected) return false;
-    return totalLength > selected.secondary_pending + 1e-6;
-  }, [selected, totalLength]);
+    return totalSqm > selected.secondary_pending_sqm + 1e-6;
+  }, [selected, totalSqm]);
+
 
   const clientRequired = !!selected && !selected.client_id;
 
@@ -227,7 +252,7 @@ export default function Head36Entry() {
     if (exceedsSecondary) {
       toast({
         title: "Exceeds secondary pending",
-        description: `Only ${selected.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selected.unit} pending on this slitting source.`,
+        description: `Only ${selected.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm pending on this slitting source.`,
         variant: "destructive",
       });
       return;
@@ -329,12 +354,13 @@ export default function Head36Entry() {
   }
 
   const sourceOptions = sources
-    .filter((s) => s.secondary_pending > 0.0001)
+    .filter((s) => s.secondary_pending_sqm > 0.0001)
     .map((s) => ({
       value: s.slitting_entry_id,
-      label: `${s.product_code} | Lot ${s.lot_number} | ${s.thickness_mm ?? "—"}mm | GSM ${s.gsm ?? "—"} | Pending ${s.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${s.unit}`,
+      label: `${s.product_code} | Lot ${s.lot_number} | ${s.thickness_mm ?? "—"}mm | GSM ${s.gsm ?? "—"} | Pending ${s.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm`,
       keywords: `${s.product_code} ${s.lot_number} ${format(new Date(s.date), "dd/MM/yy")}`,
     }));
+
 
   return (
     <Card>
@@ -386,9 +412,10 @@ export default function Head36Entry() {
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-foreground">Secondary Source (from Slitting)</p>
-                <p>Slitting Produced: <span className="font-medium">{selected.secondary_produced.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
-                <p>Consumed in 36 Head: <span className="font-medium">{selected.secondary_consumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
-                <p>Secondary Pending: <span className="font-semibold text-primary">{selected.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} {selected.unit}</span></p>
+                <p>Slitting Produced: <span className="font-medium">{selected.secondary_produced_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span> <span className="text-xs text-muted-foreground">({selected.secondary_produced_mtr.toLocaleString(undefined, { maximumFractionDigits: 2 })} m ref)</span></p>
+                <p>Consumed in 36 Head: <span className="font-medium">{selected.secondary_consumed_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span> <span className="text-xs text-muted-foreground">({selected.secondary_consumed_mtr.toLocaleString(undefined, { maximumFractionDigits: 2 })} m ref)</span></p>
+                <p>Secondary Pending: <span className="font-semibold text-primary">{selected.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm</span></p>
+
               </div>
             </div>
           )}
@@ -511,7 +538,7 @@ export default function Head36Entry() {
 
           {exceedsSecondary && selected && (
             <p className="text-sm text-destructive">
-              Total length ({totalLength.toFixed(2)} m) exceeds Secondary Pending ({selected.secondary_pending.toFixed(2)} {selected.unit}).
+              Total area ({totalSqm.toFixed(2)} sqm) exceeds Secondary Pending ({selected.secondary_pending_sqm.toFixed(2)} sqm).
             </p>
           )}
 
