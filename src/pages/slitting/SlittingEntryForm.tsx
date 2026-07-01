@@ -359,10 +359,62 @@ export default function SlittingEntryForm() {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      // Direct-inventory mode: write a mirror deduction row so the selected
+      // source item's stock actually reduces (no stock_issue_id path).
+      if (!isIssued && form.direct_source_id) {
+        const thk = form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null;
+        const noteDir = `Direct slitting consumption${form.notes ? ` — ${form.notes}` : ""}`;
+        if (form.direct_source_type === "product") {
+          const { error: siErr } = await supabase.from("stock_issues").insert({
+            product_code_id: form.direct_source_id,
+            quantity: sourceSqm || sourceQty,
+            unit: "sqmtr",
+            thickness_mm: thk,
+            date: isoDate,
+            issued_by: user.id,
+            recipient_type: "slitting_direct",
+            recipient_user_id: user.id,
+            notes: noteDir,
+          } as any);
+          if (siErr) {
+            toast({
+              title: "Stock not deducted",
+              description: `Slitting saved, but source stock deduction failed: ${siErr.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          const gsm = form.source_gsm ? parseFloat(form.source_gsm) : null;
+          const qtyKg = sourceKg || sourceQty;
+          const { error: rmErr } = await (supabase as any).from("raw_material_stock_entries").insert({
+            raw_material_id: form.direct_source_id,
+            quantity: qtyKg,
+            entry_type: "issue",
+            issue_quantity: sourceQty,
+            issue_unit: form.source_unit,
+            issue_quantity_kg: qtyKg,
+            thickness_mm: thk,
+            gsm,
+            date: isoDate,
+            added_by: user.id,
+            issued_to_user_id: user.id,
+            notes: noteDir,
+          });
+          if (rmErr) {
+            toast({
+              title: "Raw material stock not deducted",
+              description: `Slitting saved, but raw material deduction failed (permission?): ${rmErr.message}`,
+              variant: "destructive",
+            });
+          }
+        }
+      }
+
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
       setForm({
         ...form,
         issue_id: "",
+        direct_source_id: "",
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
