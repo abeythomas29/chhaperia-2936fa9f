@@ -29,13 +29,17 @@ interface Head36Source {
   primary_consumed: number; // sum source_quantity across all slitting_entries for this issue
   primary_pending: number;
   primary_unit: string;
-  // Secondary (this slitting entry's produced output vs head36 consumption)
-  secondary_produced: number; // cut_quantity_produced of this slitting entry
-  secondary_consumed: number; // sum head36 total_quantity for this slitting_entry_id
-  secondary_pending: number;
+  // Secondary (this slitting entry's produced output vs head36 consumption) — tracked in SQM (area-conserved)
+  secondary_produced_sqm: number;
+  secondary_consumed_sqm: number;
+  secondary_pending_sqm: number;
+  // Meters — reference only, NOT used for over-consumption validation
+  secondary_produced_mtr: number;
+  secondary_consumed_mtr: number;
 }
 
 interface RollRow { width_mm: string; length_mtr: string; rolls: string; }
+
 
 const extractLot = (notes: string | null | undefined): string => {
   if (!notes) return "—";
