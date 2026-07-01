@@ -35,6 +35,10 @@ export interface ManagerIssuedMaterial {
   pending_quantity: number;
   date: string | null;
   notes: string | null;
+  /** True when this row represents slitting output pending after 36 Head consumption. */
+  is_secondary?: boolean;
+  /** For secondary rows: direct anchor for slitting_returns.slitting_entry_id. */
+  secondary_slitting_entry_id?: string;
 }
 
 const num = (v: unknown): number => {
@@ -189,7 +193,95 @@ export async function listManagerIssuedMaterials(userId: string): Promise<{
     });
   });
 
-  const all = [...finished, ...raw].sort((a, b) =>
+  // --- 5. Secondary pending: slitting output for THIS user's issues that
+  // has not been fully consumed by 36 Head. Uses SQM (area conserved).
+  const secondary: ManagerIssuedMaterial[] = [];
+  const myIssueIds = fsRows.map((r) => String(r.id));
+  if (myIssueIds.length) {
+    const slitOutRes = await supabase
+      .from("slitting_entries")
+      .select("id, stock_issue_id, product_code_id, cut_width_mm, cut_quantity_produced, thickness_mm, gsm, unit, date, notes, product_codes(code)")
+      .in("stock_issue_id", myIssueIds)
+      .eq("slitting_manager_id", userId);
+    if (slitOutRes.error) {
+      errors.push({ source: "slitting_entries.secondary", message: slitOutRes.error.message });
+    }
+    const slitOuts = (slitOutRes.data ?? []) as any[];
+    const slitIds = slitOuts.map((s) => s.id);
+    const consumedSqmByEntry = new Map<string, number>();
+    const returnedByEntry = new Map<string, { reusable: number; wastage: number }>();
+    if (slitIds.length) {
+      const [hRes, retRes] = await Promise.all([
+        (supabase as any)
+          .from("head36_entries")
+          .select("slitting_entry_id, rolls_produced, length_per_tape_mtr, roll_width_mm, notes")
+          .in("slitting_entry_id", slitIds),
+        (supabase as any)
+          .from("slitting_returns")
+          .select("slitting_entry_id, returned_quantity, wastage_quantity, return_type")
+          .in("slitting_entry_id", slitIds),
+      ]);
+      for (const h of ((hRes.data as any[]) ?? [])) {
+        const k = String(h.slitting_entry_id);
+        let sqm = 0;
+        if (typeof h.notes === "string") {
+          const m = h.notes.match(/TotalSqm[:\s]+([\d.]+)/i);
+          if (m) sqm = parseFloat(m[1]);
+        }
+        if (!sqm) {
+          const w = num(h.roll_width_mm), l = num(h.length_per_tape_mtr), r = num(h.rolls_produced);
+          if (w > 0 && l > 0 && r > 0) sqm = (w / 1000) * l * r;
+        }
+        consumedSqmByEntry.set(k, (consumedSqmByEntry.get(k) ?? 0) + sqm);
+      }
+      for (const r of ((retRes.data as any[]) ?? [])) {
+        const k = String(r.slitting_entry_id);
+        const b = returnedByEntry.get(k) ?? { reusable: 0, wastage: 0 };
+        if ((r.return_type ?? "reusable").toLowerCase() === "wastage") {
+          b.wastage += num(r.wastage_quantity ?? r.returned_quantity);
+        } else {
+          b.reusable += num(r.returned_quantity);
+        }
+        returnedByEntry.set(k, b);
+      }
+    }
+    for (const s of slitOuts) {
+      const width = num(s.cut_width_mm);
+      const producedMtr = num(s.cut_quantity_produced);
+      const producedSqm = width > 0 ? (width / 1000) * producedMtr : 0;
+      if (producedSqm <= 0) continue;
+      const consumed = consumedSqmByEntry.get(String(s.id)) ?? 0;
+      const ret = returnedByEntry.get(String(s.id)) ?? { reusable: 0, wastage: 0 };
+      const pending = Math.max(0, producedSqm - consumed - ret.reusable - ret.wastage);
+      if (pending <= 0.0001) continue;
+      secondary.push({
+        key: `slit:${s.id}`,
+        issue_id: String(s.stock_issue_id ?? s.id),
+        issue_type: "finished_stock",
+        source_table: "stock_issues",
+        product_code_id: (s.product_code_id as string | null) ?? null,
+        raw_material_id: null,
+        display_name: `${s.product_codes?.code ?? "Slit output"} (slit)`,
+        product_code: s.product_codes?.code ?? null,
+        raw_material_name: null,
+        thickness_mm: s.thickness_mm != null ? num(s.thickness_mm) : null,
+        gsm: s.gsm != null ? num(s.gsm) : null,
+        lot_number: null,
+        unit: "sqm",
+        issued_quantity: producedSqm,
+        consumed_quantity: consumed,
+        returned_reusable: ret.reusable,
+        wastage: ret.wastage,
+        pending_quantity: pending,
+        date: (s.date as string | null) ?? null,
+        notes: (s.notes as string | null) ?? null,
+        is_secondary: true,
+        secondary_slitting_entry_id: String(s.id),
+      });
+    }
+  }
+
+  const all = [...finished, ...raw, ...secondary].sort((a, b) =>
     (b.date ?? "").localeCompare(a.date ?? ""),
   );
 

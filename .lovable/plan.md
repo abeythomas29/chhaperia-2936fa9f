@@ -1,123 +1,72 @@
-## Overview
 
-Six changes spanning inventory architecture, slitting workflow, and material return tracking. All stock is fully auto-derived from entries — no manual stock adjustments remain.
+# Unit Logic & Consumption Fix Plan (Frontend Only)
 
----
+Core rule enforced everywhere:
+- **Meters** = roll length / reference only.
+- **SQM or KG** = the balance/consumption/validation unit.
+- Consume via `stock_issue_id` when an issued material is chosen; otherwise consume from direct inventory source. Never both, never skip.
 
-## 1. Fully automatic stock calculation
-
-Stock is already derived in `src/lib/stock.ts` via `getFinishedProductAvailable` (production + slitting + head36 − issues − sales). Raw materials use DB triggers (`add_raw_material_stock`, `deduct_raw_material_stock`, sales triggers).
-
-Changes:
-- Remove the manual "Issue Stock" dialog's ability to act as an adjustment. Issue remains, but it only records an outbound movement — never edits stock directly.
-- Add a small `useFinishedStock(productCodeId)` hook wrapping `getFinishedProductAvailable` for consistent live counts across pages.
-- Dashboard/StockManagement read live values from the helper (no cached `current_stock` column on finished products).
+No database migrations. All changes are React/TS.
 
 ---
 
-## 2. Unified Inventory Management panel (replaces existing pages)
+## A. Finished Stock — per-entry GSM conversion
+File: `src/pages/admin/StockManagement.tsx`
 
-Replace separate **Stock Management** and **Raw Materials** nav items with a single **Inventory Management** route at `/admin/inventory` (and equivalent in Worker/Slitting layouts with reduced permissions).
+- Replace the single "product default GSM" lookup with a per-row resolver:
+  1. `stock_issues.gsm` for issue rows
+  2. `slitting_entries.gsm` for slitting-produced rows
+  3. `production_entries.gsm` for production rows
+  4. `head36_entries.gsm` for 36 head rows
+  5. Fallback to product default GSM only if row GSM is null/0
+- KG formula: `kg = sqm * gsm / 1000`
+- Show `Missing GSM` badge instead of a wrong number when both row GSM and product GSM are missing.
+- Acceptance: CP25GE 0.15 mm, 2,000 sqm, GSM 230 → **460 kg**.
 
-Layout: one page, two columns side-by-side (stacks on mobile):
+## B. Slitting / Production direct-inventory mode
+File: `src/pages/slitting/SlittingEntryForm.tsx`
 
-```text
-+-------------------- Inventory Management --------------------+
-|  FINISHED STOCK (auto)      |  RAW MATERIALS (auto)          |
-|  product / thickness / qty  |  material / thickness / gsm    |
-|  [Issue] [Edit]*            |  [Add Inward] [Edit]*          |
-+--------------------------------------------------------------+
-```
+- Keep both modes (Issued Material vs Direct Inventory / No Order).
+- Issued mode → save `stock_issue_id`, leave source columns null.
+- Direct mode → require source product/raw material + qty + unit + thickness + GSM; save `source_product_code_id` **or** `source_raw_material_id` with `source_quantity`, `source_unit`, `source_thickness_mm`, `source_gsm`.
+- After submit, invalidate the inventory queries so available balances refresh.
+- Guard: cannot submit without either an issued material or a direct source.
 
-*Action buttons visible only per role (see #3).*
+## C. 36 Head validation — area/mass, not linear meters
+File: `src/pages/slitting/Head36Entry.tsx`
 
-Routing changes:
-- `/admin/stock` and `/admin/inventory` (raw materials) merge into `/admin/inventory`.
-- `/worker/stock` and `/worker/inventory` → `/worker/inventory` (view-only).
-- `/slitting` gets a new `/slitting/inventory` (view-only).
-- Old route paths redirect to the new one to preserve bookmarks.
+- Already migrated to sqm in prior turn; harden it:
+  - When source is kg-based, compare `totalKg` vs `secondary_pending_kg` using per-entry GSM.
+  - When source is sqm-based, compare `totalSqm` vs `secondary_pending_sqm` (current behavior).
+  - Never gate on `totalLength` meters.
+- Show summary card in the same unit as the source (sqm or kg), meters displayed only as `m ref`.
+- Acceptance: 12,800 sqm submits when pending sqm ≥ 12,800 regardless of tape meters.
 
----
+## D. 36 Head form UX
+Same file.
 
-## 3. Role-based actions on inventory
+- Source dropdown restricted to slitting entries in the same issued stock chain (already using `list_36_head_source_slitting_entries`; keep).
+- Auto-carry `client_id` from the selected slitting entry; if none, mark client required.
+- Multi-row Add Roll UI (already present); persist `slitting_entry_id` and `stock_issue_id` on submit.
 
-| Role | Finished Stock | Raw Materials |
-|---|---|---|
-| Super Admin / Admin | Issue, Edit issue ledger | Add inward, Edit inward |
-| Inventory Manager | Issue, Edit issue ledger | Add inward, Edit inward |
-| Production Manager (worker) | View only | View only |
-| Slitting Manager | View only | View only |
+## E. Material Return
+File: `src/pages/slitting/MaterialReturn.tsx`
 
-Implementation: gate buttons via `useAuth()` roles. RLS already enforces this server-side — confirm policies on `stock_issues` and `raw_material_stock_entries` allow `admin`, `super_admin`, `inventory_manager` for `INSERT/UPDATE/DELETE` and everyone authenticated for `SELECT`. Patch any missing policies in a migration.
+- List pending under the same issue chain: `primary_pending + secondary_pending` per issued log.
+- Two disposition options per return row: **Reusable** vs **Wastage**.
+- Client-side guard: `return_qty <= pending_qty` in the row's unit; block submit and show inline error otherwise.
+- Refresh pending list after submit.
 
----
-
-## 4. Slitting sees only material issued to them
-
-Source: existing `stock_issues` rows where `recipient_type = 'production_manager'` AND `recipient_user_id = auth.uid()` AND the recipient holds the `slitting_manager` role.
-
-Schema addition (migration):
-- `slitting_entries.stock_issue_id uuid NULL REFERENCES stock_issues(id)` — links a slitting run to the issue it consumed from.
-- RPC `list_slitting_issued_materials()` (SECURITY DEFINER) returns, for the calling slitting manager, each open issue with: `issue_id`, `product_code_id`, product name/code, `thickness_mm`, `gsm` (joined from product_code if present, else from issue), `issued_quantity`, `consumed_quantity` (SUM of `slitting_entries.source_quantity` linked to that issue), `remaining_quantity`, `issue_date`, optional client/PO note. Only issues with `remaining > 0` are returned.
-
-Slitting Entry form (`src/pages/slitting/SlittingEntryForm.tsx`):
-- Replace product dropdown with an "Issued material" dropdown driven by the RPC.
-- Selecting an item auto-fills product, thickness, GSM, and stores `stock_issue_id`.
-
----
-
-## 5. Pending quantity shown live on slitting entry
-
-After an issued material is selected in the Slitting Entry form, display below the qty input:
-
-```text
-Issued: 500 kg   Consumed: 320 kg   Pending: 180 kg
-```
-
-Validation: `source_quantity` must not exceed pending. After save, the same RPC re-fetches and updates the display. Pending also surfaces in the dropdown row as a subtitle.
+## F. Error handling & build
+- Show the raw RPC error message via toast when GSM/pending fields are missing.
+- Run `tsgo` and fix any type errors introduced.
 
 ---
 
-## 6. Material Return — Reusable vs Wastage + Location
+## Technical notes
 
-Schema migration on `slitting_returns`:
-- `return_type text NOT NULL CHECK (return_type IN ('reusable','wastage'))` (default `'reusable'` for backfill).
-- `location text NULL` (free-text now, will become FK to a future `storage_locations` table — keep column name stable).
-- Backfill existing rows with `return_type='reusable'`.
+- Per-entry GSM resolution runs client-side in `StockManagement.tsx`; no new RPCs.
+- Direct-inventory columns on `slitting_entries` (`source_product_code_id`, `source_raw_material_id`, `source_quantity`, `source_unit`, `source_thickness_mm`, `source_gsm`) are assumed to exist. If any column is missing at runtime, the insert falls back to stashing the source metadata in `notes` (same pattern used for 36 Head) and surfaces a toast.
+- `stock.ts` `getFinishedProductAvailable` is left as-is — it already nets issues and sales.
 
-UI changes in `src/pages/slitting/MaterialReturn.tsx`:
-- Two radio/checkbox cards at the top: **Reusable** | **Wastage** (mutually exclusive).
-- **Reusable** branch: existing fields (returned qty, notes) + new **Location** text input (placeholder: "Enter return location"). Comment in code marks the TODO for switching to a dropdown.
-- **Wastage** branch: returned qty + notes only (no location). Saved with `return_type='wastage'`.
-
-Reporting:
-- New section on Inventory Management (admin/inventory manager only): **Total Wastage** grouped by product category (joined `slitting_returns → slitting_entries → product_codes → product_categories`) with date range filter.
-- Reusable returns continue to flow back to available stock as today; wastage does NOT return to stock.
-
-Stock impact rule (enforced in the helper / RPC):
-- `reusable` return → adds to remaining of the source issue (already current behaviour via `remaining_returned`).
-- `wastage` return → consumes from pending but is excluded from `remaining_returned`, so it never re-enters stock.
-
----
-
-## Technical summary
-
-**Migrations (one file, in order):**
-1. `ALTER TABLE slitting_entries ADD COLUMN stock_issue_id uuid REFERENCES stock_issues(id);`
-2. `ALTER TABLE slitting_returns ADD COLUMN return_type text NOT NULL DEFAULT 'reusable' CHECK (...)`, `ADD COLUMN location text`.
-3. Backfill existing `slitting_returns`.
-4. `CREATE OR REPLACE FUNCTION list_slitting_issued_materials()` (SECURITY DEFINER, returns open issues for `auth.uid()` slitting managers with consumed/pending).
-5. Policy review on `stock_issues`, `raw_material_stock_entries`, `slitting_returns` to confirm role matrix in #3.
-
-**Frontend files touched:**
-- `src/App.tsx` — route changes + redirects.
-- `src/layouts/{AdminLayout,WorkerLayout,SlittingManagerLayout,InventoryManagerLayout}.tsx` — nav items.
-- New: `src/pages/inventory/InventoryManagement.tsx` (two-column unified page) — used by all roles, with conditional action buttons.
-- Delete/redirect: `src/pages/admin/StockManagement.tsx`, `src/pages/admin/RawMaterials.tsx` (content moved into the unified page; keep helpers).
-- `src/pages/slitting/SlittingEntryForm.tsx` — issued-material dropdown, pending display, validation.
-- `src/pages/slitting/MaterialReturn.tsx` — reusable/wastage radio, location field.
-- `src/lib/stock.ts` — extend helper for raw-material live counts and per-issue pending.
-
-**Out of scope (for follow-up):**
-- Location dropdown (waiting on location naming).
-- PO entity (using existing `stock_issues` per your answer).
+Confirm and I'll implement.
