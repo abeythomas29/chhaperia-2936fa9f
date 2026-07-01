@@ -35,6 +35,10 @@ export interface ManagerIssuedMaterial {
   pending_quantity: number;
   date: string | null;
   notes: string | null;
+  /** True when this row represents slitting output pending after 36 Head consumption. */
+  is_secondary?: boolean;
+  /** For secondary rows: direct anchor for slitting_returns.slitting_entry_id. */
+  secondary_slitting_entry_id?: string;
 }
 
 const num = (v: unknown): number => {
