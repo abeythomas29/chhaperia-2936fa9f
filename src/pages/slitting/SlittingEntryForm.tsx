@@ -124,7 +124,7 @@ export default function SlittingEntryForm() {
       setClients((cl.data as Client[]) ?? []);
       setRawMaterials((rm.data as RawMaterial[]) ?? []);
       await reloadIssued();
-      setLoading0);
+      setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
