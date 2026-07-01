@@ -354,12 +354,13 @@ export default function Head36Entry() {
   }
 
   const sourceOptions = sources
-    .filter((s) => s.secondary_pending > 0.0001)
+    .filter((s) => s.secondary_pending_sqm > 0.0001)
     .map((s) => ({
       value: s.slitting_entry_id,
-      label: `${s.product_code} | Lot ${s.lot_number} | ${s.thickness_mm ?? "—"}mm | GSM ${s.gsm ?? "—"} | Pending ${s.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${s.unit}`,
+      label: `${s.product_code} | Lot ${s.lot_number} | ${s.thickness_mm ?? "—"}mm | GSM ${s.gsm ?? "—"} | Pending ${s.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm`,
       keywords: `${s.product_code} ${s.lot_number} ${format(new Date(s.date), "dd/MM/yy")}`,
     }));
+
 
   return (
     <Card>
