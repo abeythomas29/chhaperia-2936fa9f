@@ -42,6 +42,7 @@ export default function SlittingEntryForm() {
   const { toast } = useToast();
   const [productCodes, setProductCodes] = useState<ProductCode[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +58,10 @@ export default function SlittingEntryForm() {
     product_code_id: "",
     client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
+
+    // Direct inventory source (used when no issued material is selected)
+    direct_source_type: "product" as "product" | "raw",
+    direct_source_id: "",
 
     // Source product (shared)
     source_gsm: "",
