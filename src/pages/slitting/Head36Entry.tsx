@@ -252,7 +252,7 @@ export default function Head36Entry() {
     if (exceedsSecondary) {
       toast({
         title: "Exceeds secondary pending",
-        description: `Only ${selected.secondary_pending.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selected.unit} pending on this slitting source.`,
+        description: `Only ${selected.secondary_pending_sqm.toLocaleString(undefined, { maximumFractionDigits: 2 })} sqm pending on this slitting source.`,
         variant: "destructive",
       });
       return;
