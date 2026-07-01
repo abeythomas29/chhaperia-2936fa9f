@@ -563,6 +563,43 @@ export default function SlittingEntryForm() {
             />
           </div>
 
+          {/* Direct Inventory Source — required when no issued material selected */}
+          {!isIssued && (
+            <div className="space-y-2 rounded-lg border-2 border-primary/30 bg-primary/5 p-3">
+              <Label className="font-semibold">
+                Direct Inventory Source * <span className="text-xs font-normal text-muted-foreground">(required when no issued material is selected — stock will be deducted from this item)</span>
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-2">
+                <Select
+                  value={form.direct_source_type}
+                  onValueChange={(v) => setForm({ ...form, direct_source_type: v as "product" | "raw", direct_source_id: "" })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="product">Finished Product</SelectItem>
+                    <SelectItem value="raw">Raw Material</SelectItem>
+                  </SelectContent>
+                </Select>
+                <SearchableSelect
+                  value={form.direct_source_id}
+                  onValueChange={(v) => setForm({ ...form, direct_source_id: v })}
+                  placeholder={form.direct_source_type === "product" ? "Select source product" : "Select source raw material"}
+                  options={
+                    form.direct_source_type === "product"
+                      ? productCodes.map((pc) => ({ value: pc.id, label: pc.code }))
+                      : rawMaterials.map((rm) => ({ value: rm.id, label: `${rm.name} (${rm.unit})` }))
+                  }
+                />
+              </div>
+              {!form.direct_source_id && (
+                <p className="text-xs text-destructive">Select the inventory item that this slitting will consume from.</p>
+              )}
+            </div>
+          )}
+
+
+
+
 
           {/* Source Product */}
           <Collapsible open={sourceOpen} onOpenChange={setSourceOpen} className="border rounded-lg">
