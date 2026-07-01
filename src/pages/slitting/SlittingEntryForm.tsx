@@ -115,14 +115,16 @@ export default function SlittingEntryForm() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const [pc, cl] = await Promise.all([
+      const [pc, cl, rm] = await Promise.all([
         supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
         supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
+        supabase.from("raw_materials").select("id, name, unit").order("name"),
       ]);
       setProductCodes(pc.data ?? []);
       setClients((cl.data as Client[]) ?? []);
+      setRawMaterials((rm.data as RawMaterial[]) ?? []);
       await reloadIssued();
-      setLoading(false);
+      setLoading0);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
