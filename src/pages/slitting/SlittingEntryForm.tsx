@@ -15,6 +15,7 @@ import { listManagerIssuedMaterials } from "@/lib/issuedMaterials";
 
 interface ProductCode { id: string; code: string; category_id: string; }
 interface Client { id: string; name: string; }
+interface RawMaterial { id: string; name: string; unit: string; }
 interface RollRow { width_mm: string; times_cut: string; rolls_per_cut: string; }
 interface SourceRow { width_mm: string; length_mtr: string; rolls: string; }
 interface IssuedMaterial {
@@ -41,6 +42,7 @@ export default function SlittingEntryForm() {
   const { toast } = useToast();
   const [productCodes, setProductCodes] = useState<ProductCode[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +58,10 @@ export default function SlittingEntryForm() {
     product_code_id: "",
     client_id: "",
     entry_date: new Date().toISOString().slice(0, 10),
+
+    // Direct inventory source (used when no issued material is selected)
+    direct_source_type: "product" as "product" | "raw",
+    direct_source_id: "",
 
     // Source product (shared)
     source_gsm: "",
@@ -109,12 +115,14 @@ export default function SlittingEntryForm() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const [pc, cl] = await Promise.all([
+      const [pc, cl, rm] = await Promise.all([
         supabase.from("product_codes").select("id, code, category_id").eq("status", "active").order("code"),
         supabase.from("company_clients").select("id, name").eq("status", "active").order("name"),
+        supabase.from("raw_materials").select("id, name, unit").order("name"),
       ]);
       setProductCodes(pc.data ?? []);
       setClients((cl.data as Client[]) ?? []);
+      setRawMaterials((rm.data as RawMaterial[]) ?? []);
       await reloadIssued();
       setLoading(false);
     })();
@@ -243,6 +251,14 @@ export default function SlittingEntryForm() {
         toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
         return;
       }
+      if (!form.direct_source_id) {
+        toast({
+          title: "Direct Inventory Source required",
+          description: "No issued material selected. Pick a source item from inventory so stock is deducted.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (validRollRows.length === 0) {
         toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
         return;
@@ -343,10 +359,62 @@ export default function SlittingEntryForm() {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      // Direct-inventory mode: write a mirror deduction row so the selected
+      // source item's stock actually reduces (no stock_issue_id path).
+      if (!isIssued && form.direct_source_id) {
+        const thk = form.source_thickness_mm ? parseFloat(form.source_thickness_mm) : null;
+        const noteDir = `Direct slitting consumption${form.notes ? ` — ${form.notes}` : ""}`;
+        if (form.direct_source_type === "product") {
+          const { error: siErr } = await supabase.from("stock_issues").insert({
+            product_code_id: form.direct_source_id,
+            quantity: sourceSqm || sourceQty,
+            unit: "sqmtr",
+            thickness_mm: thk,
+            date: isoDate,
+            issued_by: user.id,
+            recipient_type: "slitting_direct",
+            recipient_user_id: user.id,
+            notes: noteDir,
+          } as any);
+          if (siErr) {
+            toast({
+              title: "Stock not deducted",
+              description: `Slitting saved, but source stock deduction failed: ${siErr.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          const gsm = form.source_gsm ? parseFloat(form.source_gsm) : null;
+          const qtyKg = sourceKg || sourceQty;
+          const { error: rmErr } = await (supabase as any).from("raw_material_stock_entries").insert({
+            raw_material_id: form.direct_source_id,
+            quantity: qtyKg,
+            entry_type: "issue",
+            issue_quantity: sourceQty,
+            issue_unit: form.source_unit,
+            issue_quantity_kg: qtyKg,
+            thickness_mm: thk,
+            gsm,
+            date: isoDate,
+            added_by: user.id,
+            issued_to_user_id: user.id,
+            notes: noteDir,
+          });
+          if (rmErr) {
+            toast({
+              title: "Raw material stock not deducted",
+              description: `Slitting saved, but raw material deduction failed (permission?): ${rmErr.message}`,
+              variant: "destructive",
+            });
+          }
+        }
+      }
+
       toast({ title: `Saved ${rowsToInsert.length} roll entries` });
       setForm({
         ...form,
         issue_id: "",
+        direct_source_id: "",
         source_gsm: "", source_thickness_mm: "",
         roll_length_mtr: "", notes: "",
       });
@@ -368,7 +436,7 @@ export default function SlittingEntryForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Issued Material — only materials issued to this slitting manager */}
           <div className="space-y-2 rounded-lg border-2 border-secondary/30 bg-secondary/5 p-3">
-            <Label className="font-semibold">Issued Material (from Inventory Manager)</Label>
+            <Label className="font-semibold">Issued Material (optional — from Inventory Manager)</Label>
             <SearchableSelect
               value={form.issue_id}
               onValueChange={async (v) => {
@@ -494,6 +562,43 @@ export default function SlittingEntryForm() {
               options={clients.map((c) => ({ value: c.id, label: c.name }))}
             />
           </div>
+
+          {/* Direct Inventory Source — required when no issued material selected */}
+          {!isIssued && (
+            <div className="space-y-2 rounded-lg border-2 border-primary/30 bg-primary/5 p-3">
+              <Label className="font-semibold">
+                Direct Inventory Source * <span className="text-xs font-normal text-muted-foreground">(required when no issued material is selected — stock will be deducted from this item)</span>
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-2">
+                <Select
+                  value={form.direct_source_type}
+                  onValueChange={(v) => setForm({ ...form, direct_source_type: v as "product" | "raw", direct_source_id: "" })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="product">Finished Product</SelectItem>
+                    <SelectItem value="raw">Raw Material</SelectItem>
+                  </SelectContent>
+                </Select>
+                <SearchableSelect
+                  value={form.direct_source_id}
+                  onValueChange={(v) => setForm({ ...form, direct_source_id: v })}
+                  placeholder={form.direct_source_type === "product" ? "Select source product" : "Select source raw material"}
+                  options={
+                    form.direct_source_type === "product"
+                      ? productCodes.map((pc) => ({ value: pc.id, label: pc.code }))
+                      : rawMaterials.map((rm) => ({ value: rm.id, label: `${rm.name} (${rm.unit})` }))
+                  }
+                />
+              </div>
+              {!form.direct_source_id && (
+                <p className="text-xs text-destructive">Select the inventory item that this slitting will consume from.</p>
+              )}
+            </div>
+          )}
+
+
+
 
 
           {/* Source Product */}
