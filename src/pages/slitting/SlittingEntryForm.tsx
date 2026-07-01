@@ -251,6 +251,14 @@ export default function SlittingEntryForm() {
         toast({ title: "Missing fields", description: "Select product code and fill source product details.", variant: "destructive" });
         return;
       }
+      if (!form.direct_source_id) {
+        toast({
+          title: "Direct Inventory Source required",
+          description: "No issued material selected. Pick a source item from inventory so stock is deducted.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (validRollRows.length === 0) {
         toast({ title: "Missing rolls", description: "Add at least one roll (width + count) under Rolls.", variant: "destructive" });
         return;
