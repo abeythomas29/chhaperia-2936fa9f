@@ -538,7 +538,7 @@ export default function Head36Entry() {
 
           {exceedsSecondary && selected && (
             <p className="text-sm text-destructive">
-              Total length ({totalLength.toFixed(2)} m) exceeds Secondary Pending ({selected.secondary_pending.toFixed(2)} {selected.unit}).
+              Total area ({totalSqm.toFixed(2)} sqm) exceeds Secondary Pending ({selected.secondary_pending_sqm.toFixed(2)} sqm).
             </p>
           )}
 
