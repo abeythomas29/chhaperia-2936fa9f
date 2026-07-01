@@ -181,8 +181,8 @@ export default function MaterialReturn() {
                 placeholder={issues.length ? "Choose an issued material" : "No pending issued logs"}
                 options={issues.map((i) => ({
                   value: i.key,
-                  label: `${i.display_name} | Lot ${i.lot_number ?? "—"} | ${i.thickness_mm ?? "—"} mm | GSM ${i.gsm ?? "—"} | Pending ${formatNumber(i.pending_quantity)} ${i.unit}`,
-                  keywords: `${i.display_name} ${i.product_code ?? ""} ${i.raw_material_name ?? ""} ${i.lot_number ?? ""} ${i.issue_type}`,
+                  label: `${i.is_secondary ? "↳ " : ""}${i.display_name} | Lot ${i.lot_number ?? "—"} | ${i.thickness_mm ?? "—"} mm | GSM ${i.gsm ?? "—"} | Pending ${formatNumber(i.pending_quantity)} ${i.unit}`,
+                  keywords: `${i.display_name} ${i.product_code ?? ""} ${i.raw_material_name ?? ""} ${i.lot_number ?? ""} ${i.issue_type} ${i.is_secondary ? "secondary slit" : "primary"}`,
                 }))}
               />
               {!issues.length && (
