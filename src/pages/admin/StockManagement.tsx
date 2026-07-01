@@ -401,13 +401,25 @@ export default function StockManagement({ embedded = false, readOnly = false }: 
       const rowGsm = productLevel ? null : (gsmByCodeThickness[key] ?? null);
       const productWidth = widthByCode[pcId] ?? null;
       const productGsm = gsmByCode[pcId] ?? null;
+      // Width may fall back to product-level (physical roll width rarely varies
+      // by thickness). GSM MUST NOT: a 0.15mm variant's GSM (e.g. 230) differs
+      // from a 0.20mm variant's GSM (e.g. 80) for the same product code, and
+      // reusing the wrong one silently produces wrong KG.
       const widthFact = rowWidth ?? productWidth;
-      const gsmFact = rowGsm ?? productGsm;
+      const gsmFact = productLevel ? productGsm : rowGsm;
+      if (!productLevel && !rowGsm && productGsm) {
+        console.warn("[stock] refusing cross-thickness GSM fallback", {
+          product_code_id: pcId,
+          thickness_mm: thickness,
+          product_level_gsm: productGsm.value,
+          product_level_gsm_source: productGsm.source,
+        });
+      }
       return {
         widthMm: widthFact?.value ?? null,
         widthSource: rowWidth?.source ?? (productWidth ? (productLevel ? productWidth.source : `product-level ${productWidth.source}`) : null),
         gsm: gsmFact?.value ?? null,
-        gsmSource: rowGsm?.source ?? (productGsm ? (productLevel ? productGsm.source : `product-level ${productGsm.source}`) : null),
+        gsmSource: gsmFact?.source ?? null,
         missingData: missingDataLabel(widthFact, gsmFact),
       };
     };
